@@ -2015,6 +2015,8 @@ html.ghca-acd--drawer-open { overflow: hidden; }
 .ghca-acd__drawer-badge--cert-missing { background: #fef3f2; color: #b42318; }
 .ghca-acd__drawer-badge--cert-issued { background: #ecfdf3; color: #067647; }
 .ghca-acd__drawer-badge--cert-pending { background: #fffaeb; color: #b54708; }
+.ghca-acd__drawer-badge--expired { background: #fef3f2; color: #b42318; }
+.ghca-acd__drawer-badge--expiring_soon { background: #fffaeb; color: #b54708; }
 .ghca-acd__drawer-kpis { display: grid; grid-template-columns: repeat(3, 1fr); background: #fff; border-bottom: 1px solid #e6eaf0; }
 .ghca-acd__drawer-kpi { padding: 16px 12px; text-align: center; border-right: 1px solid #e6eaf0; }
 .ghca-acd__drawer-kpi:last-child { border-right: none; }
