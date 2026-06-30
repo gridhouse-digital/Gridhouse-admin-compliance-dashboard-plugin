@@ -13,6 +13,8 @@ final class GHCA_ACD_Settings {
     add_action( 'update_option_' . GHCA_Compliance_Program::OPTION_NEW_HIRE_GROUPS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_action( 'update_option_' . GHCA_Compliance_Program::OPTION_NEW_HIRE_DAYS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_action( 'update_option_' . GHCA_Dashboard_Branding::OPTION, array( __CLASS__, 'bust_dashboard_cache' ) );
+    add_action( 'update_option_' . GHCA_Course_Lifespans::OPTION_LIFESPANS, array( __CLASS__, 'bust_dashboard_cache' ) );
+    add_action( 'update_option_' . GHCA_Course_Lifespans::OPTION_WARNING_DAYS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_filter( 'ghca_admin_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
     add_filter( 'ghca_employee_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
   }
@@ -53,6 +55,29 @@ final class GHCA_ACD_Settings {
           return max( 0, min( 3600, $value ) );
         },
         'default'           => 300,
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
+      GHCA_Course_Lifespans::OPTION_LIFESPANS,
+      array(
+        'type'              => 'array',
+        'sanitize_callback' => array( 'GHCA_Course_Lifespans', 'sanitize_lifespan_map' ),
+        'default'           => array(),
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
+      GHCA_Course_Lifespans::OPTION_WARNING_DAYS,
+      array(
+        'type'              => 'integer',
+        'sanitize_callback' => static function ( $value ): int {
+          $value = (int) $value;
+          return max( 7, min( 365, $value ) );
+        },
+        'default'           => GHCA_Course_Lifespans::DEFAULT_WARNING_DAYS,
       )
     );
 
