@@ -1097,6 +1097,12 @@ final class GHCA_Admin_Compliance_Dashboard {
         'sub'   => __( 'Past due date', 'ghca-acd' ),
       ),
       array(
+        'label' => __( 'Expiring Soon', 'ghca-acd' ),
+        'value' => $data['expiring_soon_employees'] ?? 0,
+        'icon'  => 'time',
+        'sub'   => __( 'Within warning window', 'ghca-acd' ),
+      ),
+      array(
         'label' => __( 'Certificates Issued', 'ghca-acd' ),
         'value' => $data['certificates_issued'] ?? 0,
         'icon'  => 'award',
@@ -2154,11 +2160,14 @@ final class GHCA_Admin_Compliance_Dashboard {
     $recent_completed  = 0;
     $recent_items      = array();
     $next_due_ts       = PHP_INT_MAX;
+    $expiring          = 0;
 
     foreach ( $employees as $employee ) {
       if ( 'completed' === $employee['status_slug'] || 'new_hire_completed' === $employee['status_slug'] ) {
         ++$completed;
-      } elseif ( 'overdue' === $employee['status_slug'] || 'new_hire_overdue' === $employee['status_slug'] ) {
+      } elseif ( 'expiring_soon' === $employee['status_slug'] ) {
+        ++$expiring;
+      } elseif ( in_array( $employee['status_slug'], array( 'overdue', 'new_hire_overdue', 'expired' ), true ) ) {
         ++$overdue;
       } elseif ( in_array( $employee['status_slug'], array( 'in_progress', 'new_hire_in_progress', 'new_hire_not_started' ), true ) ) {
         ++$in_progress;
@@ -2191,7 +2200,8 @@ final class GHCA_Admin_Compliance_Dashboard {
       }
     }
 
-    $rate = $total > 0 ? (int) round( ( $completed / $total ) * 100 ) : 0;
+    // Yellow (expiring soon) employees are still compliant for now.
+    $rate = $total > 0 ? (int) round( ( ( $completed + $expiring ) / $total ) * 100 ) : 0;
 
     usort(
       $recent_items,
@@ -2211,6 +2221,8 @@ final class GHCA_Admin_Compliance_Dashboard {
       'in_progress_employees_label'  => sprintf( _n( '%d in progress', '%d in progress', $in_progress, 'ghca-acd' ), $in_progress ),
       'overdue_employees'            => $overdue,
       'overdue_employees_label'      => sprintf( _n( '%d overdue', '%d overdue', $overdue, 'ghca-acd' ), $overdue ),
+      'expiring_soon_employees'      => $expiring,
+      'expiring_soon_employees_label' => sprintf( _n( '%d expiring soon', '%d expiring soon', $expiring, 'ghca-acd' ), $expiring ),
       'certificates_issued'          => $certificates,
       'certificates_issued_label'    => sprintf( _n( '%d certificate', '%d certificates', $certificates, 'ghca-acd' ), $certificates ),
       'upcoming_due_date_label'      => PHP_INT_MAX === $next_due_ts ? self::format_due_date( get_option( self::OPTION_DUE_DATE, '2026-07-31' ) ) : wp_date( 'F j, Y', $next_due_ts ),
