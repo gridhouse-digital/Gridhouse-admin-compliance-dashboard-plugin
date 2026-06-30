@@ -76,6 +76,26 @@ final class GHCA_Course_Lifespans {
   }
 
   /**
+   * Build the per-course traffic-light fields for one course list item.
+   * Wraps the pure evaluate() with the configured lifespan + warning window.
+   * Not pure (reads options + wp_date/time); keep evaluate() as the testable core.
+   *
+   * @return array{lifespan_days:int,expiration_ts:int,expiration_label:string,compliance_state:string}
+   */
+  public static function decorate( int $course_id, bool $completed, int $completed_ts ): array {
+    $lifespan_days = self::get_lifespan_days( $course_id );
+    $eval          = self::evaluate( $completed, $completed_ts, $lifespan_days, self::get_warning_days(), time() );
+    $expiration_ts = (int) $eval['expiration_ts'];
+
+    return array(
+      'lifespan_days'    => $lifespan_days,
+      'expiration_ts'    => $expiration_ts,
+      'expiration_label' => $expiration_ts > 0 ? wp_date( 'M j, Y', $expiration_ts ) : '',
+      'compliance_state' => (string) $eval['state'],
+    );
+  }
+
+  /**
    * Normalize the saved map to {positive int course_id: 1..3650 days}.
    * Pure: stray course IDs are harmless (a course not in a user's enrollment
    * is never evaluated), so no WP lookups happen here.
