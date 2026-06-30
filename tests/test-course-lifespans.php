@@ -24,5 +24,8 @@ check( GHCA_Course_Lifespans::rollup( array( 'current', 'expiring_soon', 'expire
 check( GHCA_Course_Lifespans::rollup( array( 'current', 'expiring_soon', 'incomplete' ) ) === 'expiring_soon', 'rollup => expiring_soon' );
 check( GHCA_Course_Lifespans::rollup( array( 'current', 'incomplete' ) ) === 'current', 'rollup => current' );
 
+$m = GHCA_Course_Lifespans::sanitize_lifespan_map( array( '10' => '730', '20' => '0', 'x' => '5', '30' => '99999', '-4' => '12' ) );
+check( $m === array( 10 => 730, 30 => 3650 ), 'sanitize: drops 0/invalid/negative ids, clamps to 3650' );
+
 echo $fails === 0 ? "\nALL PASS\n" : "\n$fails FAILED\n";
 exit( $fails === 0 ? 0 : 1 );

@@ -14,6 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 require_once __DIR__ . '/includes/class-branding.php';
 require_once __DIR__ . '/includes/class-ui-icons.php';
 require_once __DIR__ . '/includes/class-compliance-program.php';
+require_once __DIR__ . '/includes/class-course-lifespans.php';
 require_once __DIR__ . '/includes/class-roles.php';
 require_once __DIR__ . '/includes/class-scoping.php';
 require_once __DIR__ . '/includes/class-export.php';
