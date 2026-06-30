@@ -1393,6 +1393,14 @@ body.ghca-acd-page {
 .ghca-acd__status--new_hire_overdue {
   color: var(--ent-danger); background: var(--ent-danger-bg); border-color: var(--ent-danger-bd);
 }
+.ghca-acd__status--expired {
+  color: var(--ent-danger); background: var(--ent-danger-bg); border-color: var(--ent-danger-bd);
+}
+.ghca-acd__status--expiring_soon {
+  color: var(--ent-warning); background: var(--ent-warning-bg); border-color: var(--ent-warning-bd);
+}
+/* Amber "expiring soon" sub-line inside the merged Overdue KPI card */
+.ghca-acd__stat-sub--warning { color: var(--ent-warning); font-weight: 600; }
 .ghca-acd__status--new_hire_in_progress,
 .ghca-acd__status--new_hire_not_started {
   color: var(--ent-warning); background: var(--ent-warning-bg); border-color: var(--ent-warning-bd);
@@ -2007,6 +2015,8 @@ html.ghca-acd--drawer-open { overflow: hidden; }
 .ghca-acd__drawer-badge--cert-missing { background: #fef3f2; color: #b42318; }
 .ghca-acd__drawer-badge--cert-issued { background: #ecfdf3; color: #067647; }
 .ghca-acd__drawer-badge--cert-pending { background: #fffaeb; color: #b54708; }
+.ghca-acd__drawer-badge--expired { background: #fef3f2; color: #b42318; }
+.ghca-acd__drawer-badge--expiring_soon { background: #fffaeb; color: #b54708; }
 .ghca-acd__drawer-kpis { display: grid; grid-template-columns: repeat(3, 1fr); background: #fff; border-bottom: 1px solid #e6eaf0; }
 .ghca-acd__drawer-kpi { padding: 16px 12px; text-align: center; border-right: 1px solid #e6eaf0; }
 .ghca-acd__drawer-kpi:last-child { border-right: none; }
@@ -2057,6 +2067,8 @@ html.ghca-acd--drawer-open { overflow: hidden; }
 .ghca-acd__drawer-course-status--completed, .ghca-acd__drawer-course-status--compliant { background: #ecfdf3; color: #067647; }
 .ghca-acd__drawer-course-status--in_progress, .ghca-acd__drawer-course-status--in-progress { background: #eff8ff; color: #175cd3; }
 .ghca-acd__drawer-course-status--overdue { background: #fef3f2; color: #b42318; }
+.ghca-acd__drawer-course-status--expired { background: #fef3f2; color: #b42318; }
+.ghca-acd__drawer-course-status--expiring_soon { background: #fffaeb; color: #b54708; }
 .ghca-acd__drawer-course-status--not_started { background: #f2f4f7; color: #94a3b8; }
 .ghca-acd__drawer-course-progress { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .ghca-acd__drawer-course-bar { flex: 1; height: 6px; background: #eef1f5; border-radius: 3px; overflow: hidden; }

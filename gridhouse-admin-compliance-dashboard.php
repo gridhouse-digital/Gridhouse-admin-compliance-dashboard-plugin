@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Gridhouse Admin Compliance Dashboard
  * Description: HR/compliance administrative dashboard shortcodes for LearnDash + Elementor.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Gridhouse Healthcare Academy
  * Text Domain: ghca-acd
  */
@@ -14,6 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 require_once __DIR__ . '/includes/class-branding.php';
 require_once __DIR__ . '/includes/class-ui-icons.php';
 require_once __DIR__ . '/includes/class-compliance-program.php';
+require_once __DIR__ . '/includes/class-course-lifespans.php';
 require_once __DIR__ . '/includes/class-roles.php';
 require_once __DIR__ . '/includes/class-scoping.php';
 require_once __DIR__ . '/includes/class-export.php';
@@ -24,7 +25,7 @@ require_once __DIR__ . '/includes/class-user-report.php';
 require_once __DIR__ . '/includes/class-table-ui.php';
 
 final class GHCA_Admin_Compliance_Dashboard {
-  const VERSION         = '1.0.0';
+  const VERSION         = '1.1.0';
   const OPTION_DUE_DATE = 'ghca_compliance_due_date';
   const CYCLE_DAYS      = 365;
   const NOTICE_DAYS     = 90;
@@ -321,19 +322,30 @@ final class GHCA_Admin_Compliance_Dashboard {
       <?php else : ?>
         <div class="ghca-acd__drawer-courses-grid">
         <?php foreach ( $employee['courses'] as $course ) :
-          $course_status = ! empty( $course['completed'] ) ? 'completed' : (string) ( $course['status'] ?? 'not_started' );
+          $cstate = (string) ( $course['compliance_state'] ?? '' );
+          if ( 'expired' === $cstate ) {
+            $course_status = 'expired';
+          } elseif ( 'expiring_soon' === $cstate ) {
+            $course_status = 'expiring_soon';
+          } else {
+            $course_status = ! empty( $course['completed'] ) ? 'completed' : (string) ( $course['status'] ?? 'not_started' );
+          }
           $course_pct    = (int) ( $course['progress'] ?? 0 );
           $bar_class     = 'info';
           if ( $course_status === 'completed' ) { $bar_class = 'success'; }
-          elseif ( $course_status === 'overdue' )  { $bar_class = 'danger'; }
-          elseif ( $course_pct > 0 )               { $bar_class = 'info'; }
-          else                                     { $bar_class = 'danger'; }
+          elseif ( $course_status === 'expired' )       { $bar_class = 'danger'; }
+          elseif ( $course_status === 'expiring_soon' ) { $bar_class = 'warning'; }
+          elseif ( $course_status === 'overdue' )       { $bar_class = 'danger'; }
+          elseif ( $course_pct > 0 )                    { $bar_class = 'info'; }
+          else                                          { $bar_class = 'danger'; }
 
           $status_labels = array(
-            'completed'   => __( 'Compliant', 'ghca-acd' ),
-            'in_progress' => __( 'In Progress', 'ghca-acd' ),
-            'overdue'     => __( 'Overdue', 'ghca-acd' ),
-            'not_started' => __( 'Not Started', 'ghca-acd' ),
+            'completed'     => __( 'Compliant', 'ghca-acd' ),
+            'expiring_soon' => __( 'Expiring Soon', 'ghca-acd' ),
+            'expired'       => __( 'Expired', 'ghca-acd' ),
+            'in_progress'   => __( 'In Progress', 'ghca-acd' ),
+            'overdue'       => __( 'Overdue', 'ghca-acd' ),
+            'not_started'   => __( 'Not Started', 'ghca-acd' ),
           );
           $display_status = $status_labels[ $course_status ] ?? $course['status_label'] ?? ucfirst( str_replace( '_', ' ', $course_status ) );
         ?>
@@ -1090,10 +1102,11 @@ final class GHCA_Admin_Compliance_Dashboard {
         'sub'   => __( 'Currently training', 'ghca-acd' ),
       ),
       array(
-        'label' => __( 'Overdue', 'ghca-acd' ),
-        'value' => $data['overdue_employees'] ?? 0,
-        'icon'  => 'alert',
-        'sub'   => __( 'Past due date', 'ghca-acd' ),
+        'label'    => __( 'Overdue', 'ghca-acd' ),
+        'value'    => $data['overdue_employees'] ?? 0,
+        'icon'     => 'alert',
+        'sub'      => __( 'Past due date', 'ghca-acd' ),
+        'expiring' => $data['expiring_soon_employees'] ?? 0,
       ),
       array(
         'label' => __( 'Certificates Issued', 'ghca-acd' ),
@@ -1121,6 +1134,9 @@ final class GHCA_Admin_Compliance_Dashboard {
             <span class="ghca-acd__label"><?php echo esc_html( $kpi['label'] ); ?></span>
             <?php if ( ! empty( $kpi['sub'] ) ) : ?>
               <span class="ghca-acd__stat-sub"><?php echo esc_html( $kpi['sub'] ); ?></span>
+            <?php endif; ?>
+            <?php if ( ! empty( $kpi['expiring'] ) ) : ?>
+              <span class="ghca-acd__stat-sub ghca-acd__stat-sub--warning"><?php echo esc_html( sprintf( /* translators: %d: number of employees with a course expiring soon */ __( '+ %d expiring soon', 'ghca-acd' ), (int) $kpi['expiring'] ) ); ?></span>
             <?php endif; ?>
           </div>
         <?php endforeach; ?>
@@ -2070,7 +2086,9 @@ final class GHCA_Admin_Compliance_Dashboard {
   }
 
   private static function get_cache_key(): string {
-    return 'ghca_acd_agg_' . self::VERSION . '_' . get_current_user_id();
+    // Date stamp (site timezone) makes the aggregate self-invalidate at local
+    // midnight, so a course flipping 🟡→🔴 overnight recomputes with no DB write.
+    return 'ghca_acd_agg_' . self::VERSION . '_' . get_current_user_id() . '_' . wp_date( 'Ymd' );
   }
 
   private static function bust_cache(): void {
@@ -2151,11 +2169,14 @@ final class GHCA_Admin_Compliance_Dashboard {
     $recent_completed  = 0;
     $recent_items      = array();
     $next_due_ts       = PHP_INT_MAX;
+    $expiring          = 0;
 
     foreach ( $employees as $employee ) {
       if ( 'completed' === $employee['status_slug'] || 'new_hire_completed' === $employee['status_slug'] ) {
         ++$completed;
-      } elseif ( 'overdue' === $employee['status_slug'] || 'new_hire_overdue' === $employee['status_slug'] ) {
+      } elseif ( 'expiring_soon' === $employee['status_slug'] ) {
+        ++$expiring;
+      } elseif ( in_array( $employee['status_slug'], array( 'overdue', 'new_hire_overdue', 'expired' ), true ) ) {
         ++$overdue;
       } elseif ( in_array( $employee['status_slug'], array( 'in_progress', 'new_hire_in_progress', 'new_hire_not_started' ), true ) ) {
         ++$in_progress;
@@ -2188,7 +2209,8 @@ final class GHCA_Admin_Compliance_Dashboard {
       }
     }
 
-    $rate = $total > 0 ? (int) round( ( $completed / $total ) * 100 ) : 0;
+    // Yellow (expiring soon) employees are still compliant for now.
+    $rate = $total > 0 ? (int) round( ( ( $completed + $expiring ) / $total ) * 100 ) : 0;
 
     usort(
       $recent_items,
@@ -2208,6 +2230,8 @@ final class GHCA_Admin_Compliance_Dashboard {
       'in_progress_employees_label'  => sprintf( _n( '%d in progress', '%d in progress', $in_progress, 'ghca-acd' ), $in_progress ),
       'overdue_employees'            => $overdue,
       'overdue_employees_label'      => sprintf( _n( '%d overdue', '%d overdue', $overdue, 'ghca-acd' ), $overdue ),
+      'expiring_soon_employees'      => $expiring,
+      'expiring_soon_employees_label' => sprintf( _n( '%d expiring soon', '%d expiring soon', $expiring, 'ghca-acd' ), $expiring ),
       'certificates_issued'          => $certificates,
       'certificates_issued_label'    => sprintf( _n( '%d certificate', '%d certificates', $certificates, 'ghca-acd' ), $certificates ),
       'upcoming_due_date_label'      => PHP_INT_MAX === $next_due_ts ? self::format_due_date( get_option( self::OPTION_DUE_DATE, '2026-07-31' ) ) : wp_date( 'F j, Y', $next_due_ts ),
@@ -2278,6 +2302,22 @@ final class GHCA_Admin_Compliance_Dashboard {
 
       $progress_pct = $total > 0 ? (int) round( ( $completed_count / $total ) * 100 ) : 0;
 
+      // Rolling expiration overrides onboarding. A previously-completed required
+      // course that has lapsed makes the employee Overdue even mid-onboarding
+      // (precedence: expired > new-hire status). Evaluate the FULL required course
+      // set, not just new-hire group courses, so a lapsed cert outside the
+      // onboarding group is still caught. Expiring-soon does NOT override here —
+      // an incomplete new hire is not yet compliant.
+      $expiry_states = array();
+      foreach ( self::get_user_courses( $user_id ) as $c ) {
+        $expiry_states[] = (string) ( $c['compliance_state'] ?? 'incomplete' );
+      }
+      $expiry_state = GHCA_Course_Lifespans::rollup( $expiry_states );
+      if ( 'expired' === $expiry_state ) {
+        $status_slug  = 'expired';
+        $status_label = __( 'Expired', 'ghca-acd' );
+      }
+
       return array(
         'user_id'              => $user_id,
         'name'                 => self::get_user_full_name( $user_id, $user ),
@@ -2296,6 +2336,7 @@ final class GHCA_Admin_Compliance_Dashboard {
         'last_activity_label'  => self::get_last_activity_label( $user_id, $courses ),
         'status_slug'          => $status_slug,
         'status_label'         => $status_label,
+        'expiry_state'         => $expiry_state,
         'new_hire'             => $new_hire,
         'certificate_url'      => $certificate_url,
         'certificate_label'    => $certificate_url ? __( 'Available', 'ghca-acd' ) : ( $all_complete ? __( 'Check certificates', 'ghca-acd' ) : __( 'Pending', 'ghca-acd' ) ),
@@ -2326,9 +2367,26 @@ final class GHCA_Admin_Compliance_Dashboard {
     $due_ts       = (int) ( $cycle['due_timestamp'] ?? 0 );
     $is_overdue   = ! $all_complete && $due_ts > 0 && time() > $due_ts;
 
-    if ( $all_complete ) {
-      $status_slug  = 'completed';
-      $status_label = __( 'Completed', 'ghca-acd' );
+    // Roll up per-course traffic-light state (completed courses only react here).
+    $course_states = array();
+    foreach ( $courses as $c ) {
+      $course_states[] = (string) ( $c['compliance_state'] ?? 'incomplete' );
+    }
+    $expiry_state = GHCA_Course_Lifespans::rollup( $course_states );
+
+    if ( 'expired' === $expiry_state ) {
+      // Finished but past its rolling lifespan → 🔴 Expired. Distinct row label
+      // from incomplete "Overdue", but both roll into the Overdue KPI bucket.
+      $status_slug  = 'expired';
+      $status_label = __( 'Expired', 'ghca-acd' );
+    } elseif ( $all_complete ) {
+      if ( 'expiring_soon' === $expiry_state ) {
+        $status_slug  = 'expiring_soon';
+        $status_label = __( 'Expiring Soon', 'ghca-acd' );
+      } else {
+        $status_slug  = 'completed';
+        $status_label = __( 'Completed', 'ghca-acd' );
+      }
     } elseif ( $is_overdue ) {
       $status_slug  = 'overdue';
       $status_label = __( 'Overdue', 'ghca-acd' );
@@ -2360,6 +2418,7 @@ final class GHCA_Admin_Compliance_Dashboard {
       'last_activity_label'  => self::get_last_activity_label( $user_id, $courses ),
       'status_slug'          => $status_slug,
       'status_label'         => $status_label,
+      'expiry_state'         => $expiry_state,
       'new_hire'             => $new_hire,
       'certificate_url'      => $certificate_url,
       'certificate_label'    => $certificate_url ? __( 'Available', 'ghca-acd' ) : ( $all_complete ? __( 'Check certificates', 'ghca-acd' ) : __( 'Pending', 'ghca-acd' ) ),
@@ -2406,7 +2465,7 @@ final class GHCA_Admin_Compliance_Dashboard {
         'certificate_url'    => $cert,
         'completed_recently' => $completed && $completed_ts > ( time() - ( 30 * DAY_IN_SECONDS ) ),
         'last_activity_ts'   => self::get_course_last_activity_timestamp( $user_id, $course_id, $completed_ts ),
-      );
+      ) + GHCA_Course_Lifespans::decorate( $course_id, $completed, $completed_ts );
     }
 
     return $items;
@@ -2436,7 +2495,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     $rows = array();
 
     foreach ( self::get_aggregate()['employees'] as $employee ) {
-      if ( ! empty( $employee['completed_count'] ) && (int) $employee['completed_count'] === (int) $employee['total_courses'] && (int) $employee['total_courses'] > 0 ) {
+      if ( ! empty( $employee['completed_count'] ) && (int) $employee['completed_count'] === (int) $employee['total_courses'] && (int) $employee['total_courses'] > 0 && 'expired' !== $employee['status_slug'] ) {
         continue;
       }
 
@@ -2554,7 +2613,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     if ( $due_ts > 0 && $due_ts <= ( time() + ( self::get_at_risk_days() * DAY_IN_SECONDS ) ) ) {
       return 'at_risk';
     }
-    if ( 'overdue' === $employee['status_slug'] || 'new_hire_overdue' === $employee['status_slug'] ) {
+    if ( in_array( $employee['status_slug'], array( 'overdue', 'new_hire_overdue', 'expired' ), true ) ) {
       return 'overdue';
     }
     return '';
@@ -2759,8 +2818,15 @@ final class GHCA_Admin_Compliance_Dashboard {
             if ( $filters['status'] === 'completed' ) {
               return in_array( $status, array( 'completed', 'new_hire_completed' ), true );
             }
+            if ( $filters['status'] === 'expiring_soon' ) {
+              return $status === 'expiring_soon';
+            }
+            if ( $filters['status'] === 'expired' ) {
+              return $status === 'expired';
+            }
             if ( $filters['status'] === 'overdue' ) {
-              return in_array( $status, array( 'overdue', 'new_hire_overdue' ), true );
+              // "Everyone lapsed": never-finished overdue + expired re-certs.
+              return in_array( $status, array( 'overdue', 'new_hire_overdue', 'expired' ), true );
             }
             if ( $filters['status'] === 'in_progress' ) {
               return in_array( $status, array( 'in_progress', 'new_hire_in_progress', 'new_hire_not_started' ), true );
@@ -2796,7 +2862,7 @@ final class GHCA_Admin_Compliance_Dashboard {
         array_filter(
           $rows,
           static function ( array $row ): bool {
-            return in_array( $row['status_slug'], array( 'overdue', 'new_hire_overdue' ), true );
+            return in_array( $row['status_slug'], array( 'overdue', 'new_hire_overdue', 'expired' ), true );
           }
         )
       );
@@ -2867,10 +2933,12 @@ final class GHCA_Admin_Compliance_Dashboard {
   /** @return array<string,string> */
   private static function get_status_options(): array {
     return array(
-      'completed'   => __( 'Completed', 'ghca-acd' ),
-      'in_progress' => __( 'In Progress', 'ghca-acd' ),
-      'not_started' => __( 'Not Started', 'ghca-acd' ),
-      'overdue'     => __( 'Overdue', 'ghca-acd' ),
+      'completed'     => __( 'Completed', 'ghca-acd' ),
+      'expiring_soon' => __( 'Expiring Soon', 'ghca-acd' ),
+      'in_progress'   => __( 'In Progress', 'ghca-acd' ),
+      'not_started'   => __( 'Not Started', 'ghca-acd' ),
+      'overdue'       => __( 'Overdue (incl. expired)', 'ghca-acd' ),
+      'expired'       => __( 'Expired', 'ghca-acd' ),
     );
   }
 

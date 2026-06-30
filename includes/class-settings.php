@@ -13,6 +13,8 @@ final class GHCA_ACD_Settings {
     add_action( 'update_option_' . GHCA_Compliance_Program::OPTION_NEW_HIRE_GROUPS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_action( 'update_option_' . GHCA_Compliance_Program::OPTION_NEW_HIRE_DAYS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_action( 'update_option_' . GHCA_Dashboard_Branding::OPTION, array( __CLASS__, 'bust_dashboard_cache' ) );
+    add_action( 'update_option_' . GHCA_Course_Lifespans::OPTION_LIFESPANS, array( __CLASS__, 'bust_dashboard_cache' ) );
+    add_action( 'update_option_' . GHCA_Course_Lifespans::OPTION_WARNING_DAYS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_filter( 'ghca_admin_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
     add_filter( 'ghca_employee_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
   }
@@ -53,6 +55,29 @@ final class GHCA_ACD_Settings {
           return max( 0, min( 3600, $value ) );
         },
         'default'           => 300,
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
+      GHCA_Course_Lifespans::OPTION_LIFESPANS,
+      array(
+        'type'              => 'array',
+        'sanitize_callback' => array( 'GHCA_Course_Lifespans', 'sanitize_lifespan_map' ),
+        'default'           => array(),
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
+      GHCA_Course_Lifespans::OPTION_WARNING_DAYS,
+      array(
+        'type'              => 'integer',
+        'sanitize_callback' => static function ( $value ): int {
+          $value = (int) $value;
+          return max( 7, min( 365, $value ) );
+        },
+        'default'           => GHCA_Course_Lifespans::DEFAULT_WARNING_DAYS,
       )
     );
 
@@ -135,6 +160,23 @@ final class GHCA_ACD_Settings {
     return is_array( $posts ) ? $posts : array();
   }
 
+  /** @return array<int,\WP_Post> */
+  private static function get_published_courses(): array {
+    $posts = get_posts(
+      array(
+        'post_type'              => 'sfwd-courses',
+        'post_status'            => 'publish',
+        'posts_per_page'         => 500,
+        'orderby'                => 'title',
+        'order'                  => 'ASC',
+        'no_found_rows'          => true,
+        'update_post_meta_cache' => false,
+        'update_post_term_cache' => false,
+      )
+    );
+    return is_array( $posts ) ? $posts : array();
+  }
+
   public static function render_page(): void {
     if ( ! current_user_can( 'manage_options' ) ) {
       return;
@@ -150,6 +192,11 @@ final class GHCA_ACD_Settings {
     $brand_saved     = get_option( GHCA_Dashboard_Branding::OPTION, array() );
     $accent_raw      = is_array( $brand_saved ) ? (string) ( $brand_saved['accent'] ?? '' ) : '';
     $option_name     = GHCA_Dashboard_Branding::OPTION;
+    $lifespan_map    = GHCA_Course_Lifespans::get_lifespan_map();
+    $warning_days    = GHCA_Course_Lifespans::get_warning_days();
+    $all_courses     = self::get_published_courses();
+    $lifespan_opt    = GHCA_Course_Lifespans::OPTION_LIFESPANS;
+    $warning_opt     = GHCA_Course_Lifespans::OPTION_WARNING_DAYS;
     ?>
     <div class="wrap">
       <h1><?php esc_html_e( 'Admin Compliance Dashboard', 'ghca-acd' ); ?></h1>
@@ -271,6 +318,94 @@ final class GHCA_ACD_Settings {
             <td><input type="number" min="0" max="3600" id="ghca_acd_cache_ttl" name="<?php echo esc_attr( self::OPTION_CACHE_TTL ); ?>" value="<?php echo esc_attr( (string) $cache ); ?>" class="small-text" /></td>
           </tr>
         </table>
+        <h2><?php esc_html_e( 'Rolling Expirations & Traffic Light', 'ghca-acd' ); ?></h2>
+        <p><?php esc_html_e( 'Define how long each course stays valid after completion. A completed course turns yellow inside the warning window and red once it passes its lifespan. Courses with no lifespan never expire.', 'ghca-acd' ); ?></p>
+        <table class="form-table" role="presentation">
+          <tr>
+            <th scope="row"><label for="ghca_acd_warning_days"><?php esc_html_e( 'Warning window (days)', 'ghca-acd' ); ?></label></th>
+            <td>
+              <input type="number" min="7" max="365" id="ghca_acd_warning_days" name="<?php echo esc_attr( $warning_opt ); ?>" value="<?php echo esc_attr( (string) $warning_days ); ?>" class="small-text" />
+              <p class="description"><?php esc_html_e( 'How many days before expiry a course is flagged "Expiring Soon". Default: 90.', 'ghca-acd' ); ?></p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><?php esc_html_e( 'Course lifespans', 'ghca-acd' ); ?></th>
+            <td>
+              <?php if ( empty( $all_courses ) ) : ?>
+                <p><?php esc_html_e( 'No published LearnDash courses found.', 'ghca-acd' ); ?></p>
+              <?php else : ?>
+                <div id="ghca-lifespan-rows">
+                  <?php foreach ( $lifespan_map as $cid => $days ) : ?>
+                    <div class="ghca-lifespan-row" style="margin:0 0 8px;display:flex;gap:8px;align-items:center;">
+                      <select class="ghca-lifespan-course">
+                        <option value="0"><?php esc_html_e( '— Select course —', 'ghca-acd' ); ?></option>
+                        <?php foreach ( $all_courses as $course ) : ?>
+                          <option value="<?php echo esc_attr( (string) $course->ID ); ?>" <?php selected( (int) $cid, (int) $course->ID ); ?>><?php echo esc_html( $course->post_title ); ?> (#<?php echo esc_html( (string) $course->ID ); ?>)</option>
+                        <?php endforeach; ?>
+                      </select>
+                      <input type="number" min="1" max="3650" class="ghca-lifespan-days small-text" value="<?php echo esc_attr( (string) $days ); ?>" placeholder="<?php esc_attr_e( 'days', 'ghca-acd' ); ?>" />
+                      <button type="button" class="button ghca-lifespan-remove"><?php esc_html_e( 'Remove', 'ghca-acd' ); ?></button>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+                <p><button type="button" class="button" id="ghca-lifespan-add"><?php esc_html_e( '+ Add course lifespan', 'ghca-acd' ); ?></button></p>
+                <p class="description"><?php esc_html_e( 'Example: CPR = 730 days, HIPAA = 365 days. Rows with no course or 0 days are ignored on save.', 'ghca-acd' ); ?></p>
+
+                <template id="ghca-lifespan-template">
+                  <div class="ghca-lifespan-row" style="margin:0 0 8px;display:flex;gap:8px;align-items:center;">
+                    <select class="ghca-lifespan-course">
+                      <option value="0"><?php esc_html_e( '— Select course —', 'ghca-acd' ); ?></option>
+                      <?php foreach ( $all_courses as $course ) : ?>
+                        <option value="<?php echo esc_attr( (string) $course->ID ); ?>"><?php echo esc_html( $course->post_title ); ?> (#<?php echo esc_html( (string) $course->ID ); ?>)</option>
+                      <?php endforeach; ?>
+                    </select>
+                    <input type="number" min="1" max="3650" class="ghca-lifespan-days small-text" placeholder="<?php esc_attr_e( 'days', 'ghca-acd' ); ?>" />
+                    <button type="button" class="button ghca-lifespan-remove"><?php esc_html_e( 'Remove', 'ghca-acd' ); ?></button>
+                  </div>
+                </template>
+
+                <input type="hidden" id="ghca-lifespan-name-base" value="<?php echo esc_attr( $lifespan_opt ); ?>" />
+              <?php endif; ?>
+            </td>
+          </tr>
+        </table>
+
+        <script>
+          (function () {
+            var rows = document.getElementById('ghca-lifespan-rows');
+            if (!rows) return;
+            var base = document.getElementById('ghca-lifespan-name-base').value;
+            var tpl = document.getElementById('ghca-lifespan-template');
+            var addBtn = document.getElementById('ghca-lifespan-add');
+            var form = rows.closest('form');
+
+            function wire(row) {
+              row.querySelector('.ghca-lifespan-remove').addEventListener('click', function () { row.remove(); });
+            }
+            Array.prototype.forEach.call(rows.querySelectorAll('.ghca-lifespan-row'), wire);
+
+            addBtn.addEventListener('click', function () {
+              var clone = tpl.content.firstElementChild.cloneNode(true);
+              rows.appendChild(clone);
+              wire(clone);
+            });
+
+            // On submit, materialize each row into name="base[courseId]" = days.
+            form.addEventListener('submit', function () {
+              Array.prototype.forEach.call(rows.querySelectorAll('.ghca-lifespan-row'), function (row) {
+                var cid = parseInt(row.querySelector('.ghca-lifespan-course').value, 10);
+                var days = parseInt(row.querySelector('.ghca-lifespan-days').value, 10);
+                if (!cid || !days || days < 1) return;
+                var hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = base + '[' + cid + ']';
+                hidden.value = days;
+                form.appendChild(hidden);
+              });
+            });
+          })();
+        </script>
+
         <?php submit_button(); ?>
       </form>
       <p><?php esc_html_e( 'Dashboard URL:', 'ghca-acd' ); ?> <code><?php echo esc_html( GHCA_ACD_Nav::get_dashboard_url() ); ?></code></p>
