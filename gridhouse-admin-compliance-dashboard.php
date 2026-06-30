@@ -2792,8 +2792,15 @@ final class GHCA_Admin_Compliance_Dashboard {
             if ( $filters['status'] === 'completed' ) {
               return in_array( $status, array( 'completed', 'new_hire_completed' ), true );
             }
+            if ( $filters['status'] === 'expiring_soon' ) {
+              return $status === 'expiring_soon';
+            }
+            if ( $filters['status'] === 'expired' ) {
+              return $status === 'expired';
+            }
             if ( $filters['status'] === 'overdue' ) {
-              return in_array( $status, array( 'overdue', 'new_hire_overdue' ), true );
+              // "Everyone lapsed": never-finished overdue + expired re-certs.
+              return in_array( $status, array( 'overdue', 'new_hire_overdue', 'expired' ), true );
             }
             if ( $filters['status'] === 'in_progress' ) {
               return in_array( $status, array( 'in_progress', 'new_hire_in_progress', 'new_hire_not_started' ), true );
@@ -2900,10 +2907,12 @@ final class GHCA_Admin_Compliance_Dashboard {
   /** @return array<string,string> */
   private static function get_status_options(): array {
     return array(
-      'completed'   => __( 'Completed', 'ghca-acd' ),
-      'in_progress' => __( 'In Progress', 'ghca-acd' ),
-      'not_started' => __( 'Not Started', 'ghca-acd' ),
-      'overdue'     => __( 'Overdue', 'ghca-acd' ),
+      'completed'     => __( 'Completed', 'ghca-acd' ),
+      'expiring_soon' => __( 'Expiring Soon', 'ghca-acd' ),
+      'in_progress'   => __( 'In Progress', 'ghca-acd' ),
+      'not_started'   => __( 'Not Started', 'ghca-acd' ),
+      'overdue'       => __( 'Overdue (incl. expired)', 'ghca-acd' ),
+      'expired'       => __( 'Expired', 'ghca-acd' ),
     );
   }
 
