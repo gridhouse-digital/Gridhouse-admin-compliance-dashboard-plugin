@@ -322,19 +322,30 @@ final class GHCA_Admin_Compliance_Dashboard {
       <?php else : ?>
         <div class="ghca-acd__drawer-courses-grid">
         <?php foreach ( $employee['courses'] as $course ) :
-          $course_status = ! empty( $course['completed'] ) ? 'completed' : (string) ( $course['status'] ?? 'not_started' );
+          $cstate = (string) ( $course['compliance_state'] ?? '' );
+          if ( 'expired' === $cstate ) {
+            $course_status = 'expired';
+          } elseif ( 'expiring_soon' === $cstate ) {
+            $course_status = 'expiring_soon';
+          } else {
+            $course_status = ! empty( $course['completed'] ) ? 'completed' : (string) ( $course['status'] ?? 'not_started' );
+          }
           $course_pct    = (int) ( $course['progress'] ?? 0 );
           $bar_class     = 'info';
           if ( $course_status === 'completed' ) { $bar_class = 'success'; }
-          elseif ( $course_status === 'overdue' )  { $bar_class = 'danger'; }
-          elseif ( $course_pct > 0 )               { $bar_class = 'info'; }
-          else                                     { $bar_class = 'danger'; }
+          elseif ( $course_status === 'expired' )       { $bar_class = 'danger'; }
+          elseif ( $course_status === 'expiring_soon' ) { $bar_class = 'warning'; }
+          elseif ( $course_status === 'overdue' )       { $bar_class = 'danger'; }
+          elseif ( $course_pct > 0 )                    { $bar_class = 'info'; }
+          else                                          { $bar_class = 'danger'; }
 
           $status_labels = array(
-            'completed'   => __( 'Compliant', 'ghca-acd' ),
-            'in_progress' => __( 'In Progress', 'ghca-acd' ),
-            'overdue'     => __( 'Overdue', 'ghca-acd' ),
-            'not_started' => __( 'Not Started', 'ghca-acd' ),
+            'completed'     => __( 'Compliant', 'ghca-acd' ),
+            'expiring_soon' => __( 'Expiring Soon', 'ghca-acd' ),
+            'expired'       => __( 'Expired', 'ghca-acd' ),
+            'in_progress'   => __( 'In Progress', 'ghca-acd' ),
+            'overdue'       => __( 'Overdue', 'ghca-acd' ),
+            'not_started'   => __( 'Not Started', 'ghca-acd' ),
           );
           $display_status = $status_labels[ $course_status ] ?? $course['status_label'] ?? ucfirst( str_replace( '_', ' ', $course_status ) );
         ?>
