@@ -2480,7 +2480,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     $rows = array();
 
     foreach ( self::get_aggregate()['employees'] as $employee ) {
-      if ( ! empty( $employee['completed_count'] ) && (int) $employee['completed_count'] === (int) $employee['total_courses'] && (int) $employee['total_courses'] > 0 ) {
+      if ( ! empty( $employee['completed_count'] ) && (int) $employee['completed_count'] === (int) $employee['total_courses'] && (int) $employee['total_courses'] > 0 && 'expired' !== $employee['status_slug'] ) {
         continue;
       }
 
@@ -2598,7 +2598,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     if ( $due_ts > 0 && $due_ts <= ( time() + ( self::get_at_risk_days() * DAY_IN_SECONDS ) ) ) {
       return 'at_risk';
     }
-    if ( 'overdue' === $employee['status_slug'] || 'new_hire_overdue' === $employee['status_slug'] ) {
+    if ( in_array( $employee['status_slug'], array( 'overdue', 'new_hire_overdue', 'expired' ), true ) ) {
       return 'overdue';
     }
     return '';
@@ -2847,7 +2847,7 @@ final class GHCA_Admin_Compliance_Dashboard {
         array_filter(
           $rows,
           static function ( array $row ): bool {
-            return in_array( $row['status_slug'], array( 'overdue', 'new_hire_overdue' ), true );
+            return in_array( $row['status_slug'], array( 'overdue', 'new_hire_overdue', 'expired' ), true );
           }
         )
       );
