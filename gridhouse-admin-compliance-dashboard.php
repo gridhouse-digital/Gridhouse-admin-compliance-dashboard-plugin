@@ -2302,6 +2302,22 @@ final class GHCA_Admin_Compliance_Dashboard {
 
       $progress_pct = $total > 0 ? (int) round( ( $completed_count / $total ) * 100 ) : 0;
 
+      // Rolling expiration overrides onboarding. A previously-completed required
+      // course that has lapsed makes the employee Overdue even mid-onboarding
+      // (precedence: expired > new-hire status). Evaluate the FULL required course
+      // set, not just new-hire group courses, so a lapsed cert outside the
+      // onboarding group is still caught. Expiring-soon does NOT override here —
+      // an incomplete new hire is not yet compliant.
+      $expiry_states = array();
+      foreach ( self::get_user_courses( $user_id ) as $c ) {
+        $expiry_states[] = (string) ( $c['compliance_state'] ?? 'incomplete' );
+      }
+      $expiry_state = GHCA_Course_Lifespans::rollup( $expiry_states );
+      if ( 'expired' === $expiry_state ) {
+        $status_slug  = 'expired';
+        $status_label = __( 'Expired', 'ghca-acd' );
+      }
+
       return array(
         'user_id'              => $user_id,
         'name'                 => self::get_user_full_name( $user_id, $user ),
@@ -2320,6 +2336,7 @@ final class GHCA_Admin_Compliance_Dashboard {
         'last_activity_label'  => self::get_last_activity_label( $user_id, $courses ),
         'status_slug'          => $status_slug,
         'status_label'         => $status_label,
+        'expiry_state'         => $expiry_state,
         'new_hire'             => $new_hire,
         'certificate_url'      => $certificate_url,
         'certificate_label'    => $certificate_url ? __( 'Available', 'ghca-acd' ) : ( $all_complete ? __( 'Check certificates', 'ghca-acd' ) : __( 'Pending', 'ghca-acd' ) ),
