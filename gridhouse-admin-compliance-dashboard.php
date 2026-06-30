@@ -2329,9 +2329,26 @@ final class GHCA_Admin_Compliance_Dashboard {
     $due_ts       = (int) ( $cycle['due_timestamp'] ?? 0 );
     $is_overdue   = ! $all_complete && $due_ts > 0 && time() > $due_ts;
 
-    if ( $all_complete ) {
-      $status_slug  = 'completed';
-      $status_label = __( 'Completed', 'ghca-acd' );
+    // Roll up per-course traffic-light state (completed courses only react here).
+    $course_states = array();
+    foreach ( $courses as $c ) {
+      $course_states[] = (string) ( $c['compliance_state'] ?? 'incomplete' );
+    }
+    $expiry_state = GHCA_Course_Lifespans::rollup( $course_states );
+
+    if ( 'expired' === $expiry_state ) {
+      // Finished but past its rolling lifespan → 🔴 Expired. Distinct row label
+      // from incomplete "Overdue", but both roll into the Overdue KPI bucket.
+      $status_slug  = 'expired';
+      $status_label = __( 'Expired', 'ghca-acd' );
+    } elseif ( $all_complete ) {
+      if ( 'expiring_soon' === $expiry_state ) {
+        $status_slug  = 'expiring_soon';
+        $status_label = __( 'Expiring Soon', 'ghca-acd' );
+      } else {
+        $status_slug  = 'completed';
+        $status_label = __( 'Completed', 'ghca-acd' );
+      }
     } elseif ( $is_overdue ) {
       $status_slug  = 'overdue';
       $status_label = __( 'Overdue', 'ghca-acd' );
@@ -2363,6 +2380,7 @@ final class GHCA_Admin_Compliance_Dashboard {
       'last_activity_label'  => self::get_last_activity_label( $user_id, $courses ),
       'status_slug'          => $status_slug,
       'status_label'         => $status_label,
+      'expiry_state'         => $expiry_state,
       'new_hire'             => $new_hire,
       'certificate_url'      => $certificate_url,
       'certificate_label'    => $certificate_url ? __( 'Available', 'ghca-acd' ) : ( $all_complete ? __( 'Check certificates', 'ghca-acd' ) : __( 'Pending', 'ghca-acd' ) ),
