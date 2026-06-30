@@ -1102,16 +1102,11 @@ final class GHCA_Admin_Compliance_Dashboard {
         'sub'   => __( 'Currently training', 'ghca-acd' ),
       ),
       array(
-        'label' => __( 'Overdue', 'ghca-acd' ),
-        'value' => $data['overdue_employees'] ?? 0,
-        'icon'  => 'alert',
-        'sub'   => __( 'Past due date', 'ghca-acd' ),
-      ),
-      array(
-        'label' => __( 'Expiring Soon', 'ghca-acd' ),
-        'value' => $data['expiring_soon_employees'] ?? 0,
-        'icon'  => 'time',
-        'sub'   => __( 'Within warning window', 'ghca-acd' ),
+        'label'    => __( 'Overdue', 'ghca-acd' ),
+        'value'    => $data['overdue_employees'] ?? 0,
+        'icon'     => 'alert',
+        'sub'      => __( 'Past due date', 'ghca-acd' ),
+        'expiring' => $data['expiring_soon_employees'] ?? 0,
       ),
       array(
         'label' => __( 'Certificates Issued', 'ghca-acd' ),
@@ -1139,6 +1134,9 @@ final class GHCA_Admin_Compliance_Dashboard {
             <span class="ghca-acd__label"><?php echo esc_html( $kpi['label'] ); ?></span>
             <?php if ( ! empty( $kpi['sub'] ) ) : ?>
               <span class="ghca-acd__stat-sub"><?php echo esc_html( $kpi['sub'] ); ?></span>
+            <?php endif; ?>
+            <?php if ( ! empty( $kpi['expiring'] ) ) : ?>
+              <span class="ghca-acd__stat-sub ghca-acd__stat-sub--warning"><?php echo esc_html( sprintf( /* translators: %d: number of employees with a course expiring soon */ __( '+ %d expiring soon', 'ghca-acd' ), (int) $kpi['expiring'] ) ); ?></span>
             <?php endif; ?>
           </div>
         <?php endforeach; ?>

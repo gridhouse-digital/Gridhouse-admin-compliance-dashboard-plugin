@@ -1399,6 +1399,8 @@ body.ghca-acd-page {
 .ghca-acd__status--expiring_soon {
   color: var(--ent-warning); background: var(--ent-warning-bg); border-color: var(--ent-warning-bd);
 }
+/* Amber "expiring soon" sub-line inside the merged Overdue KPI card */
+.ghca-acd__stat-sub--warning { color: var(--ent-warning); font-weight: 600; }
 .ghca-acd__status--new_hire_in_progress,
 .ghca-acd__status--new_hire_not_started {
   color: var(--ent-warning); background: var(--ent-warning-bg); border-color: var(--ent-warning-bd);
