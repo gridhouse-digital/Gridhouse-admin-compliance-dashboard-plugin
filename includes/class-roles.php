@@ -112,6 +112,13 @@ final class GHCA_ACD_Roles {
     return self::user_can_view() && self::user_in_setting_list( GHCA_ACD_Settings::OPTION_PERM_MANAGE_ANNOUNCEMENTS );
   }
 
+  public static function user_can_manage_users(): bool {
+    if ( current_user_can( 'manage_options' ) ) {
+      return true;
+    }
+    return self::user_can_view() && self::user_in_setting_list( GHCA_ACD_Settings::OPTION_PERM_MANAGE_USERS );
+  }
+
   public static function user_has_unrestricted_view(): bool {
     if ( current_user_can( 'manage_options' ) ) {
       return true;

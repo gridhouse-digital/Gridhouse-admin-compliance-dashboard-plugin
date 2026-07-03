@@ -24,6 +24,7 @@ require_once __DIR__ . '/includes/class-nav.php';
 require_once __DIR__ . '/includes/class-settings.php';
 require_once __DIR__ . '/includes/class-user-report.php';
 require_once __DIR__ . '/includes/class-table-ui.php';
+require_once __DIR__ . '/includes/class-manage-users-ui.php';
 
 final class GHCA_Admin_Compliance_Dashboard {
   const VERSION         = '1.1.0';
@@ -53,6 +54,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     GHCA_ACD_Settings::init();
     GHCA_Compliance_Program::init();
     GHCA_ACD_User_Report::init();
+    GHCA_ACD_Manage_Users_UI::init();
     add_action( 'init', array( __CLASS__, 'register_shortcodes' ) );
     add_action( 'init', array( __CLASS__, 'register_announce_cpt' ), 4 );
     add_action( 'wp_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
@@ -65,7 +67,10 @@ final class GHCA_Admin_Compliance_Dashboard {
     add_action( 'wp_ajax_ghca_acd_mark_reviewed', array( __CLASS__, 'ajax_mark_reviewed' ) );
     add_action( 'wp_footer', array( __CLASS__, 'render_edit_records_modal' ) );
     add_action( 'wp_ajax_ghca_acd_get_edit_records_form', array( __CLASS__, 'ajax_get_edit_records_form' ) );
+    add_action( 'wp_ajax_ghca_acd_save_settings', array( __CLASS__, 'ajax_save_settings' ) );
     add_action( 'wp_ajax_ghca_acd_save_employee_records', array( __CLASS__, 'ajax_save_employee_records' ) );
+    add_action( 'wp_ajax_ghca_acd_save_employee', array( __CLASS__, 'ajax_save_employee' ) );
+    add_action( 'admin_post_ghca_acd_export_csv', array( __CLASS__, 'export_csv' ) );
     add_action( 'wp_footer', array( __CLASS__, 'render_announcement_modal' ) );
     add_action( 'wp_ajax_ghca_acd_save_announcement', array( __CLASS__, 'ajax_save_announcement' ) );
     add_action( 'wp_ajax_ghca_acd_delete_announcement', array( __CLASS__, 'ajax_delete_announcement' ) );
@@ -2008,6 +2013,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     $export_url  = wp_nonce_url( admin_url( 'admin-post.php?action=ghca_acd_export_csv' ), 'ghca_acd_export_csv' );
     $user_report = self::get_page_url( 'user-report', '/user-report/' );
     $cert_url    = self::get_page_url( 'cert-download', '/cert-download/' );
+    $manage_url  = self::get_page_url( 'manage-users', '/manage-users/' );
 
     $reports = array(
       array(
@@ -2030,6 +2036,13 @@ final class GHCA_Admin_Compliance_Dashboard {
         'icon'   => 'certificate',
         'action' => __( 'View certificates', 'ghca-acd' ),
         'url'    => $cert_url,
+      ),
+      array(
+        'title'  => __( 'Manage Users', 'ghca-acd' ),
+        'desc'   => __( 'Add, remove, or modify user enrollment and group assignments.', 'ghca-acd' ),
+        'icon'   => 'users',
+        'action' => __( 'Manage', 'ghca-acd' ),
+        'url'    => $manage_url,
       ),
     );
 
@@ -2098,7 +2111,7 @@ final class GHCA_Admin_Compliance_Dashboard {
   }
 
   /** @return array<int> */
-  private static function get_employee_user_ids(): array {
+  public static function get_employee_user_ids(): array {
     $ids = array();
 
     foreach ( self::get_tracked_group_ids() as $group_id ) {
@@ -2984,7 +2997,7 @@ final class GHCA_Admin_Compliance_Dashboard {
         ),
         array(
           'label'   => __( 'Manage Users', 'ghca-acd' ),
-          'url'     => current_user_can( 'edit_users' ) ? admin_url( 'users.php' ) : self::get_page_url( 'group-management', '/group-management/' ),
+          'url'     => GHCA_ACD_Roles::user_can_manage_users() ? self::get_page_url( 'manage-users', '/manage-users/' ) : ( current_user_can( 'edit_users' ) ? admin_url( 'users.php' ) : self::get_page_url( 'group-management', '/group-management/' ) ),
           'icon'    => 'user-plus',
           'variant' => 'secondary',
         ),
@@ -3005,7 +3018,7 @@ final class GHCA_Admin_Compliance_Dashboard {
         'label'    => __( 'Users', 'ghca-acd' ),
         'subtitle' => __( 'Employee accounts', 'ghca-acd' ),
         'icon'     => 'users',
-        'url'      => current_user_can( 'edit_users' ) ? admin_url( 'users.php' ) : self::get_page_url( 'group-management', '/group-management/' ),
+        'url'      => GHCA_ACD_Roles::user_can_manage_users() ? self::get_page_url( 'manage-users', '/manage-users/' ) : ( current_user_can( 'edit_users' ) ? admin_url( 'users.php' ) : self::get_page_url( 'group-management', '/group-management/' ) ),
       ),
       array(
         'label'    => __( 'Reports', 'ghca-acd' ),
@@ -3379,6 +3392,76 @@ final class GHCA_Admin_Compliance_Dashboard {
       }
     }
     return $initials !== '' ? $initials : '–';
+  }
+
+  public static function ajax_save_employee(): void {
+    check_ajax_referer( 'ghca_save_employee', 'nonce' );
+
+    if ( ! GHCA_ACD_Roles::user_can_manage_users() ) {
+      wp_send_json_error( __( 'Permission denied.', 'ghca-acd' ) );
+    }
+
+    $user_id    = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
+    $first_name = isset( $_POST['first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['first_name'] ) ) : '';
+    $last_name  = isset( $_POST['last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['last_name'] ) ) : '';
+    $email      = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+    $phone      = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
+    $groups     = isset( $_POST['groups'] ) && is_array( $_POST['groups'] ) ? array_map( 'intval', wp_unslash( $_POST['groups'] ) ) : array();
+
+    if ( empty( $first_name ) || empty( $last_name ) || empty( $email ) ) {
+      wp_send_json_error( __( 'Please fill in all required fields.', 'ghca-acd' ) );
+    }
+
+    if ( ! is_email( $email ) ) {
+      wp_send_json_error( __( 'Invalid email address.', 'ghca-acd' ) );
+    }
+
+    $visible_groups = GHCA_ACD_Scoping::get_visible_group_ids();
+    foreach ( $groups as $gid ) {
+      if ( ! in_array( $gid, $visible_groups, true ) ) {
+        wp_send_json_error( __( 'You do not have permission to assign this group.', 'ghca-acd' ) );
+      }
+    }
+
+    $userdata = array(
+      'user_email'   => $email,
+      'first_name'   => $first_name,
+      'last_name'    => $last_name,
+      'display_name' => trim( $first_name . ' ' . $last_name ),
+    );
+
+    if ( $user_id > 0 ) {
+      $userdata['ID'] = $user_id;
+      $result = wp_update_user( $userdata );
+    } else {
+      $userdata['user_login'] = $email;
+      $userdata['user_pass']  = wp_generate_password( 20, true, true );
+      $userdata['role']       = 'subscriber';
+      $result = wp_insert_user( $userdata );
+    }
+
+    if ( is_wp_error( $result ) ) {
+      wp_send_json_error( $result->get_error_message() );
+    }
+
+    $saved_user_id = $user_id > 0 ? $user_id : $result;
+
+    update_user_meta( $saved_user_id, 'billing_phone', $phone );
+    update_user_meta( $saved_user_id, 'phone', $phone );
+    if ( function_exists( 'xprofile_set_field_data' ) ) {
+      xprofile_set_field_data( 'Phone', $saved_user_id, $phone );
+      xprofile_set_field_data( 'Phone Number', $saved_user_id, $phone );
+    }
+
+    if ( function_exists( 'learndash_set_users_group_ids' ) ) {
+      $existing_groups = function_exists( 'learndash_get_users_group_ids' ) ? learndash_get_users_group_ids( $saved_user_id ) : array();
+      $unmanageable_groups = array_diff( $existing_groups, $visible_groups );
+      $final_groups = array_unique( array_merge( $unmanageable_groups, $groups ) );
+      learndash_set_users_group_ids( $saved_user_id, $final_groups );
+    }
+
+    GHCA_ACD_Settings::bust_dashboard_cache();
+    wp_send_json_success( __( 'Employee saved successfully.', 'ghca-acd' ) );
   }
 
   /** Deterministic, calm avatar tint derived from the user id. */

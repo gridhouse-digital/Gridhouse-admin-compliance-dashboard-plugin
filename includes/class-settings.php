@@ -9,6 +9,7 @@ final class GHCA_ACD_Settings {
   const OPTION_PERM_EDIT_RECORDS = 'ghca_acd_permission_edit_records';
   const OPTION_PERM_MANAGE_ANNOUNCEMENTS = 'ghca_acd_permission_manage_announcements';
   const OPTION_PERM_UNRESTRICTED_VIEW = 'ghca_acd_permission_unrestricted_view';
+  const OPTION_PERM_MANAGE_USERS = 'ghca_acd_permission_manage_users';
 
   public static function init(): void {
     add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
@@ -21,6 +22,7 @@ final class GHCA_ACD_Settings {
     add_action( 'update_option_' . self::OPTION_PERM_EDIT_RECORDS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_action( 'update_option_' . self::OPTION_PERM_MANAGE_ANNOUNCEMENTS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_action( 'update_option_' . self::OPTION_PERM_UNRESTRICTED_VIEW, array( __CLASS__, 'bust_dashboard_cache' ) );
+    add_action( 'update_option_' . self::OPTION_PERM_MANAGE_USERS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_filter( 'ghca_admin_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
     add_filter( 'ghca_employee_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
   }
@@ -143,6 +145,16 @@ final class GHCA_ACD_Settings {
     register_setting(
       'ghca_acd_permissions',
       self::OPTION_PERM_UNRESTRICTED_VIEW,
+      array(
+        'type'              => 'string',
+        'sanitize_callback' => 'sanitize_text_field',
+        'default'           => '',
+      )
+    );
+
+    register_setting(
+      'ghca_acd_permissions',
+      self::OPTION_PERM_MANAGE_USERS,
       array(
         'type'              => 'string',
         'sanitize_callback' => 'sanitize_text_field',
@@ -465,6 +477,7 @@ final class GHCA_ACD_Settings {
     $edit_records  = get_option( self::OPTION_PERM_EDIT_RECORDS, '' );
     $manage_ann    = get_option( self::OPTION_PERM_MANAGE_ANNOUNCEMENTS, '' );
     $unrestricted  = get_option( self::OPTION_PERM_UNRESTRICTED_VIEW, '' );
+    $manage_users  = get_option( self::OPTION_PERM_MANAGE_USERS, '' );
     ?>
     <div class="wrap">
       <h1><?php esc_html_e( 'Compliance Permissions', 'ghca-acd' ); ?></h1>
@@ -493,6 +506,13 @@ final class GHCA_ACD_Settings {
             <td>
               <input type="text" class="regular-text" id="ghca_perm_unrestricted" name="<?php echo esc_attr( self::OPTION_PERM_UNRESTRICTED_VIEW ); ?>" value="<?php echo esc_attr( (string) $unrestricted ); ?>" placeholder="e.g. 5, 12, 18" />
               <p class="description"><?php esc_html_e( 'User IDs allowed to see all employees company-wide, overriding LearnDash group constraints.', 'ghca-acd' ); ?></p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><label for="ghca_perm_manage_users"><?php esc_html_e( 'Manage Users', 'ghca-acd' ); ?></label></th>
+            <td>
+              <input type="text" class="regular-text" id="ghca_perm_manage_users" name="<?php echo esc_attr( self::OPTION_PERM_MANAGE_USERS ); ?>" value="<?php echo esc_attr( (string) $manage_users ); ?>" placeholder="e.g. 5, 12, 18" />
+              <p class="description"><?php esc_html_e( 'User IDs allowed to add and edit employees from the frontend User Management panel.', 'ghca-acd' ); ?></p>
             </td>
           </tr>
         </table>
