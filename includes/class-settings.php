@@ -6,6 +6,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class GHCA_ACD_Settings {
   const OPTION_AT_RISK_DAYS = 'ghca_acd_at_risk_days';
   const OPTION_CACHE_TTL    = 'ghca_acd_cache_ttl';
+  const OPTION_PERM_EDIT_RECORDS = 'ghca_acd_permission_edit_records';
+  const OPTION_PERM_MANAGE_ANNOUNCEMENTS = 'ghca_acd_permission_manage_announcements';
+  const OPTION_PERM_UNRESTRICTED_VIEW = 'ghca_acd_permission_unrestricted_view';
 
   public static function init(): void {
     add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
@@ -113,6 +116,36 @@ final class GHCA_ACD_Settings {
         'default'           => GHCA_Dashboard_Branding::defaults(),
       )
     );
+
+    register_setting(
+      'ghca_acd_permissions',
+      self::OPTION_PERM_EDIT_RECORDS,
+      array(
+        'type'              => 'string',
+        'sanitize_callback' => 'sanitize_text_field',
+        'default'           => '',
+      )
+    );
+
+    register_setting(
+      'ghca_acd_permissions',
+      self::OPTION_PERM_MANAGE_ANNOUNCEMENTS,
+      array(
+        'type'              => 'string',
+        'sanitize_callback' => 'sanitize_text_field',
+        'default'           => '',
+      )
+    );
+
+    register_setting(
+      'ghca_acd_permissions',
+      self::OPTION_PERM_UNRESTRICTED_VIEW,
+      array(
+        'type'              => 'string',
+        'sanitize_callback' => 'sanitize_text_field',
+        'default'           => '',
+      )
+    );
   }
 
   /** @param mixed $value @return array<int> */
@@ -131,6 +164,14 @@ final class GHCA_ACD_Settings {
       'manage_options',
       'ghca-acd-settings',
       array( __CLASS__, 'render_page' )
+    );
+
+    add_options_page(
+      __( 'Compliance Permissions', 'ghca-acd' ),
+      __( 'Compliance Permissions', 'ghca-acd' ),
+      'manage_options',
+      'ghca-acd-permissions',
+      array( __CLASS__, 'render_permissions_page' )
     );
   }
 
@@ -412,4 +453,51 @@ final class GHCA_ACD_Settings {
     </div>
     <?php
   }
+
+  public static function render_permissions_page(): void {
+    if ( ! current_user_can( 'manage_options' ) ) {
+      return;
+    }
+
+    $edit_records  = get_option( self::OPTION_PERM_EDIT_RECORDS, '' );
+    $manage_ann    = get_option( self::OPTION_PERM_MANAGE_ANNOUNCEMENTS, '' );
+    $unrestricted  = get_option( self::OPTION_PERM_UNRESTRICTED_VIEW, '' );
+    ?>
+    <div class="wrap">
+      <h1><?php esc_html_e( 'Compliance Permissions', 'ghca-acd' ); ?></h1>
+      <p><?php esc_html_e( 'Enter a comma-separated list of User IDs to grant specific dashboard overrides. These apply on top of standard role limits.', 'ghca-acd' ); ?></p>
+      
+      <form method="post" action="options.php">
+        <?php settings_fields( 'ghca_acd_permissions' ); ?>
+        
+        <table class="form-table" role="presentation">
+          <tr>
+            <th scope="row"><label for="ghca_perm_edit_records"><?php esc_html_e( 'Edit Training Records', 'ghca-acd' ); ?></label></th>
+            <td>
+              <input type="text" class="regular-text" id="ghca_perm_edit_records" name="<?php echo esc_attr( self::OPTION_PERM_EDIT_RECORDS ); ?>" value="<?php echo esc_attr( (string) $edit_records ); ?>" placeholder="e.g. 5, 12, 18" />
+              <p class="description"><?php esc_html_e( 'User IDs allowed to manually alter course completion dates and timers.', 'ghca-acd' ); ?></p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><label for="ghca_perm_manage_ann"><?php esc_html_e( 'Manage Announcements', 'ghca-acd' ); ?></label></th>
+            <td>
+              <input type="text" class="regular-text" id="ghca_perm_manage_ann" name="<?php echo esc_attr( self::OPTION_PERM_MANAGE_ANNOUNCEMENTS ); ?>" value="<?php echo esc_attr( (string) $manage_ann ); ?>" placeholder="e.g. 5, 12, 18" />
+              <p class="description"><?php esc_html_e( 'User IDs allowed to create, edit, or delete global compliance dashboard announcements.', 'ghca-acd' ); ?></p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><label for="ghca_perm_unrestricted"><?php esc_html_e( 'Unrestricted View', 'ghca-acd' ); ?></label></th>
+            <td>
+              <input type="text" class="regular-text" id="ghca_perm_unrestricted" name="<?php echo esc_attr( self::OPTION_PERM_UNRESTRICTED_VIEW ); ?>" value="<?php echo esc_attr( (string) $unrestricted ); ?>" placeholder="e.g. 5, 12, 18" />
+              <p class="description"><?php esc_html_e( 'User IDs allowed to see all employees company-wide, overriding LearnDash group constraints.', 'ghca-acd' ); ?></p>
+            </td>
+          </tr>
+        </table>
+
+        <?php submit_button(); ?>
+      </form>
+    </div>
+    <?php
+  }
 }
+
