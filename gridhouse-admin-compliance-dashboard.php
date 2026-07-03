@@ -553,7 +553,7 @@ final class GHCA_Admin_Compliance_Dashboard {
   public static function ajax_save_employee_records(): void {
     check_ajax_referer( 'ghca_acd_table', 'nonce' );
 
-    if ( ! GHCA_ACD_Roles::user_can_view() ) {
+    if ( ! GHCA_ACD_Roles::user_can_edit_records() ) {
       wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ghca-acd' ) ) );
     }
 
@@ -1607,7 +1607,7 @@ final class GHCA_Admin_Compliance_Dashboard {
 
   /** Whether the current user may create/edit/delete announcements. */
   public static function can_manage_announcements(): bool {
-    return GHCA_ACD_Roles::user_can_view();
+    return GHCA_ACD_Roles::user_can_manage_announcements();
   }
 
   /** Registers the private CPT that stores admin-authored announcements. */
@@ -2118,26 +2118,28 @@ final class GHCA_Admin_Compliance_Dashboard {
       }
     }
 
-    // Also include any WP users not enrolled in any tracked group.
-    $all_wp_users = get_users( array(
-      'fields'  => 'ID',
-      'orderby' => 'registered',
-      'order'   => 'ASC',
-    ) );
-    foreach ( $all_wp_users as $wp_uid ) {
-      $wp_uid = (int) $wp_uid;
-      if ( $wp_uid <= 0 || in_array( $wp_uid, $ids, true ) ) {
-        continue;
+    // Also include any WP users not enrolled in any tracked group, if allowed.
+    if ( GHCA_ACD_Roles::user_has_unrestricted_view() ) {
+      $all_wp_users = get_users( array(
+        'fields'  => 'ID',
+        'orderby' => 'registered',
+        'order'   => 'ASC',
+      ) );
+      foreach ( $all_wp_users as $wp_uid ) {
+        $wp_uid = (int) $wp_uid;
+        if ( $wp_uid <= 0 || in_array( $wp_uid, $ids, true ) ) {
+          continue;
+        }
+        $user = get_userdata( $wp_uid );
+        if ( ! $user ) {
+          continue;
+        }
+        // Skip super admins on multisite or users with no real role.
+        if ( empty( $user->roles ) || is_super_admin( $wp_uid ) ) {
+          continue;
+        }
+        $ids[] = $wp_uid;
       }
-      $user = get_userdata( $wp_uid );
-      if ( ! $user ) {
-        continue;
-      }
-      // Skip super admins on multisite or users with no real role.
-      if ( empty( $user->roles ) ) {
-        continue;
-      }
-      $ids[] = $wp_uid;
     }
 
     return array_values( array_unique( $ids ) );

@@ -23,7 +23,7 @@ final class GHCA_ACD_Scoping {
     ) );
     $all = apply_filters( 'ghca_compliance_group_ids', empty( $all_groups ) ? array() : $all_groups );
 
-    if ( current_user_can( 'manage_options' ) || current_user_can( 'edit_users' ) ) {
+    if ( current_user_can( 'manage_options' ) || current_user_can( 'edit_users' ) || GHCA_ACD_Roles::user_has_unrestricted_view() ) {
       return array_map( 'intval', (array) $all );
     }
 
@@ -39,6 +39,7 @@ final class GHCA_ACD_Scoping {
   public static function is_scoped_user(): bool {
     return ! current_user_can( 'manage_options' )
       && ! current_user_can( 'edit_users' )
+      && ! GHCA_ACD_Roles::user_has_unrestricted_view()
       && in_array( 'group_leader', (array) wp_get_current_user()->roles, true );
   }
 

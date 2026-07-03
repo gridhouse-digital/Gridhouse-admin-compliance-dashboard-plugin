@@ -67,4 +67,55 @@ final class GHCA_ACD_Roles {
 
     return (bool) array_intersect( $allowed, (array) wp_get_current_user()->roles );
   }
+
+  private static $setting_cache = array();
+
+  /**
+   * Helper to check if a specific user ID is in a comma-separated setting.
+   */
+  private static function user_in_setting_list( string $option_name ): bool {
+    $user_id = get_current_user_id();
+    if ( ! $user_id ) {
+      return false;
+    }
+
+    if ( ! isset( self::$setting_cache[ $option_name ] ) ) {
+      $setting = get_option( $option_name, '' );
+      if ( empty( $setting ) ) {
+        self::$setting_cache[ $option_name ] = array();
+      } else {
+        $ids = array();
+        foreach ( explode( ',', $setting ) as $token ) {
+          $token = trim( $token );
+          if ( '' !== $token && ctype_digit( $token ) ) {
+            $ids[] = (int) $token;
+          }
+        }
+        self::$setting_cache[ $option_name ] = $ids;
+      }
+    }
+
+    return in_array( $user_id, self::$setting_cache[ $option_name ], true );
+  }
+
+  public static function user_can_edit_records(): bool {
+    if ( current_user_can( 'manage_options' ) ) {
+      return true;
+    }
+    return self::user_can_view() && self::user_in_setting_list( GHCA_ACD_Settings::OPTION_PERM_EDIT_RECORDS );
+  }
+
+  public static function user_can_manage_announcements(): bool {
+    if ( current_user_can( 'manage_options' ) ) {
+      return true;
+    }
+    return self::user_can_view() && self::user_in_setting_list( GHCA_ACD_Settings::OPTION_PERM_MANAGE_ANNOUNCEMENTS );
+  }
+
+  public static function user_has_unrestricted_view(): bool {
+    if ( current_user_can( 'manage_options' ) ) {
+      return true;
+    }
+    return self::user_in_setting_list( GHCA_ACD_Settings::OPTION_PERM_UNRESTRICTED_VIEW );
+  }
 }
