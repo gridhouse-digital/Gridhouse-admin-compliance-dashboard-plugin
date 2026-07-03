@@ -145,7 +145,6 @@ final class GHCA_ACD_Manage_Users_UI {
                 <button type="button" class="ghca-acd__btn ghca-acd__btn--secondary ghca-acd-modal__cancel"><?php esc_html_e( 'Cancel', 'ghca-acd' ); ?></button>
                 <button type="submit" class="ghca-acd__btn ghca-acd__btn--primary" id="ghca-acd-user-submit">
                   <span class="ghca-acd-btn-text"><?php esc_html_e( 'Save Employee', 'ghca-acd' ); ?></span>
-                  <span class="ghca-acd-spinner" style="display:none;"></span>
                 </button>
               </div>
             </form>

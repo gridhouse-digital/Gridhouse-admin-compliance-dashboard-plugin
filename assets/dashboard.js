@@ -934,8 +934,10 @@
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         if (submitBtn) submitBtn.disabled = true;
-        if (btnText) btnText.style.display = 'none';
-        if (spinner) spinner.style.display = 'inline-block';
+        if (btnText) {
+          btnText.dataset.original = btnText.textContent;
+          btnText.textContent = 'Saving...';
+        }
 
         var formData = new FormData(form);
         var urlEncoded = new URLSearchParams(formData).toString();
@@ -948,8 +950,7 @@
         .then(function(res) { return res.json(); })
         .then(function(json) {
           if (submitBtn) submitBtn.disabled = false;
-          if (btnText) btnText.style.display = '';
-          if (spinner) spinner.style.display = 'none';
+          if (btnText) btnText.textContent = btnText.dataset.original;
 
           if (json && json.success) {
             ghcaToast(json.data || 'Saved successfully.', false);
@@ -961,8 +962,7 @@
         })
         .catch(function() {
           if (submitBtn) submitBtn.disabled = false;
-          if (btnText) btnText.style.display = '';
-          if (spinner) spinner.style.display = 'none';
+          if (btnText) btnText.textContent = btnText.dataset.original;
           ghcaToast('Network error.', true);
         });
       });
