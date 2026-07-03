@@ -66,6 +66,7 @@ final class GHCA_ACD_Manage_Users_UI {
                       $phone = xprofile_get_field_data( 'Phone Number', $user_id );
                     }
                   }
+                  $phone = wp_strip_all_tags( (string) $phone );
                   
                   $user_groups = learndash_get_users_group_ids( $user_id );
                   $user_group_names = array();

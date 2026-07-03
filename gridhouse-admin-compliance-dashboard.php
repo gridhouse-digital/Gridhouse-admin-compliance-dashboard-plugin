@@ -851,6 +851,7 @@ final class GHCA_Admin_Compliance_Dashboard {
       'admin_compliance_support',
       'admin_compliance_dashboard',
       'admin_compliance_user_report',
+      'admin_compliance_manage_users',
     );
 
     foreach ( $tags as $tag ) {
