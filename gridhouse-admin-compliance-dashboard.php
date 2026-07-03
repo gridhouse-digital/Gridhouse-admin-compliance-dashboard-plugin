@@ -3407,6 +3407,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     $last_name  = isset( $_POST['last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['last_name'] ) ) : '';
     $email      = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
     $phone      = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
+    $role       = isset( $_POST['role'] ) ? sanitize_text_field( wp_unslash( $_POST['role'] ) ) : 'subscriber';
     $groups     = isset( $_POST['groups'] ) && is_array( $_POST['groups'] ) ? array_map( 'intval', wp_unslash( $_POST['groups'] ) ) : array();
 
     if ( empty( $first_name ) || empty( $last_name ) || empty( $email ) ) {
@@ -3431,13 +3432,33 @@ final class GHCA_Admin_Compliance_Dashboard {
       'display_name' => trim( $first_name . ' ' . $last_name ),
     );
 
+    // Validate role against editable roles
+    $all_roles = wp_roles()->roles;
+    $editable_roles = apply_filters( 'editable_roles', $all_roles );
+    if ( ! current_user_can( 'manage_options' ) ) {
+      unset( $editable_roles['administrator'] );
+    }
+    
+    if ( array_key_exists( $role, $editable_roles ) ) {
+      $userdata['role'] = $role;
+    }
+
     if ( $user_id > 0 ) {
       $userdata['ID'] = $user_id;
+      
+      // Prevent editing administrators if current user is not one
+      $existing_user = get_userdata( $user_id );
+      if ( $existing_user && in_array( 'administrator', (array) $existing_user->roles, true ) && ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( __( 'You cannot modify an administrator account.', 'ghca-acd' ) );
+      }
+      
       $result = wp_update_user( $userdata );
     } else {
       $userdata['user_login'] = $email;
       $userdata['user_pass']  = wp_generate_password( 20, true, true );
-      $userdata['role']       = 'subscriber';
+      if ( ! isset( $userdata['role'] ) ) {
+        $userdata['role'] = 'subscriber';
+      }
       $result = wp_insert_user( $userdata );
     }
 

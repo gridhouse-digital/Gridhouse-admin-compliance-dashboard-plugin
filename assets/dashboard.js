@@ -915,6 +915,9 @@
         form.elements['last_name'].value = btn.getAttribute('data-last_name');
         form.elements['email'].value = btn.getAttribute('data-email');
         form.elements['phone'].value = btn.getAttribute('data-phone') || '';
+        if (form.elements['role']) {
+          form.elements['role'].value = btn.getAttribute('data-role') || 'subscriber';
+        }
         
         var groups = [];
         try {

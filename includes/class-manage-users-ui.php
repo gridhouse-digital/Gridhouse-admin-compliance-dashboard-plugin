@@ -22,6 +22,13 @@ final class GHCA_ACD_Manage_Users_UI {
       $group_options[ $gid ] = get_the_title( $gid );
     }
 
+    // Get editable roles
+    $all_roles = wp_roles()->roles;
+    $editable_roles = apply_filters( 'editable_roles', $all_roles );
+    if ( ! current_user_can( 'manage_options' ) ) {
+      unset( $editable_roles['administrator'] );
+    }
+
     ob_start();
     ?>
     <div class="ghca-acd ghca-acd--manage-users">
@@ -41,6 +48,7 @@ final class GHCA_ACD_Manage_Users_UI {
                 <th><?php esc_html_e( 'Name', 'ghca-acd' ); ?></th>
                 <th><?php esc_html_e( 'Email', 'ghca-acd' ); ?></th>
                 <th><?php esc_html_e( 'Phone', 'ghca-acd' ); ?></th>
+                <th><?php esc_html_e( 'Role', 'ghca-acd' ); ?></th>
                 <th><?php esc_html_e( 'Group', 'ghca-acd' ); ?></th>
                 <th><?php esc_html_e( 'Actions', 'ghca-acd' ); ?></th>
               </tr>
@@ -48,7 +56,7 @@ final class GHCA_ACD_Manage_Users_UI {
             <tbody>
               <?php if ( empty( $users ) ) : ?>
                 <tr>
-                  <td colspan="5" class="ghca-acd__table-empty"><?php esc_html_e( 'No employees found.', 'ghca-acd' ); ?></td>
+                  <td colspan="6" class="ghca-acd__table-empty"><?php esc_html_e( 'No employees found.', 'ghca-acd' ); ?></td>
                 </tr>
               <?php else : ?>
                 <?php foreach ( $users as $user_id ) : 
@@ -73,11 +81,16 @@ final class GHCA_ACD_Manage_Users_UI {
                   foreach ( $user_groups as $g ) {
                     $user_group_names[] = get_the_title( $g );
                   }
+                  
+                  // Get user's primary role
+                  $user_role_slug = ! empty( $user->roles ) ? $user->roles[0] : '';
+                  $user_role_name = $user_role_slug && isset( $all_roles[ $user_role_slug ] ) ? $all_roles[ $user_role_slug ]['name'] : $user_role_slug;
                   ?>
                   <tr>
                     <td><?php echo esc_html( $user->first_name . ' ' . $user->last_name ); ?></td>
                     <td><?php echo esc_html( $user->user_email ); ?></td>
                     <td><?php echo esc_html( (string) $phone ); ?></td>
+                    <td><?php echo esc_html( translate_user_role( $user_role_name ) ); ?></td>
                     <td><?php echo esc_html( implode( ', ', $user_group_names ) ); ?></td>
                     <td>
                       <button type="button" class="ghca-acd__btn ghca-acd__btn--secondary ghca-acd-btn-edit-user"
@@ -86,7 +99,8 @@ final class GHCA_ACD_Manage_Users_UI {
                         data-last_name="<?php echo esc_attr( $user->last_name ); ?>"
                         data-email="<?php echo esc_attr( $user->user_email ); ?>"
                         data-phone="<?php echo esc_attr( (string) $phone ); ?>"
-                        data-groups="<?php echo esc_attr( json_encode( $user_groups ) ); ?>">
+                        data-role="<?php echo esc_attr( $user_role_slug ); ?>"
+                        data-groups="<?php echo esc_attr( wp_json_encode( $user_groups ) ); ?>">
                         <?php esc_html_e( 'Edit', 'ghca-acd' ); ?>
                       </button>
                     </td>
@@ -127,6 +141,17 @@ final class GHCA_ACD_Manage_Users_UI {
               <div class="ghca-acd-form-group">
                 <label for="ghca-acd-phone"><?php esc_html_e( 'Phone Number', 'ghca-acd' ); ?></label>
                 <input type="text" id="ghca-acd-phone" name="phone" />
+              </div>
+
+              <div class="ghca-acd-form-group">
+                <label for="ghca-acd-role"><?php esc_html_e( 'Role', 'ghca-acd' ); ?> *</label>
+                <select id="ghca-acd-role" name="role" required style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:4px;">
+                  <?php foreach ( $editable_roles as $role_slug => $role_details ) : ?>
+                    <option value="<?php echo esc_attr( $role_slug ); ?>">
+                      <?php echo esc_html( translate_user_role( $role_details['name'] ) ); ?>
+                    </option>
+                  <?php endforeach; ?>
+                </select>
               </div>
               
               <div class="ghca-acd-form-group">
