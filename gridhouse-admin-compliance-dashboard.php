@@ -3396,7 +3396,7 @@ final class GHCA_Admin_Compliance_Dashboard {
   }
 
   public static function ajax_save_employee(): void {
-    check_ajax_referer( 'ghca_save_employee', 'nonce' );
+    check_ajax_referer( 'ghca_save_employee', 'ghca_nonce' );
 
     if ( ! GHCA_ACD_Roles::user_can_manage_users() ) {
       wp_send_json_error( __( 'Permission denied.', 'ghca-acd' ) );

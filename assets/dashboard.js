@@ -940,7 +940,7 @@
         var formData = new FormData(form);
         var urlEncoded = new URLSearchParams(formData).toString();
 
-        fetch(ghca_acd_opts.ajax_url, {
+        fetch(ghcaAcd.ajaxUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: urlEncoded
