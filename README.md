@@ -153,7 +153,7 @@ Developers can easily extend or modify the dashboard's behavior using the provid
 
 The plugin provides a secure, nonce-protected endpoint for CSV generation:
 
-```
+```text
 admin-post.php?action=ghca_acd_export_csv
 ```
 

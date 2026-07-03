@@ -2135,7 +2135,7 @@ final class GHCA_Admin_Compliance_Dashboard {
           continue;
         }
         // Skip super admins on multisite or users with no real role.
-        if ( empty( $user->roles ) ) {
+        if ( empty( $user->roles ) || is_super_admin( $wp_uid ) ) {
           continue;
         }
         $ids[] = $wp_uid;

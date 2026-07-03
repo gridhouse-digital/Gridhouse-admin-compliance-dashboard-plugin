@@ -18,6 +18,9 @@ final class GHCA_ACD_Settings {
     add_action( 'update_option_' . GHCA_Dashboard_Branding::OPTION, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_action( 'update_option_' . GHCA_Course_Lifespans::OPTION_LIFESPANS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_action( 'update_option_' . GHCA_Course_Lifespans::OPTION_WARNING_DAYS, array( __CLASS__, 'bust_dashboard_cache' ) );
+    add_action( 'update_option_' . self::OPTION_PERM_EDIT_RECORDS, array( __CLASS__, 'bust_dashboard_cache' ) );
+    add_action( 'update_option_' . self::OPTION_PERM_MANAGE_ANNOUNCEMENTS, array( __CLASS__, 'bust_dashboard_cache' ) );
+    add_action( 'update_option_' . self::OPTION_PERM_UNRESTRICTED_VIEW, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_filter( 'ghca_admin_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
     add_filter( 'ghca_employee_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
   }

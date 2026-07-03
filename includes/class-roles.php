@@ -84,7 +84,14 @@ final class GHCA_ACD_Roles {
       if ( empty( $setting ) ) {
         self::$setting_cache[ $option_name ] = array();
       } else {
-        self::$setting_cache[ $option_name ] = array_map( 'intval', array_map( 'trim', explode( ',', $setting ) ) );
+        $ids = array();
+        foreach ( explode( ',', $setting ) as $token ) {
+          $token = trim( $token );
+          if ( '' !== $token && ctype_digit( $token ) ) {
+            $ids[] = (int) $token;
+          }
+        }
+        self::$setting_cache[ $option_name ] = $ids;
       }
     }
 
@@ -95,14 +102,14 @@ final class GHCA_ACD_Roles {
     if ( current_user_can( 'manage_options' ) ) {
       return true;
     }
-    return self::user_in_setting_list( GHCA_ACD_Settings::OPTION_PERM_EDIT_RECORDS );
+    return self::user_can_view() && self::user_in_setting_list( GHCA_ACD_Settings::OPTION_PERM_EDIT_RECORDS );
   }
 
   public static function user_can_manage_announcements(): bool {
     if ( current_user_can( 'manage_options' ) ) {
       return true;
     }
-    return self::user_in_setting_list( GHCA_ACD_Settings::OPTION_PERM_MANAGE_ANNOUNCEMENTS );
+    return self::user_can_view() && self::user_in_setting_list( GHCA_ACD_Settings::OPTION_PERM_MANAGE_ANNOUNCEMENTS );
   }
 
   public static function user_has_unrestricted_view(): bool {
