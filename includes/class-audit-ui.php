@@ -16,7 +16,7 @@ final class GHCA_ACD_Audit_UI {
 		$url_annual = wp_nonce_url( admin_url( 'admin-post.php?action=ghca_acd_audit_export_csv&tracker=annual' ), 'ghca_acd_audit_export_csv' );
 		$url_orient = wp_nonce_url( admin_url( 'admin-post.php?action=ghca_acd_audit_export_csv&tracker=orientation' ), 'ghca_acd_audit_export_csv' );
 		
-		$employees = GHCA_Admin_Compliance_Dashboard::get_employee_user_ids();
+		$employees = GHCA_ACD_Data_Provider::get_employee_user_ids();
 		
 		ob_start();
 		?>
@@ -79,7 +79,7 @@ final class GHCA_ACD_Audit_UI {
 								$doh = $doh_ts ? gmdate( 'm/d/Y', $doh_ts ) : '';
 								?>
 								<tr data-user-id="<?php echo esc_attr( $user_id ); ?>">
-									<td><?php echo esc_html( GHCA_Admin_Compliance_Dashboard::get_user_full_name( $user_id, $user ) ); ?></td>
+									<td><?php echo esc_html( GHCA_ACD_Data_Provider::get_user_full_name( $user_id, $user ) ); ?></td>
 									<td><?php echo esc_html( $role ); ?></td>
 									<td style="color: #64748b; font-size: 13px;"><?php echo esc_html( $doh ); ?></td>
 									<td>

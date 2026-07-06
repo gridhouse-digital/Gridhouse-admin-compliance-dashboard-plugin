@@ -13,7 +13,7 @@ final class GHCA_ACD_Manage_Users_UI {
       return '<div class="ghca-acd__card ghca-acd__card--denied"><p>' . esc_html__( 'You do not have permission to manage users.', 'ghca-acd' ) . '</p></div>';
     }
 
-    $users = GHCA_Admin_Compliance_Dashboard::get_employee_user_ids();
+    $users = GHCA_ACD_Data_Provider::get_employee_user_ids();
     
     // Get visible groups for the dropdown
     $visible_groups = GHCA_ACD_Scoping::get_visible_group_ids();

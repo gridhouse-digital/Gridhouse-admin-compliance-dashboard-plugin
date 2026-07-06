@@ -26,7 +26,7 @@ final class GHCA_ACD_User_Report {
       return self::wrap_message( __( 'You do not have permission to view this employee report.', 'ghca-acd' ), 'denied' );
     }
 
-    $employee = GHCA_Admin_Compliance_Dashboard::get_employee_record( $user_id );
+    $employee = GHCA_ACD_Data_Provider::get_employee_record( $user_id );
     if ( empty( $employee['user_id'] ) ) {
       return self::wrap_message( __( 'Employee not found or has no compliance data.', 'ghca-acd' ), 'empty' );
     }
@@ -142,7 +142,7 @@ final class GHCA_ACD_User_Report {
                       </span>
                     </td>
                     <td><?php echo esc_html( $course['progress_label'] ); ?></td>
-                    <td><?php echo esc_html( GHCA_Admin_Compliance_Dashboard::format_activity_label( (int) ( $course['last_activity_ts'] ?? 0 ) ) ); ?></td>
+                    <td><?php echo esc_html( GHCA_ACD_Data_Provider::format_activity_label( (int) ( $course['last_activity_ts'] ?? 0 ) ) ); ?></td>
                     <td class="ghca-acd__actions">
                       <div class="ghca-acd__action-chips">
                         <a href="<?php echo esc_url( $course['url'] ); ?>"><?php esc_html_e( 'View Course', 'ghca-acd' ); ?></a>
@@ -172,7 +172,7 @@ final class GHCA_ACD_User_Report {
       return true;
     }
 
-    $employee = GHCA_Admin_Compliance_Dashboard::get_employee_record( $user_id );
+    $employee = GHCA_ACD_Data_Provider::get_employee_record( $user_id );
     $group_id = (int) ( $employee['group_id'] ?? 0 );
     if ( $group_id <= 0 ) {
       return false;
@@ -185,7 +185,7 @@ final class GHCA_ACD_User_Report {
     ob_start();
     ?>
     <p class="ghca-acd__back">
-      <a href="<?php echo esc_url( GHCA_Admin_Compliance_Dashboard::get_admin_dashboard_url() ); ?>">
+      <a href="<?php echo esc_url( GHCA_ACD_Data_Provider::get_admin_dashboard_url() ); ?>">
         <?php echo esc_html( apply_filters( 'ghca_user_report_back_label', __( '← Back to Compliance Dashboard', 'ghca-acd' ) ) ); ?>
       </a>
     </p>
@@ -207,7 +207,7 @@ final class GHCA_ACD_User_Report {
         <p><?php echo esc_html( $message ); ?></p>
         <?php if ( $show_dashboard_cta ) : ?>
           <p class="ghca-acd__user-report-cta">
-            <a class="ghca-acd__btn" href="<?php echo esc_url( GHCA_Admin_Compliance_Dashboard::get_admin_dashboard_url() . '#ghca-overdue-employees' ); ?>">
+            <a class="ghca-acd__btn" href="<?php echo esc_url( GHCA_ACD_Data_Provider::get_admin_dashboard_url() . '#ghca-overdue-employees' ); ?>">
               <?php esc_html_e( 'Go to Compliance Dashboard', 'ghca-acd' ); ?>
             </a>
           </p>

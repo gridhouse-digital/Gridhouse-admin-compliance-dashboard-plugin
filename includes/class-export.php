@@ -37,7 +37,7 @@ final class GHCA_ACD_Export {
 
     check_admin_referer( 'ghca_acd_export_csv' );
 
-    $employees = GHCA_Admin_Compliance_Dashboard::get_employees_for_current_view();
+    $employees = GHCA_ACD_Data_Provider::get_employees_for_current_view();
     $filename  = 'compliance-export-' . wp_date( 'Y-m-d-His' ) . '.csv';
 
     nocache_headers();

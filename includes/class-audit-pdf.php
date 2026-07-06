@@ -39,7 +39,7 @@ final class GHCA_Audit_PDF {
 		}
 
 		// Grab Employee Data & Config
-		$employees = GHCA_Admin_Compliance_Dashboard::get_employees_for_current_view();
+		$employees = GHCA_ACD_Data_Provider::get_employees_for_current_view();
 		$employee_data = null;
 		foreach ( $employees as $emp ) {
 			if ( (int) $emp['user_id'] === $user_id ) {

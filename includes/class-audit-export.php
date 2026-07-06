@@ -46,7 +46,7 @@ final class GHCA_Audit_Export {
 		check_admin_referer( 'ghca_acd_audit_export_csv' );
 
 		$tracker_type = ( isset( $_GET['tracker'] ) && 'orientation' === $_GET['tracker'] ) ? 'orientation' : 'annual';
-		$employees    = GHCA_Admin_Compliance_Dashboard::get_employees_for_current_view();
+		$employees    = GHCA_ACD_Data_Provider::get_employees_for_current_view();
 		$filename     = 'odp-' . $tracker_type . '-tracker-' . wp_date( 'Y-m-d-His' ) . '.csv';
 
 		nocache_headers();
