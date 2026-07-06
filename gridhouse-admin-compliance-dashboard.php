@@ -9,7 +9,7 @@
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
-  exit;
+	exit;
 }
 
 require_once __DIR__ . '/includes/class-branding.php';
@@ -25,6 +25,11 @@ require_once __DIR__ . '/includes/class-settings.php';
 require_once __DIR__ . '/includes/class-user-report.php';
 require_once __DIR__ . '/includes/class-table-ui.php';
 require_once __DIR__ . '/includes/class-manage-users-ui.php';
+require_once __DIR__ . '/includes/class-audit-mapping.php';
+require_once __DIR__ . '/includes/class-audit-calculator.php';
+require_once __DIR__ . '/includes/class-audit-export.php';
+require_once __DIR__ . '/includes/class-audit-pdf.php';
+require_once __DIR__ . '/includes/class-audit-ui.php';
 
 final class GHCA_Admin_Compliance_Dashboard {
   const VERSION         = '1.1.0';
@@ -52,6 +57,10 @@ final class GHCA_Admin_Compliance_Dashboard {
     GHCA_ACD_FluentCRM::init();
     GHCA_ACD_Nav::init();
     GHCA_ACD_Settings::init();
+    GHCA_Audit_Mapping::init();
+    GHCA_Audit_Export::init();
+    GHCA_Audit_PDF::init();
+    GHCA_ACD_Audit_UI::init();
     GHCA_Compliance_Program::init();
     GHCA_ACD_User_Report::init();
     GHCA_ACD_Manage_Users_UI::init();
@@ -67,10 +76,8 @@ final class GHCA_Admin_Compliance_Dashboard {
     add_action( 'wp_ajax_ghca_acd_mark_reviewed', array( __CLASS__, 'ajax_mark_reviewed' ) );
     add_action( 'wp_footer', array( __CLASS__, 'render_edit_records_modal' ) );
     add_action( 'wp_ajax_ghca_acd_get_edit_records_form', array( __CLASS__, 'ajax_get_edit_records_form' ) );
-    add_action( 'wp_ajax_ghca_acd_save_settings', array( __CLASS__, 'ajax_save_settings' ) );
     add_action( 'wp_ajax_ghca_acd_save_employee_records', array( __CLASS__, 'ajax_save_employee_records' ) );
     add_action( 'wp_ajax_ghca_acd_save_employee', array( __CLASS__, 'ajax_save_employee' ) );
-    add_action( 'admin_post_ghca_acd_export_csv', array( __CLASS__, 'export_csv' ) );
     add_action( 'wp_footer', array( __CLASS__, 'render_announcement_modal' ) );
     add_action( 'wp_ajax_ghca_acd_save_announcement', array( __CLASS__, 'ajax_save_announcement' ) );
     add_action( 'wp_ajax_ghca_acd_delete_announcement', array( __CLASS__, 'ajax_delete_announcement' ) );
@@ -379,6 +386,10 @@ final class GHCA_Admin_Compliance_Dashboard {
       <div class="ghca-acd__drawer-actions-row">
         <a href="<?php echo esc_url( $report_url ); ?>" class="ghca-acd__drawer-action ghca-acd__drawer-action--primary"><?php esc_html_e( 'View Certificates', 'ghca-acd' ); ?></a>
         <a href="<?php echo esc_url( 'mailto:' . $employee['email'] . '?subject=' . rawurlencode( __( 'Compliance Reminder', 'ghca-acd' ) ) ); ?>" class="ghca-acd__drawer-action ghca-acd__drawer-action--danger"><?php esc_html_e( 'Send Reminder', 'ghca-acd' ); ?></a>
+      </div>
+      <div class="ghca-acd__drawer-actions-row">
+        <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ghca_acd_download_packet&tracker=orientation&user_id=' . $user_id ), 'ghca_acd_download_packet' ) ); ?>" class="ghca-acd__drawer-action ghca-acd__drawer-action--primary" style="background-color: var(--ent-dark);"><?php esc_html_e( 'Orientation Packet', 'ghca-acd' ); ?></a>
+        <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ghca_acd_download_packet&tracker=annual&user_id=' . $user_id ), 'ghca_acd_download_packet' ) ); ?>" class="ghca-acd__drawer-action ghca-acd__drawer-action--primary" style="background-color: var(--ent-dark);"><?php esc_html_e( 'Annual Packet', 'ghca-acd' ); ?></a>
       </div>
       <button type="button" class="ghca-acd__drawer-action ghca-acd__drawer-action--primary ghca-acd__drawer-action--full" data-ghca-edit-records="<?php echo esc_attr( (string) $user_id ); ?>" data-ghca-edit-records-name="<?php echo esc_attr( $employee['name'] ); ?>"><?php esc_html_e( 'Edit Records', 'ghca-acd' ); ?></button>
       <button type="button" class="ghca-acd__drawer-action ghca-acd__drawer-action--primary ghca-acd__drawer-action--full" data-ghca-mark-reviewed="<?php echo esc_attr( (string) $user_id ); ?>"><?php esc_html_e( 'Mark Reviewed', 'ghca-acd' ); ?></button>
@@ -888,6 +899,7 @@ final class GHCA_Admin_Compliance_Dashboard {
       <button type="button" class="ghca-acd__tab-btn" data-ghca-tab-target="ghca-tab-certificates">' . esc_html__( 'Certificates', 'ghca-acd' ) . '</button>
       <button type="button" class="ghca-acd__tab-btn" data-ghca-tab-target="ghca-tab-overdue">' . esc_html__( 'Overdue', 'ghca-acd' ) . ' <span class="ghca-acd__tab-badge">' . esc_html($overdue_count) . '</span></button>
       <button type="button" class="ghca-acd__tab-btn" data-ghca-tab-target="ghca-tab-reports">' . esc_html__( 'Reports', 'ghca-acd' ) . '</button>
+      <button type="button" class="ghca-acd__tab-btn" data-ghca-tab-target="ghca-tab-audit">' . esc_html__( 'Audit Data', 'ghca-acd' ) . '</button>
     </div>';
 
     // Overview Tab
@@ -924,6 +936,11 @@ final class GHCA_Admin_Compliance_Dashboard {
     // Reports Tab
     $html .= '<div id="ghca-tab-reports" class="ghca-acd__tab-content">';
     $html .= self::render_reports( $atts );
+    $html .= '</div>';
+
+    // Audit Tab
+    $html .= '<div id="ghca-tab-audit" class="ghca-acd__tab-content">';
+    $html .= GHCA_ACD_Audit_UI::render();
     $html .= '</div>';
     $html .= '</div>';
 
@@ -3132,7 +3149,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     return $items;
   }
 
-  private static function get_user_full_name( int $user_id, ?WP_User $user = null ): string {
+  public static function get_user_full_name( int $user_id, ?WP_User $user = null ): string {
     if ( null === $user ) {
       $user = get_userdata( $user_id );
     }

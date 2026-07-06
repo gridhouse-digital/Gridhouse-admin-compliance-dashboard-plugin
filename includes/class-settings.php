@@ -10,6 +10,7 @@ final class GHCA_ACD_Settings {
   const OPTION_PERM_MANAGE_ANNOUNCEMENTS = 'ghca_acd_permission_manage_announcements';
   const OPTION_PERM_UNRESTRICTED_VIEW = 'ghca_acd_permission_unrestricted_view';
   const OPTION_PERM_MANAGE_USERS = 'ghca_acd_permission_manage_users';
+  const OPTION_ANNUAL_CYCLE = 'ghca_acd_annual_cycle';
 
   public static function init(): void {
     add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
@@ -23,6 +24,7 @@ final class GHCA_ACD_Settings {
     add_action( 'update_option_' . self::OPTION_PERM_MANAGE_ANNOUNCEMENTS, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_action( 'update_option_' . self::OPTION_PERM_UNRESTRICTED_VIEW, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_action( 'update_option_' . self::OPTION_PERM_MANAGE_USERS, array( __CLASS__, 'bust_dashboard_cache' ) );
+    add_action( 'update_option_' . self::OPTION_ANNUAL_CYCLE, array( __CLASS__, 'bust_dashboard_cache' ) );
     add_filter( 'ghca_admin_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
     add_filter( 'ghca_employee_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
   }
@@ -114,6 +116,16 @@ final class GHCA_ACD_Settings {
 
     register_setting(
       'ghca_acd_settings',
+      self::OPTION_ANNUAL_CYCLE,
+      array(
+        'type'              => 'string',
+        'sanitize_callback' => 'sanitize_text_field',
+        'default'           => 'employee_start_date',
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
       GHCA_Dashboard_Branding::OPTION,
       array(
         'type'              => 'array',
@@ -198,6 +210,11 @@ final class GHCA_ACD_Settings {
     return (int) get_option( self::OPTION_CACHE_TTL, 300 );
   }
 
+  public static function get_annual_cycle(): string {
+    $val = get_option( self::OPTION_ANNUAL_CYCLE, 'employee_start_date' );
+    return in_array( $val, array( 'employee_start_date', 'calendar_year' ), true ) ? (string) $val : 'employee_start_date';
+  }
+
   /** @return array<int,\WP_Post> */
   private static function get_learndash_groups(): array {
     $posts = get_posts(
@@ -240,6 +257,7 @@ final class GHCA_ACD_Settings {
 
     $at_risk         = self::get_at_risk_days();
     $cache           = self::get_cache_ttl();
+    $annual_cycle    = self::get_annual_cycle();
     $new_hire_groups = GHCA_Compliance_Program::get_new_hire_group_ids();
     $new_hire_days   = GHCA_Compliance_Program::get_deadline_days();
     $groups          = self::get_learndash_groups();
@@ -258,8 +276,8 @@ final class GHCA_ACD_Settings {
       <h1><?php esc_html_e( 'Admin Compliance Dashboard', 'ghca-acd' ); ?></h1>
       <form method="post" action="options.php">
         <?php settings_fields( 'ghca_acd_settings' ); ?>
-        <h2><?php esc_html_e( 'New Hire Compliance', 'ghca-acd' ); ?></h2>
-        <p><?php esc_html_e( 'Employees in the selected new hire groups must complete all group courses within the deadline. Overdue new hires are flagged on both dashboards.', 'ghca-acd' ); ?></p>
+        <h2><?php esc_html_e( 'Compliance & Training Rules', 'ghca-acd' ); ?></h2>
+        <p><?php esc_html_e( 'Configure rules for new hires and annual training cycles.', 'ghca-acd' ); ?></p>
         <table class="form-table" role="presentation">
           <tr>
             <th scope="row"><?php esc_html_e( 'New Hire Groups', 'ghca-acd' ); ?></th>
@@ -289,6 +307,16 @@ final class GHCA_ACD_Settings {
             <td>
               <input type="number" min="7" max="120" id="ghca_new_hire_deadline_days" name="<?php echo esc_attr( GHCA_Compliance_Program::OPTION_NEW_HIRE_DAYS ); ?>" value="<?php echo esc_attr( (string) $new_hire_days ); ?>" class="small-text" />
               <p class="description"><?php esc_html_e( 'Default: 30 days from new hire group enrollment.', 'ghca-acd' ); ?></p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><label for="ghca_acd_annual_cycle"><?php esc_html_e( 'Annual Training Cycle', 'ghca-acd' ); ?></label></th>
+            <td>
+              <select name="<?php echo esc_attr( self::OPTION_ANNUAL_CYCLE ); ?>" id="ghca_acd_annual_cycle">
+                <option value="employee_start_date" <?php selected( $annual_cycle, 'employee_start_date' ); ?>><?php esc_html_e( 'Employee Anniversary (12 months from hire date)', 'ghca-acd' ); ?></option>
+                <option value="calendar_year" <?php selected( $annual_cycle, 'calendar_year' ); ?>><?php esc_html_e( 'Calendar Year (Jan 1 - Dec 31)', 'ghca-acd' ); ?></option>
+              </select>
+              <p class="description"><?php esc_html_e( 'Defines the 12-month window used to calculate ODP annual compliance. Note: Employees are not due for annual training until their first complete cycle ends.', 'ghca-acd' ); ?></p>
             </td>
           </tr>
         </table>
