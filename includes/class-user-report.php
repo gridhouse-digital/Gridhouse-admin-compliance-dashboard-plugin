@@ -5,7 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class GHCA_ACD_User_Report {
   public static function init(): void {
-    // Shortcode registered via GHCA_Admin_Compliance_Dashboard::register_shortcodes().
+    // Shortcode registered via GHCA_ACD_Shortcodes::register_shortcodes().
   }
 
   public static function render( $atts = array() ): string {
@@ -109,7 +109,7 @@ final class GHCA_ACD_User_Report {
         </div>
 
         <div class="ghca-acd__user-report-actions">
-          <?php echo wp_kses_post( GHCA_Admin_Compliance_Dashboard::build_user_report_actions_html( $user_id, $employee['email'] ) ); ?>
+          <?php echo wp_kses_post( GHCA_ACD_Shortcodes::build_user_report_actions_html( $user_id, $employee['email'] ) ); ?>
         </div>
       </div>
 
@@ -147,7 +147,7 @@ final class GHCA_ACD_User_Report {
                       <div class="ghca-acd__action-chips">
                         <a href="<?php echo esc_url( $course['url'] ); ?>"><?php esc_html_e( 'View Course', 'ghca-acd' ); ?></a>
                         <?php if ( ! empty( $course['certificate_url'] ) ) : ?>
-                          <?php echo GHCA_Admin_Compliance_Dashboard::build_certificate_link_html( (string) $course['certificate_url'], (string) $course['title'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                          <?php echo GHCA_ACD_Shortcodes::build_certificate_link_html( (string) $course['certificate_url'], (string) $course['title'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                         <?php endif; ?>
                       </div>
                     </td>

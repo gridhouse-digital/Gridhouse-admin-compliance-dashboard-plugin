@@ -302,7 +302,7 @@ final class GHCA_ACD_Data_Provider {
         'new_hire'             => $new_hire,
         'certificate_url'      => $certificate_url,
         'certificate_label'    => $certificate_url ? __( 'Available', 'ghca-acd' ) : ( $all_complete ? __( 'Check certificates', 'ghca-acd' ) : __( 'Pending', 'ghca-acd' ) ),
-        'actions_html'         => GHCA_Admin_Compliance_Dashboard::build_employee_actions_html( $user_id, $user ? $user->user_email : '' ),
+        'actions_html'         => GHCA_ACD_Shortcodes::build_employee_actions_html( $user_id, $user ? $user->user_email : '' ),
       );
     }
 
@@ -384,7 +384,7 @@ final class GHCA_ACD_Data_Provider {
       'new_hire'             => $new_hire,
       'certificate_url'      => $certificate_url,
       'certificate_label'    => $certificate_url ? __( 'Available', 'ghca-acd' ) : ( $all_complete ? __( 'Check certificates', 'ghca-acd' ) : __( 'Pending', 'ghca-acd' ) ),
-      'actions_html'         => GHCA_Admin_Compliance_Dashboard::build_employee_actions_html( $user_id, $user ? $user->user_email : '' ),
+      'actions_html'         => GHCA_ACD_Shortcodes::build_employee_actions_html( $user_id, $user ? $user->user_email : '' ),
     );
   }
 
@@ -480,7 +480,7 @@ final class GHCA_ACD_Data_Provider {
         'status_slug'         => $employee['status_slug'],
         'status_label'        => $employee['status_label'],
         'last_activity_label' => $employee['last_activity_label'],
-        'actions_html'        => GHCA_Admin_Compliance_Dashboard::build_priority_actions_html( (int) $employee['user_id'], $employee['email'] ),
+        'actions_html'        => GHCA_ACD_Shortcodes::build_priority_actions_html( (int) $employee['user_id'], $employee['email'] ),
       );
     }
 

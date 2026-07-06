@@ -109,7 +109,7 @@ final class GHCA_ACD_FluentCRM {
   public static function build_action_links( int $employee_user_id, string $email, string $course_title = '' ): array {
     $links = array(
       '<a href="' . esc_url( self::build_reminder_url( $employee_user_id, $email, $course_title ) ) . '">' . esc_html__( 'Log Reminder', 'ghca-acd' ) . '</a>',
-      '<a href="' . esc_url( GHCA_Admin_Compliance_Dashboard::build_mailto_reminder( $email, $course_title ) ) . '">' . esc_html__( 'Email Reminder', 'ghca-acd' ) . '</a>',
+      '<a href="' . esc_url( GHCA_ACD_Shortcodes::build_mailto_reminder( $email, $course_title ) ) . '">' . esc_html__( 'Email Reminder', 'ghca-acd' ) . '</a>',
     );
 
     $crm_url = self::get_contact_admin_url( $email );
