@@ -33,6 +33,7 @@ require_once __DIR__ . '/includes/class-audit-mapping.php';
 require_once __DIR__ . '/includes/class-audit-calculator.php';
 require_once __DIR__ . '/includes/class-audit-export.php';
 require_once __DIR__ . '/includes/class-audit-pdf.php';
+require_once __DIR__ . '/includes/class-audit-pdf-jobs.php';
 require_once __DIR__ . '/includes/class-audit-ui.php';
 
 final class GHCA_Admin_Compliance_Dashboard {
