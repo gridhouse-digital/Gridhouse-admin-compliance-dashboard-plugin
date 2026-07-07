@@ -26,8 +26,7 @@ final class GHCA_ACD_Shortcodes {
       'admin_course_completion_overview'    => array( __CLASS__, 'render_course_overview' ),
       'admin_employee_compliance_table'     => array( __CLASS__, 'render_employee_table' ),
       'admin_certificate_tracking'          => array( __CLASS__, 'render_certificate_tracking' ),
-      // Announcements render in the core class until the Announcements manager exists.
-      'admin_compliance_announcements'      => array( 'GHCA_Admin_Compliance_Dashboard', 'render_announcements' ),
+      'admin_compliance_announcements'      => array( 'GHCA_ACD_Announcements', 'render_announcements' ),
       'admin_compliance_quick_links'        => array( __CLASS__, 'render_quick_links' ),
       'admin_compliance_support'            => array( __CLASS__, 'render_support' ),
       'admin_compliance_dashboard'          => array( __CLASS__, 'render_full_dashboard' ),
@@ -75,7 +74,7 @@ final class GHCA_ACD_Shortcodes {
     $html .= GHCA_ACD_Scoping::render_group_summary( $atts );
     $html .= '<div class="ghca-acd__split-grid">';
     $html .= self::render_certificate_tracking( $atts );
-    $html .= GHCA_Admin_Compliance_Dashboard::render_announcements( $atts );
+    $html .= GHCA_ACD_Announcements::render_announcements( $atts );
     $html .= '</div>';
     $html .= self::render_quick_links( $atts );
     $html .= self::render_support( $atts );
