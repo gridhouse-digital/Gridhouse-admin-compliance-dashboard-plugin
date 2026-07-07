@@ -1063,6 +1063,8 @@ git commit -m "feat: switch packet downloads to async progress-modal flow"
 
 ### Task 6: Remove the legacy synchronous path + GC verification
 
+> **Added by user 2026-07-07:** also bump `GHCA_Admin_Compliance_Dashboard::VERSION` (and the plugin header `Version:`) from `1.1.0` to `1.2.0` so deployed browsers cache-bust the new JS/CSS automatically.
+
 **Files:**
 - Modify: `includes/class-audit-pdf.php`
 

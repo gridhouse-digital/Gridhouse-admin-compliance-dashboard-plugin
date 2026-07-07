@@ -95,8 +95,8 @@ final class GHCA_ACD_Audit_UI {
 										</label>
 									</td>
 									<td style="white-space: nowrap;">
-										<a class="ghca-acd__btn ghca-acd__btn--sm" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ghca_acd_download_packet&tracker=orientation&user_id=' . $user_id ), 'ghca_acd_download_packet' ) ); ?>" title="<?php esc_attr_e( 'Download Orientation Packet', 'ghca-acd' ); ?>" style="padding: 4px 8px; margin-right: 4px;">Ori.</a>
-										<a class="ghca-acd__btn ghca-acd__btn--sm" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ghca_acd_download_packet&tracker=annual&user_id=' . $user_id ), 'ghca_acd_download_packet' ) ); ?>" title="<?php esc_attr_e( 'Download Annual Packet', 'ghca-acd' ); ?>" style="padding: 4px 8px;">Ann.</a>
+										<button type="button" class="ghca-acd__btn ghca-acd__btn--sm" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="orientation" title="<?php esc_attr_e( 'Download Orientation Packet', 'ghca-acd' ); ?>" style="padding: 4px 8px; margin-right: 4px;">Ori.</button>
+										<button type="button" class="ghca-acd__btn ghca-acd__btn--sm" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="annual" title="<?php esc_attr_e( 'Download Annual Packet', 'ghca-acd' ); ?>" style="padding: 4px 8px;">Ann.</button>
 									</td>
 									<td>
 										<button type="button" class="ghca-acd__btn ghca-acd__btn--sm ghca-audit-save-btn">
