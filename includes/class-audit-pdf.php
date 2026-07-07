@@ -5,38 +5,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class GHCA_Audit_PDF {
 	public static function init(): void {
-		add_action( 'admin_post_ghca_acd_download_packet', array( __CLASS__, 'handle_download' ) );
 		add_action( 'wp_ajax_ghca_acd_pdf_init', array( __CLASS__, 'ajax_init_job' ) );
 		add_action( 'wp_ajax_ghca_acd_pdf_fetch', array( __CLASS__, 'ajax_fetch_cert' ) );
 		add_action( 'wp_ajax_ghca_acd_pdf_merge', array( __CLASS__, 'ajax_merge' ) );
 		add_action( 'wp_ajax_ghca_acd_pdf_download', array( __CLASS__, 'ajax_download' ) );
-	}
-
-	public static function handle_download(): void {
-		if ( ! is_user_logged_in() || ! GHCA_ACD_Roles::user_can_view() ) {
-			wp_die( esc_html__( 'Unauthorized.', 'ghca-acd' ) );
-		}
-
-		check_admin_referer( 'ghca_acd_download_packet' );
-
-		$user_id = isset( $_GET['user_id'] ) ? (int) $_GET['user_id'] : 0;
-		if ( $user_id <= 0 || ! GHCA_ACD_User_Report::can_view_user( $user_id ) ) {
-			wp_die( esc_html__( 'Invalid employee or permission denied.', 'ghca-acd' ) );
-		}
-
-		$libs = self::load_libs();
-		if ( is_wp_error( $libs ) ) {
-			wp_die( esc_html( $libs->get_error_message() ) );
-		}
-
-		$tracker_type = isset( $_GET['tracker'] ) && $_GET['tracker'] === 'orientation' ? 'orientation' : 'annual';
-
-		$context = self::resolve_audit_context( $user_id, $tracker_type );
-		if ( is_wp_error( $context ) ) {
-			wp_die( esc_html( $context->get_error_message() ) );
-		}
-
-		self::generate_packet( $context['audit_data'], $context['employee_data'], $tracker_type );
 	}
 
 	/* ---------------------------------------------------------------------
@@ -481,64 +453,6 @@ final class GHCA_Audit_PDF {
 
 	public static function build_filename( array $audit_data ): string {
 		return 'Audit_Packet_' . sanitize_title( $audit_data['first_name'] . '_' . $audit_data['last_name'] ) . '_' . wp_date( 'Y-m-d' ) . '.pdf';
-	}
-
-	private static function generate_packet( array $audit_data, array $employee_data, string $tracker_type ): void {
-		$pdf = self::create_document( $audit_data );
-
-		// ---------------------------------------------------------
-		// PAGE 1: COVER PAGE (Compliance Matrix)
-		// ---------------------------------------------------------
-		$pdf->AddPage();
-		self::render_cover( $pdf, $audit_data, $tracker_type );
-
-		// ---------------------------------------------------------
-		// PAGES 2+: CERTIFICATES
-		// ---------------------------------------------------------
-		// Certificates are generated dynamically by LearnDash, so we fetch them
-		// via HTTP with the admin's session cookies forwarded.
-		$cookies = array();
-		foreach ( $_COOKIE as $name => $value ) {
-			$cookies[] = new \WP_Http_Cookie( array( 'name' => $name, 'value' => $value ) );
-		}
-
-		foreach ( self::collect_certificate_urls( $audit_data, (int) $employee_data['user_id'] ) as $cert_url ) {
-			$response = wp_remote_get( $cert_url, array(
-				'timeout'     => 15,
-				'cookies'     => $cookies,
-				'sslverify'   => false,
-			) );
-
-			if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) !== 200 ) {
-				continue;
-			}
-
-			$pdf_content = wp_remote_retrieve_body( $response );
-
-			// Ensure it is actually a PDF by checking signature
-			if ( strpos( $pdf_content, '%PDF-' ) !== 0 ) {
-				continue;
-			}
-
-			// FPDI can only parse files or streams, so spill the body to a temp file.
-			$temp_file = wp_tempnam( 'ghca_cert_' );
-			if ( $temp_file ) {
-				file_put_contents( $temp_file, $pdf_content );
-				self::append_certificate( $pdf, $temp_file );
-				@unlink( $temp_file );
-			}
-		}
-
-		// Output PDF
-		$filename = self::build_filename( $audit_data );
-
-		// Clean the output buffer to avoid corrupting the PDF
-		if ( ob_get_length() ) {
-			ob_clean();
-		}
-
-		$pdf->Output( $filename, 'D' );
-		exit;
 	}
 
 	private static function get_certificate_url( int $user_id, int $course_id ): string {

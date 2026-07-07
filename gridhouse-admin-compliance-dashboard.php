@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Gridhouse Admin Compliance Dashboard
  * Description: HR/compliance administrative dashboard shortcodes for LearnDash + Elementor.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Gridhouse Digital
  * Author URI: https://gridhouse.digital
  * Text Domain: ghca-acd
@@ -37,7 +37,7 @@ require_once __DIR__ . '/includes/class-audit-pdf-jobs.php';
 require_once __DIR__ . '/includes/class-audit-ui.php';
 
 final class GHCA_Admin_Compliance_Dashboard {
-  const VERSION         = '1.1.0';
+  const VERSION         = '1.2.0';
   const OPTION_DUE_DATE = 'ghca_compliance_due_date';
   const CYCLE_DAYS      = 365;
   const NOTICE_DAYS     = 90;
