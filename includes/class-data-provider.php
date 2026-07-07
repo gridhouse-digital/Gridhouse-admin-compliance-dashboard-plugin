@@ -54,6 +54,9 @@ final class GHCA_ACD_Data_Provider {
   public static function bust_cache(): void {
     delete_transient( self::get_cache_key() );
     self::$aggregate = null;
+    // The compliance-program memo caches derive from the same LearnDash data;
+    // an AJAX record edit must not serve a stale status later in the request.
+    GHCA_Compliance_Program::reset_runtime_cache();
   }
 
   /** @return array<int> */
@@ -84,6 +87,9 @@ final class GHCA_ACD_Data_Provider {
         'orderby' => 'registered',
         'order'   => 'ASC',
       ) );
+      // Bulk-prime the object cache so the role/super-admin checks below are
+      // memory reads instead of one users + one usermeta query per user.
+      cache_users( array_map( 'intval', $all_wp_users ) );
       foreach ( $all_wp_users as $wp_uid ) {
         $wp_uid = (int) $wp_uid;
         if ( $wp_uid <= 0 || in_array( $wp_uid, $ids, true ) ) {
@@ -217,8 +223,20 @@ final class GHCA_ACD_Data_Provider {
       return array();
     }
 
+    $user_ids = self::get_employee_user_ids();
+    if ( empty( $user_ids ) ) {
+      return array();
+    }
+
+    // Eager-load every user object and ALL user meta into the object cache in
+    // two bulk queries. LearnDash keeps course completions
+    // ('course_completed_{ID}'), certificates and group enrollment stamps in
+    // user meta, so every get_userdata()/get_user_meta() in the loop below
+    // reads from memory instead of issuing its own query per user.
+    cache_users( $user_ids );
+
     $records = array();
-    foreach ( self::get_employee_user_ids() as $user_id ) {
+    foreach ( $user_ids as $user_id ) {
       $records[] = self::build_employee_record( $user_id );
     }
 
