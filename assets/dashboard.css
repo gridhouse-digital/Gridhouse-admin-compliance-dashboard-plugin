@@ -2547,4 +2547,17 @@ select.ghca-acd__edit-input { appearance: none; -webkit-appearance: none; backgr
   .ghca-acd__drawer-course-bar-fill { animation: none !important; transition: none !important; }
   .ghca-acd__drawer-loading::before,
   .ghca-acd__edit-loading::before { animation-duration: 1.6s; }
+  .ghca-acd__pdf-progress-fill { transition: none !important; }
 }
+
+/* --- Async PDF packet progress modal ------------------------------------ */
+.ghca-acd__pdf-modal { position: fixed; inset: 0; z-index: 100000; display: flex; align-items: center; justify-content: center; }
+.ghca-acd__pdf-modal[hidden] { display: none; }
+.ghca-acd__pdf-modal-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.55); }
+.ghca-acd__pdf-modal-dialog { position: relative; background: var(--ent-surface, #fff); border-radius: 12px; padding: 24px 28px; width: min(420px, calc(100vw - 32px)); box-shadow: 0 24px 64px rgba(15, 23, 42, 0.35); }
+.ghca-acd__pdf-modal-dialog h2 { margin: 0 0 6px; font-size: 17px; }
+.ghca-acd__pdf-modal-status { margin: 0 0 14px; font-size: 13px; color: var(--ent-muted, #64748b); }
+.ghca-acd__pdf-progress { height: 10px; border-radius: 999px; background: var(--ent-border, #e2e8f0); overflow: hidden; }
+.ghca-acd__pdf-progress-fill { height: 100%; width: 0%; border-radius: 999px; background: var(--ent-primary, #2563eb); transition: width 0.25s ease; }
+.ghca-acd__pdf-progress-fill.is-error { background: var(--ent-danger, #dc2626); }
+.ghca-acd__pdf-modal-footer { margin-top: 18px; text-align: right; }

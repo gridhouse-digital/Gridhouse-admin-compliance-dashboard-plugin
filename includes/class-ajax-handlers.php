@@ -21,6 +21,7 @@ final class GHCA_ACD_AJAX {
     add_action( 'wp_ajax_ghca_acd_get_employee_drawer', array( __CLASS__, 'ajax_get_employee_drawer' ) );
     add_action( 'wp_ajax_ghca_acd_mark_reviewed', array( __CLASS__, 'ajax_mark_reviewed' ) );
     add_action( 'wp_footer', array( __CLASS__, 'render_edit_records_modal' ) );
+    add_action( 'wp_footer', array( __CLASS__, 'render_pdf_progress_modal' ) );
     add_action( 'wp_ajax_ghca_acd_get_edit_records_form', array( __CLASS__, 'ajax_get_edit_records_form' ) );
     add_action( 'wp_ajax_ghca_acd_save_employee_records', array( __CLASS__, 'ajax_save_employee_records' ) );
     add_action( 'wp_ajax_ghca_acd_save_employee', array( __CLASS__, 'ajax_save_employee' ) );
@@ -326,6 +327,32 @@ final class GHCA_ACD_AJAX {
         </div>
         <div class="ghca-acd__edit-modal-body" id="ghca-acd-edit-modal-body">
           <p class="ghca-acd__edit-loading"><?php esc_html_e( 'Loading records…', 'ghca-acd' ); ?></p>
+        </div>
+      </div>
+    </div>
+    <?php
+  }
+
+  /** Progress modal for the async packet builder (driven by initPdfPacket in dashboard.js). */
+  public static function render_pdf_progress_modal(): void {
+    if ( ! is_singular() ) {
+      return;
+    }
+    $post = get_post();
+    if ( ! $post || ! GHCA_Admin_Compliance_Dashboard::page_uses_dashboard( $post ) || ! is_user_logged_in() || ! GHCA_ACD_Roles::user_can_view() ) {
+      return;
+    }
+    ?>
+    <div class="ghca-acd__pdf-modal" id="ghca-acd-pdf-modal" hidden aria-hidden="true">
+      <div class="ghca-acd__pdf-modal-backdrop"></div>
+      <div class="ghca-acd__pdf-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="ghca-acd-pdf-modal-title">
+        <h2 id="ghca-acd-pdf-modal-title"><?php esc_html_e( 'Building Compliance Packet', 'ghca-acd' ); ?></h2>
+        <p class="ghca-acd__pdf-modal-status" data-ghca-pdf-label aria-live="polite"><?php esc_html_e( 'Preparing…', 'ghca-acd' ); ?></p>
+        <div class="ghca-acd__pdf-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" data-ghca-pdf-track>
+          <div class="ghca-acd__pdf-progress-fill" data-ghca-pdf-bar></div>
+        </div>
+        <div class="ghca-acd__pdf-modal-footer">
+          <button type="button" class="ghca-acd__cert-btn ghca-acd__cert-btn--close" data-ghca-pdf-cancel><?php esc_html_e( 'Cancel', 'ghca-acd' ); ?></button>
         </div>
       </div>
     </div>

@@ -136,6 +136,12 @@ final class GHCA_Admin_Compliance_Dashboard {
         'certDownload'     => __( 'Download', 'ghca-acd' ),
         'certClose'        => __( 'Close', 'ghca-acd' ),
         'certLoading'      => __( 'Loading certificate…', 'ghca-acd' ),
+        'pdfPreparing'     => __( 'Preparing packet…', 'ghca-acd' ),
+        /* translators: 1: current certificate number, 2: total certificates */
+        'pdfFetching'      => __( 'Fetching certificate %1$s of %2$s…', 'ghca-acd' ),
+        'pdfMerging'       => __( 'Merging documents…', 'ghca-acd' ),
+        'pdfDone'          => __( 'Done! Starting download…', 'ghca-acd' ),
+        'pdfError'         => __( 'Packet generation failed. No packet was created. Please try again.', 'ghca-acd' ),
       )
     );
   }

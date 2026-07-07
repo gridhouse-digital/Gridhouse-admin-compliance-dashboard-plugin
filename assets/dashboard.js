@@ -972,10 +972,139 @@
     }
   }
 
+  function initPdfPacket() {
+    var modal = document.getElementById('ghca-acd-pdf-modal');
+    if (!modal) return;
+
+    var bar = modal.querySelector('[data-ghca-pdf-bar]');
+    var track = modal.querySelector('[data-ghca-pdf-track]');
+    var label = modal.querySelector('[data-ghca-pdf-label]');
+    var running = false;
+    var cancelled = false;
+
+    function t(key, fallback) {
+      return (window.ghcaAcd && window.ghcaAcd[key]) || fallback;
+    }
+
+    function sprintf1(str, a, b) {
+      return str.replace('%1$s', a).replace('%2$s', b).replace('%s', a);
+    }
+
+    function setProgress(pct, text) {
+      bar.style.width = pct + '%';
+      track.setAttribute('aria-valuenow', String(pct));
+      label.textContent = text;
+    }
+
+    function openModal() {
+      cancelled = false;
+      bar.classList.remove('is-error');
+      modal.hidden = false;
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeModal() {
+      modal.hidden = true;
+      modal.setAttribute('aria-hidden', 'true');
+      running = false;
+    }
+
+    function failState(msg) {
+      bar.classList.add('is-error');
+      setProgress(100, msg || t('pdfError', 'Packet generation failed. No packet was created. Please try again.'));
+      running = false;
+    }
+
+    function post(params) {
+      params.append('nonce', window.ghcaAcd.nonce);
+      return fetch(window.ghcaAcd.ajaxUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: params.toString()
+      }).then(function(res) { return res.json(); });
+    }
+
+    function run(userId, tracker) {
+      if (running) return;
+      running = true;
+      openModal();
+      setProgress(3, t('pdfPreparing', 'Preparing packet…'));
+
+      var initParams = new URLSearchParams();
+      initParams.append('action', 'ghca_acd_pdf_init');
+      initParams.append('user_id', userId);
+      initParams.append('tracker', tracker);
+
+      post(initParams).then(function(json) {
+        if (cancelled) return;
+        if (!json || !json.success || !json.data || !json.data.job_id) {
+          failState(json && json.data && json.data.message);
+          return;
+        }
+
+        var jobId = json.data.job_id;
+        var total = parseInt(json.data.total, 10) || 0;
+
+        function mergeJob() {
+          setProgress(92, t('pdfMerging', 'Merging documents…'));
+          var mp = new URLSearchParams();
+          mp.append('action', 'ghca_acd_pdf_merge');
+          mp.append('job_id', jobId);
+          post(mp).then(function(mj) {
+            if (cancelled) return;
+            if (mj && mj.success && mj.data && mj.data.download_url) {
+              setProgress(100, t('pdfDone', 'Done! Starting download…'));
+              window.location.assign(mj.data.download_url);
+              window.setTimeout(closeModal, 1500);
+            } else {
+              failState(mj && mj.data && mj.data.message);
+            }
+          }).catch(function() { failState(); });
+        }
+
+        function fetchNext(i) {
+          if (cancelled) return;
+          if (i >= total) { mergeJob(); return; }
+
+          setProgress(5 + Math.round((i / total) * 85), sprintf1(t('pdfFetching', 'Fetching certificate %1$s of %2$s…'), String(i + 1), String(total)));
+
+          var fp = new URLSearchParams();
+          fp.append('action', 'ghca_acd_pdf_fetch');
+          fp.append('job_id', jobId);
+          fp.append('index', String(i));
+          post(fp).then(function(fj) {
+            if (cancelled) return;
+            // ABORT policy: any fetch failure ends the job; the server has
+            // already deleted the manifest and temp files at this point.
+            if (!fj || !fj.success) { failState(fj && fj.data && fj.data.message); return; }
+            fetchNext(i + 1);
+          }).catch(function() { failState(); });
+        }
+
+        if (total === 0) { mergeJob(); } else { fetchNext(0); }
+      }).catch(function() { failState(); });
+    }
+
+    document.addEventListener('click', function(e) {
+      var trigger = e.target.closest('[data-ghca-pdf-packet]');
+      if (trigger) {
+        e.preventDefault();
+        run(trigger.getAttribute('data-ghca-pdf-packet'), trigger.getAttribute('data-tracker') || 'annual');
+        return;
+      }
+      if (e.target.closest('[data-ghca-pdf-cancel]')) {
+        e.preventDefault();
+        cancelled = true;
+        closeModal();
+      }
+    });
+  }
+
   initTabs();
   initEmployeeDrawer();
   initEditRecordsModal();
   initAnnouncements();
   initManageUsers();
+  initPdfPacket();
 
 })();
