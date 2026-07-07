@@ -1027,10 +1027,12 @@ Replace the two `<a href="…admin-post.php?action=ghca_acd_download_packet…">
 
 ```php
       <div class="ghca-acd__drawer-actions-row">
-        <button type="button" class="ghca-acd__drawer-action ghca-acd__drawer-action--primary" style="background-color: var(--ent-dark);" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="orientation"><?php esc_html_e( 'Orientation Packet', 'ghca-acd' ); ?></button>
-        <button type="button" class="ghca-acd__drawer-action ghca-acd__drawer-action--primary" style="background-color: var(--ent-dark);" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="annual"><?php esc_html_e( 'Annual Packet', 'ghca-acd' ); ?></button>
+        <button type="button" class="ghca-acd__drawer-action ghca-acd__drawer-action--primary" style="background-color: var(--ent-dark); color: #ffffff;" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="orientation"><?php esc_html_e( 'Orientation Packet', 'ghca-acd' ); ?></button>
+        <button type="button" class="ghca-acd__drawer-action ghca-acd__drawer-action--primary" style="background-color: var(--ent-dark); color: #ffffff;" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="annual"><?php esc_html_e( 'Annual Packet', 'ghca-acd' ); ?></button>
       </div>
 ```
+
+(User note 2026-07-06: explicit `color: #ffffff;` added because the label text was blending into the `var(--ent-dark)` background on the old links.)
 
 - [ ] **Step 2: Audit-UI buttons**
 

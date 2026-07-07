@@ -6,6 +6,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class GHCA_Audit_PDF {
 	public static function init(): void {
 		add_action( 'admin_post_ghca_acd_download_packet', array( __CLASS__, 'handle_download' ) );
+		add_action( 'wp_ajax_ghca_acd_pdf_init', array( __CLASS__, 'ajax_init_job' ) );
+		add_action( 'wp_ajax_ghca_acd_pdf_fetch', array( __CLASS__, 'ajax_fetch_cert' ) );
+		add_action( 'wp_ajax_ghca_acd_pdf_merge', array( __CLASS__, 'ajax_merge' ) );
+		add_action( 'wp_ajax_ghca_acd_pdf_download', array( __CLASS__, 'ajax_download' ) );
 	}
 
 	public static function handle_download(): void {
@@ -33,6 +37,192 @@ final class GHCA_Audit_PDF {
 		}
 
 		self::generate_packet( $context['audit_data'], $context['employee_data'], $tracker_type );
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Async packet builder (init -> fetch x N -> merge -> download)
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Common gate for all packet AJAX endpoints: nonce, role, and (when a
+	 * job id is supplied) manifest ownership. Sends a JSON error and exits
+	 * on failure; returns the manifest (or null when no job id expected).
+	 */
+	private static function guard_ajax( bool $expects_job ): ?array {
+		check_ajax_referer( 'ghca_acd_table', 'nonce' );
+
+		if ( ! is_user_logged_in() || ! GHCA_ACD_Roles::user_can_view() ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ghca-acd' ) ), 403 );
+		}
+
+		if ( ! $expects_job ) {
+			return null;
+		}
+
+		$job_id = isset( $_REQUEST['job_id'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['job_id'] ) ) : '';
+		$job    = GHCA_Audit_PDF_Jobs::get_job( $job_id, get_current_user_id() );
+		if ( is_wp_error( $job ) ) {
+			wp_send_json_error( array( 'message' => $job->get_error_message() ), 404 );
+		}
+
+		// Re-check scope on every phase in case group visibility changed mid-job.
+		if ( ! GHCA_ACD_User_Report::can_view_user( (int) $job['user_id'] ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ghca-acd' ) ), 403 );
+		}
+
+		$job['job_id'] = $job_id;
+		return $job;
+	}
+
+	/** Phase 1: build the manifest and return job_id + certificate count. */
+	public static function ajax_init_job(): void {
+		self::guard_ajax( false );
+
+		$user_id = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
+		if ( $user_id <= 0 || ! GHCA_ACD_User_Report::can_view_user( $user_id ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid employee or permission denied.', 'ghca-acd' ) ), 403 );
+		}
+
+		$tracker = ( isset( $_POST['tracker'] ) && 'orientation' === $_POST['tracker'] ) ? 'orientation' : 'annual';
+
+		$context = self::resolve_audit_context( $user_id, $tracker );
+		if ( is_wp_error( $context ) ) {
+			wp_send_json_error( array( 'message' => $context->get_error_message() ) );
+		}
+
+		GHCA_Audit_PDF_Jobs::gc();
+
+		$urls   = self::collect_certificate_urls( $context['audit_data'], $user_id );
+		$job_id = GHCA_Audit_PDF_Jobs::create_job(
+			get_current_user_id(),
+			$user_id,
+			$tracker,
+			$urls,
+			self::build_filename( $context['audit_data'] )
+		);
+
+		wp_send_json_success( array(
+			'job_id'   => $job_id,
+			'total'    => count( $urls ),
+			'employee' => $context['employee_data']['name'] ?? '',
+		) );
+	}
+
+	/** Phase 2: fetch ONE certificate to the job's temp folder. */
+	public static function ajax_fetch_cert(): void {
+		$job = self::guard_ajax( true );
+
+		$index = isset( $_POST['index'] ) ? (int) $_POST['index'] : -1;
+		if ( $index < 0 || $index >= count( $job['urls'] ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid certificate index.', 'ghca-acd' ) ), 400 );
+		}
+
+		// Forward the admin's cookies so LearnDash serves the certificate,
+		// exactly as the old synchronous path did.
+		$cookies = array();
+		foreach ( $_COOKIE as $name => $value ) {
+			$cookies[] = new \WP_Http_Cookie( array( 'name' => $name, 'value' => $value ) );
+		}
+
+		$response = wp_remote_get( $job['urls'][ $index ], array(
+			'timeout'   => 25,
+			'cookies'   => $cookies,
+			'sslverify' => false,
+		) );
+
+		$pdf_content = ( ! is_wp_error( $response ) && wp_remote_retrieve_response_code( $response ) === 200 )
+			? wp_remote_retrieve_body( $response )
+			: '';
+
+		$saved = false;
+		if ( strpos( $pdf_content, '%PDF-' ) === 0 ) {
+			$saved = (bool) file_put_contents( GHCA_Audit_PDF_Jobs::cert_path( $job['job_id'], $index ), $pdf_content );
+		}
+
+		if ( ! $saved ) {
+			// ABORT policy: a compliance packet must never be produced with a
+			// certificate silently missing. Kill the whole job and tell the admin.
+			GHCA_Audit_PDF_Jobs::delete_job( $job['job_id'] );
+			wp_send_json_error( array(
+				'message' => sprintf(
+					/* translators: %d: 1-based certificate number */
+					__( 'Certificate %d could not be retrieved. Packet generation was aborted — no partial packet was created. Please try again.', 'ghca-acd' ),
+					$index + 1
+				),
+			) );
+		}
+
+		wp_send_json_success( array( 'index' => $index ) );
+	}
+
+	/** Phase 3: merge cover sheet + local certificates into the final packet. */
+	public static function ajax_merge(): void {
+		$job = self::guard_ajax( true );
+
+		$libs = self::load_libs();
+		if ( is_wp_error( $libs ) ) {
+			wp_send_json_error( array( 'message' => $libs->get_error_message() ) );
+		}
+
+		$context = self::resolve_audit_context( (int) $job['user_id'], (string) $job['tracker'] );
+		if ( is_wp_error( $context ) ) {
+			wp_send_json_error( array( 'message' => $context->get_error_message() ) );
+		}
+
+		$pdf = self::create_document( $context['audit_data'] );
+		$pdf->AddPage();
+		self::render_cover( $pdf, $context['audit_data'], (string) $job['tracker'] );
+
+		$total = count( $job['urls'] );
+		for ( $i = 0; $i < $total; $i++ ) {
+			if ( ! self::append_certificate( $pdf, GHCA_Audit_PDF_Jobs::cert_path( $job['job_id'], $i ) ) ) {
+				// ABORT policy (defense in depth): every fetched cert must merge.
+				GHCA_Audit_PDF_Jobs::delete_job( $job['job_id'] );
+				wp_send_json_error( array(
+					'message' => sprintf(
+						/* translators: %d: 1-based certificate number */
+						__( 'Certificate %d was missing or unreadable at merge time. Packet generation was aborted — no partial packet was created.', 'ghca-acd' ),
+						$i + 1
+					),
+				) );
+			}
+		}
+
+		$pdf->Output( GHCA_Audit_PDF_Jobs::packet_path( $job['job_id'] ), 'F' );
+
+		wp_send_json_success( array(
+			'download_url' => add_query_arg(
+				array(
+					'action' => 'ghca_acd_pdf_download',
+					'job_id' => $job['job_id'],
+					'nonce'  => wp_create_nonce( 'ghca_acd_table' ),
+				),
+				admin_url( 'admin-ajax.php' )
+			),
+			'total'        => $total,
+		) );
+	}
+
+	/** Phase 4: stream the finished packet (files are never web-readable directly). */
+	public static function ajax_download(): void {
+		$job = self::guard_ajax( true );
+
+		$path = GHCA_Audit_PDF_Jobs::packet_path( $job['job_id'] );
+		if ( ! is_readable( $path ) ) {
+			wp_die( esc_html__( 'This packet has expired. Please generate it again.', 'ghca-acd' ) );
+		}
+
+		nocache_headers();
+		header( 'Content-Type: application/pdf' );
+		header( 'Content-Disposition: attachment; filename="' . sanitize_file_name( (string) $job['filename'] ) . '"' );
+		header( 'Content-Length: ' . (string) filesize( $path ) );
+
+		if ( ob_get_length() ) {
+			ob_clean();
+		}
+
+		readfile( $path );
+		exit;
 	}
 
 	/** Loads TCPDF (from LearnDash) and the bundled FPDI. */
