@@ -20,26 +20,49 @@ final class GHCA_Audit_PDF {
 			wp_die( esc_html__( 'Invalid employee or permission denied.', 'ghca-acd' ) );
 		}
 
-		// Ensure TCPDF is loaded (LearnDash bundles it)
+		$libs = self::load_libs();
+		if ( is_wp_error( $libs ) ) {
+			wp_die( esc_html( $libs->get_error_message() ) );
+		}
+
+		$tracker_type = isset( $_GET['tracker'] ) && $_GET['tracker'] === 'orientation' ? 'orientation' : 'annual';
+
+		$context = self::resolve_audit_context( $user_id, $tracker_type );
+		if ( is_wp_error( $context ) ) {
+			wp_die( esc_html( $context->get_error_message() ) );
+		}
+
+		self::generate_packet( $context['audit_data'], $context['employee_data'], $tracker_type );
+	}
+
+	/** Loads TCPDF (from LearnDash) and the bundled FPDI. */
+	public static function load_libs() {
 		if ( ! class_exists( 'TCPDF' ) ) {
 			$tcpdf_path = WP_PLUGIN_DIR . '/sfwd-lms/includes/lib/tcpdf/tcpdf.php';
 			if ( file_exists( $tcpdf_path ) ) {
 				require_once $tcpdf_path;
 			} else {
-				wp_die( esc_html__( 'LearnDash TCPDF library not found.', 'ghca-acd' ) );
+				return new WP_Error( 'ghca_pdf_no_tcpdf', __( 'LearnDash TCPDF library not found.', 'ghca-acd' ) );
 			}
 		}
 
-		// Load our bundled FPDI
 		$fpdi_autoload = __DIR__ . '/lib/fpdi/autoload.php';
 		if ( file_exists( $fpdi_autoload ) ) {
 			require_once $fpdi_autoload;
 		} else {
-			wp_die( esc_html__( 'FPDI library not found in plugin.', 'ghca-acd' ) );
+			return new WP_Error( 'ghca_pdf_no_fpdi', __( 'FPDI library not found in plugin.', 'ghca-acd' ) );
 		}
 
-		// Grab Employee Data & Config
-		$employees = GHCA_ACD_Data_Provider::get_employees_for_current_view();
+		return true;
+	}
+
+	/**
+	 * Resolves the employee record + audit data for one packet build.
+	 *
+	 * @return array{audit_data: array, employee_data: array}|WP_Error
+	 */
+	public static function resolve_audit_context( int $user_id, string $tracker_type ) {
+		$employees     = GHCA_ACD_Data_Provider::get_employees_for_current_view();
 		$employee_data = null;
 		foreach ( $employees as $emp ) {
 			if ( (int) $emp['user_id'] === $user_id ) {
@@ -50,7 +73,7 @@ final class GHCA_Audit_PDF {
 
 		if ( ! $employee_data ) {
 			// Fallback if they were somehow excluded from current view but valid
-			$user_info = get_userdata( $user_id );
+			$user_info     = get_userdata( $user_id );
 			$employee_data = array(
 				'user_id' => $user_id,
 				'name'    => $user_info ? $user_info->display_name : 'Unknown',
@@ -59,19 +82,18 @@ final class GHCA_Audit_PDF {
 			);
 		}
 
-		$mappings = get_option( 'ghca_acd_audit_mapping', array() );
-		$tracker_type = isset( $_GET['tracker'] ) && $_GET['tracker'] === 'orientation' ? 'orientation' : 'annual';
+		$mappings   = get_option( 'ghca_acd_audit_mapping', array() );
 		$audit_data = GHCA_Audit_Calculator::calculate_employee_audit_data( $employee_data, $tracker_type, $mappings );
 
 		if ( empty( $audit_data ) ) {
-			wp_die( esc_html__( 'Employee is excluded from audits or has an ignored role.', 'ghca-acd' ) );
+			return new WP_Error( 'ghca_pdf_excluded', __( 'Employee is excluded from audits or has an ignored role.', 'ghca-acd' ) );
 		}
 
-		self::generate_packet( $audit_data, $employee_data, $tracker_type );
+		return array( 'audit_data' => $audit_data, 'employee_data' => $employee_data );
 	}
 
-	private static function generate_packet( array $audit_data, array $employee_data, string $tracker_type ): void {
-		// Initialize FPDI (which extends TCPDF)
+	/** Document setup: page format, metadata, margins. */
+	public static function create_document( array $audit_data ): \setasign\Fpdi\Tcpdf\Fpdi {
 		$pdf = new \setasign\Fpdi\Tcpdf\Fpdi( PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false );
 
 		// Set Document Info
@@ -85,11 +107,11 @@ final class GHCA_Audit_PDF {
 		$pdf->SetMargins( 15, 15, 15 );
 		$pdf->SetAutoPageBreak( true, 15 );
 
-		// ---------------------------------------------------------
-		// PAGE 1: COVER PAGE (Compliance Matrix)
-		// ---------------------------------------------------------
-		$pdf->AddPage();
-		
+		return $pdf;
+	}
+
+	/** Cover page (Compliance Matrix). Caller must AddPage() first. */
+	public static function render_cover( \setasign\Fpdi\Tcpdf\Fpdi $pdf, array $audit_data, string $tracker_type ): void {
 		// Agency Name
 		$agency_name = get_bloginfo( 'name' );
 		if ( ! empty( $agency_name ) ) {
@@ -100,10 +122,10 @@ final class GHCA_Audit_PDF {
 
 		$pdf->SetFont( 'helvetica', 'B', 14 );
 		$pdf->Cell( 0, 10, 'Compliance Audit Packet', 0, 1, 'C' );
-		
+
 		$pdf->SetFont( 'helvetica', 'B', 12 );
 		$pdf->Cell( 0, 10, 'Employee: ' . $audit_data['first_name'] . ' ' . $audit_data['last_name'], 0, 1, 'C' );
-		
+
 		$pdf->Ln( 5 );
 
 		// Details block
@@ -134,7 +156,7 @@ final class GHCA_Audit_PDF {
 			$html .= '<h3>Annual ODP Requirements Matrix</h3>';
 			$html .= '<p><strong>Annual Cycle Rule:</strong> ' . esc_html( $cycle_name ) . '<br>';
 			$html .= '<strong>Window Reviewed:</strong> ' . esc_html( $audit_data['start_date'] ) . ' to ' . esc_html( $audit_data['end_date'] ) . '</p>';
-			
+
 			if ( 'not_due' === $audit_data['annual_status'] ) {
 				$html .= '<div style="background-color: #fcf8e3; border: 1px solid #faebcc; padding: 10px; color: #8a6d3b;">
 					<strong>Notice:</strong> This employee has not yet completed their first full 12-month annual training cycle. Annual training is <strong>Not Due</strong>. Progress is shown below for reference only.
@@ -171,7 +193,7 @@ final class GHCA_Audit_PDF {
 				<td>Reporting Incidents</td>
 				<td>' . esc_html( $audit_data['incidents'] ) . '</td>
 			</tr>';
-			
+
 		if ( 'annual' === $tracker_type ) {
 			$html .= '
 			<tr>
@@ -189,7 +211,7 @@ final class GHCA_Audit_PDF {
 				<td>' . esc_html( $audit_data['job_related'] ) . '</td>
 			</tr>';
 		}
-		
+
 		$html .= '</table><br><br>';
 
 		if ( 'annual' === $tracker_type ) {
@@ -227,78 +249,104 @@ final class GHCA_Audit_PDF {
 		}
 
 		$pdf->writeHTML( $html, true, false, true, false, '' );
+	}
 
+	/**
+	 * Imports every page of one local certificate PDF into the master document.
+	 *
+	 * @return bool false if the file is missing/malformed (caller decides policy).
+	 */
+	public static function append_certificate( \setasign\Fpdi\Tcpdf\Fpdi $pdf, string $path ): bool {
+		if ( ! is_readable( $path ) ) {
+			return false;
+		}
+		try {
+			$page_count = $pdf->setSourceFile( $path );
+			for ( $page_no = 1; $page_no <= $page_count; $page_no++ ) {
+				$template_id = $pdf->importPage( $page_no );
+				$size        = $pdf->getTemplateSize( $template_id );
+
+				$orientation = $size['width'] > $size['height'] ? 'L' : 'P';
+				$pdf->AddPage( $orientation, array( $size['width'], $size['height'] ) );
+				$pdf->useTemplate( $template_id, 0, 0, $size['width'], $size['height'] );
+			}
+		} catch ( \Exception $e ) {
+			// Malformed or encrypted certificate
+			return false;
+		}
+		return true;
+	}
+
+	/** Flat 0-indexed certificate URL list for one employee's packet. */
+	public static function collect_certificate_urls( array $audit_data, int $user_id ): array {
+		$urls = array();
+		foreach ( ( $audit_data['raw_completed_courses'] ?? array() ) as $course ) {
+			$cert_url = self::get_certificate_url( $user_id, (int) $course['course_id'] );
+			if ( '' !== $cert_url ) {
+				$urls[] = $cert_url;
+			}
+		}
+		return $urls;
+	}
+
+	public static function build_filename( array $audit_data ): string {
+		return 'Audit_Packet_' . sanitize_title( $audit_data['first_name'] . '_' . $audit_data['last_name'] ) . '_' . wp_date( 'Y-m-d' ) . '.pdf';
+	}
+
+	private static function generate_packet( array $audit_data, array $employee_data, string $tracker_type ): void {
+		$pdf = self::create_document( $audit_data );
+
+		// ---------------------------------------------------------
+		// PAGE 1: COVER PAGE (Compliance Matrix)
+		// ---------------------------------------------------------
+		$pdf->AddPage();
+		self::render_cover( $pdf, $audit_data, $tracker_type );
 
 		// ---------------------------------------------------------
 		// PAGES 2+: CERTIFICATES
 		// ---------------------------------------------------------
-		// For certificates, we need to fetch them via HTTP because they are generated dynamically
-		// We pass our admin session cookies so LearnDash allows us to see them.
-		
+		// Certificates are generated dynamically by LearnDash, so we fetch them
+		// via HTTP with the admin's session cookies forwarded.
 		$cookies = array();
 		foreach ( $_COOKIE as $name => $value ) {
 			$cookies[] = new \WP_Http_Cookie( array( 'name' => $name, 'value' => $value ) );
 		}
 
-		// Fallback to get_certificate_url if not injected via raw_completed_courses. But we have it.
-		$raw_courses = $audit_data['raw_completed_courses'] ?? array();
-		
-		foreach ( $raw_courses as $course ) {
-			// In some setups, get_certificate_url is public in GHCA_Compliance_Program, let's verify. 
-			// Wait, in class-compliance-program.php, get_certificate_url is 'private'!
-			// Let's reflection-invoke it or just copy the logic. 
-			// I'll copy the logic since it's just 10 lines.
-			$cert_url = self::get_certificate_url( $employee_data['user_id'], $course['course_id'] );
-			
-			if ( empty( $cert_url ) ) {
-				continue;
-			}
-			
+		foreach ( self::collect_certificate_urls( $audit_data, (int) $employee_data['user_id'] ) as $cert_url ) {
 			$response = wp_remote_get( $cert_url, array(
 				'timeout'     => 15,
 				'cookies'     => $cookies,
-				'sslverify'   => false, 
+				'sslverify'   => false,
 			) );
 
-			if ( ! is_wp_error( $response ) && wp_remote_retrieve_response_code( $response ) === 200 ) {
-				$pdf_content = wp_remote_retrieve_body( $response );
-				
-				// Ensure it is actually a PDF by checking signature
-				if ( strpos( $pdf_content, '%PDF-' ) === 0 ) {
-					// FPDI can only parse files or streams. Since we have a string in memory,
-					// we write to a temp file.
-					$temp_file = wp_tempnam( 'ghca_cert_' );
-					if ( $temp_file ) {
-						file_put_contents( $temp_file, $pdf_content );
-						
-						try {
-							$page_count = $pdf->setSourceFile( $temp_file );
-							for ( $page_no = 1; $page_no <= $page_count; $page_no++ ) {
-								$template_id = $pdf->importPage( $page_no );
-								$size = $pdf->getTemplateSize( $template_id );
-								
-								$orientation = $size['width'] > $size['height'] ? 'L' : 'P';
-								$pdf->AddPage( $orientation, array( $size['width'], $size['height'] ) );
-								$pdf->useTemplate( $template_id, 0, 0, $size['width'], $size['height'] );
-							}
-						} catch ( \Exception $e ) {
-							// Skip this certificate if it's malformed or encrypted
-						}
-						
-						@unlink( $temp_file );
-					}
-				}
+			if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) !== 200 ) {
+				continue;
+			}
+
+			$pdf_content = wp_remote_retrieve_body( $response );
+
+			// Ensure it is actually a PDF by checking signature
+			if ( strpos( $pdf_content, '%PDF-' ) !== 0 ) {
+				continue;
+			}
+
+			// FPDI can only parse files or streams, so spill the body to a temp file.
+			$temp_file = wp_tempnam( 'ghca_cert_' );
+			if ( $temp_file ) {
+				file_put_contents( $temp_file, $pdf_content );
+				self::append_certificate( $pdf, $temp_file );
+				@unlink( $temp_file );
 			}
 		}
 
 		// Output PDF
-		$filename = 'Audit_Packet_' . sanitize_title( $audit_data['first_name'] . '_' . $audit_data['last_name'] ) . '_' . wp_date('Y-m-d') . '.pdf';
-		
+		$filename = self::build_filename( $audit_data );
+
 		// Clean the output buffer to avoid corrupting the PDF
 		if ( ob_get_length() ) {
 			ob_clean();
 		}
-		
+
 		$pdf->Output( $filename, 'D' );
 		exit;
 	}
