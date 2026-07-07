@@ -235,6 +235,18 @@ final class GHCA_ACD_Data_Provider {
     // reads from memory instead of issuing its own query per user.
     cache_users( $user_ids );
 
+    // Same idea for FluentCRM: resolve every employee's subscriber id in one
+    // query instead of one per row inside build_employee_actions_html().
+    // Emails are memory reads here thanks to cache_users() above.
+    $emails = array();
+    foreach ( $user_ids as $user_id ) {
+      $user = get_userdata( $user_id );
+      if ( $user && $user->user_email ) {
+        $emails[] = $user->user_email;
+      }
+    }
+    GHCA_ACD_FluentCRM::prime_contact_cache( $emails );
+
     $records = array();
     foreach ( $user_ids as $user_id ) {
       $records[] = self::build_employee_record( $user_id );
