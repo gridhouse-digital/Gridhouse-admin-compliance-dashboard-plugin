@@ -142,7 +142,7 @@ final class GHCA_ACD_Scoping {
 
   /** @return array<int,array<string,mixed>> */
   public static function build_group_summary_rows(): array {
-    $employees = GHCA_Admin_Compliance_Dashboard::get_employees_for_current_view();
+    $employees = GHCA_ACD_Data_Provider::get_employees_for_current_view();
     $groups    = self::get_visible_group_ids();
     $rows      = array();
 

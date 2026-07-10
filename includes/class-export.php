@@ -37,7 +37,7 @@ final class GHCA_ACD_Export {
 
     check_admin_referer( 'ghca_acd_export_csv' );
 
-    $employees = GHCA_Admin_Compliance_Dashboard::get_employees_for_current_view();
+    $employees = GHCA_ACD_Data_Provider::get_employees_for_current_view();
     $filename  = 'compliance-export-' . wp_date( 'Y-m-d-His' ) . '.csv';
 
     nocache_headers();
@@ -51,7 +51,7 @@ final class GHCA_ACD_Export {
 
     fputcsv(
       $out,
-      array(
+      array_map( array( __CLASS__, 'csv_safe' ), array(
         'Employee Name',
         'Email',
         'Group',
@@ -62,28 +62,34 @@ final class GHCA_ACD_Export {
         'Certificate',
         'Last Activity',
         'Status',
-      )
+      ) )
     );
 
     foreach ( $employees as $employee ) {
-      fputcsv(
-        $out,
-        array(
-          $employee['name'],
-          $employee['email'],
-          $employee['group'],
-          $employee['required_label'],
-          $employee['completed_label'],
-          $employee['progress_label'],
-          $employee['due_date_label'],
-          $employee['certificate_label'],
-          $employee['last_activity_label'],
-          $employee['status_label'],
-        )
+      $row = array(
+        $employee['name'],
+        $employee['email'],
+        $employee['group'],
+        $employee['required_label'],
+        $employee['completed_label'],
+        $employee['progress_label'],
+        $employee['due_date_label'],
+        $employee['certificate_label'],
+        $employee['last_activity_label'],
+        $employee['status_label'],
       );
+      fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $row ) );
     }
 
     fclose( $out );
     exit;
+  }
+
+  private static function csv_safe( $value ): string {
+    $value = (string) $value;
+    if ( $value !== '' && in_array( $value[0], array( '=', '+', '-', '@', "\t", "\r" ), true ) ) {
+      $value = "'" . $value; // leading apostrophe = Excel treats as text
+    }
+    return $value;
   }
 }

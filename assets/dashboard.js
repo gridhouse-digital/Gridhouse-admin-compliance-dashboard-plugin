@@ -872,9 +872,110 @@
     });
   }
 
+  function initManageUsers() {
+    var modal = document.getElementById('ghca-acd-user-modal');
+    if (!modal) return;
+
+    var form = document.getElementById('ghca-acd-user-form');
+    var closeBtn = modal.querySelector('.ghca-acd-modal__close');
+    var cancelBtn = modal.querySelector('.ghca-acd-modal__cancel');
+    var addBtn = document.getElementById('ghca-acd-btn-add-user');
+    var editBtns = document.querySelectorAll('.ghca-acd-btn-edit-user');
+    var submitBtn = document.getElementById('ghca-acd-user-submit');
+    var btnText = submitBtn ? submitBtn.querySelector('.ghca-acd-btn-text') : null;
+    var spinner = submitBtn ? submitBtn.querySelector('.ghca-acd-spinner') : null;
+    var titleEl = document.getElementById('ghca-acd-user-modal-title');
+
+    function openModal() {
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal() {
+      modal.style.display = 'none';
+      document.body.style.overflow = '';
+      form.reset();
+      document.getElementById('ghca-acd-user-id').value = '';
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    if (addBtn) {
+      addBtn.addEventListener('click', function () {
+        titleEl.textContent = 'Add Employee';
+        openModal();
+      });
+    }
+
+    Array.prototype.forEach.call(editBtns, function (btn) {
+      btn.addEventListener('click', function () {
+        titleEl.textContent = 'Edit Employee';
+        form.elements['user_id'].value = btn.getAttribute('data-user_id');
+        form.elements['first_name'].value = btn.getAttribute('data-first_name');
+        form.elements['last_name'].value = btn.getAttribute('data-last_name');
+        form.elements['email'].value = btn.getAttribute('data-email');
+        form.elements['phone'].value = btn.getAttribute('data-phone') || '';
+        if (form.elements['role']) {
+          form.elements['role'].value = btn.getAttribute('data-role') || 'subscriber';
+        }
+        
+        var groups = [];
+        try {
+          groups = JSON.parse(btn.getAttribute('data-groups') || '[]');
+        } catch(e) {}
+        
+        var checkboxes = form.querySelectorAll('input[name="groups[]"]');
+        Array.prototype.forEach.call(checkboxes, function (cb) {
+          cb.checked = groups.indexOf(parseInt(cb.value, 10)) > -1;
+        });
+        
+        openModal();
+      });
+    });
+
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (submitBtn) submitBtn.disabled = true;
+        if (btnText) {
+          btnText.dataset.original = btnText.textContent;
+          btnText.textContent = 'Saving...';
+        }
+
+        var formData = new FormData(form);
+        var urlEncoded = new URLSearchParams(formData).toString();
+
+        fetch(ghcaAcd.ajaxUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: urlEncoded
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(json) {
+          if (submitBtn) submitBtn.disabled = false;
+          if (btnText) btnText.textContent = btnText.dataset.original;
+
+          if (json && json.success) {
+            ghcaToast(json.data || 'Saved successfully.', false);
+            closeModal();
+            setTimeout(function() { window.location.reload(); }, 1500);
+          } else {
+            ghcaToast(json.data || 'Error saving user.', true);
+          }
+        })
+        .catch(function() {
+          if (submitBtn) submitBtn.disabled = false;
+          if (btnText) btnText.textContent = btnText.dataset.original;
+          ghcaToast('Network error.', true);
+        });
+      });
+    }
+  }
+
   initTabs();
   initEmployeeDrawer();
   initEditRecordsModal();
   initAnnouncements();
+  initManageUsers();
 
 })();
