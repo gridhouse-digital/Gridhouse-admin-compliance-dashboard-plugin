@@ -523,6 +523,11 @@ final class GHCA_ACD_AJAX {
     }
 
     GHCA_ACD_Data_Provider::bust_cache();
+    // Back-dated completions intentionally skip LearnDash hooks (see
+    // apply_course_completion), so the employee dashboard must be busted here.
+    if ( class_exists( 'GHCA_Employee_Compliance_Dashboard' ) && method_exists( 'GHCA_Employee_Compliance_Dashboard', 'bust_cache' ) ) {
+      GHCA_Employee_Compliance_Dashboard::bust_cache( $user_id );
+    }
 
     if ( ! empty( $errors ) && empty( $changes ) ) {
       wp_send_json_error( array( 'message' => implode( ' ', $errors ) ) );
@@ -830,6 +835,9 @@ final class GHCA_ACD_AJAX {
     }
 
     GHCA_ACD_Settings::bust_dashboard_cache();
+    if ( class_exists( 'GHCA_Employee_Compliance_Dashboard' ) && method_exists( 'GHCA_Employee_Compliance_Dashboard', 'bust_cache' ) ) {
+      GHCA_Employee_Compliance_Dashboard::bust_cache( (int) $saved_user_id );
+    }
     wp_send_json_success( __( 'Employee saved successfully.', 'ghca-acd' ) );
   }
 }
