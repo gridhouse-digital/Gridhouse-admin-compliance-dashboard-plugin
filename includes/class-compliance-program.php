@@ -9,6 +9,24 @@ final class GHCA_Compliance_Program {
   const DEFAULT_DEADLINE_DAYS    = 30;
   const AT_RISK_DAYS             = 7;
 
+  /**
+   * Per-request memo caches. get_user_status() is invoked several times per
+   * employee while the dashboard aggregate is built, and the group→course
+   * mapping is identical for every user in the same groups — recomputing
+   * either per call multiplies LearnDash queries by the employee count.
+   *
+   * @var array<int,array<string,mixed>> */
+  private static $user_status_cache = array();
+
+  /** @var array<string,array<int>> */
+  private static $group_course_ids_cache = array();
+
+  /** Drop the per-request memo caches (call after mutating LearnDash data). */
+  public static function reset_runtime_cache(): void {
+    self::$user_status_cache      = array();
+    self::$group_course_ids_cache = array();
+  }
+
   public static function init(): void {
     add_filter( 'ghca_new_hire_group_ids', array( __CLASS__, 'filter_new_hire_group_ids' ) );
     add_filter( 'ghca_new_hire_deadline_days', array( __CLASS__, 'filter_deadline_days' ) );
@@ -96,6 +114,11 @@ final class GHCA_Compliance_Program {
 
   /** @param array<int> $group_ids @return array<int> */
   public static function get_group_course_ids( array $group_ids ): array {
+    $cache_key = implode( ',', array_map( 'intval', $group_ids ) );
+    if ( isset( self::$group_course_ids_cache[ $cache_key ] ) ) {
+      return self::$group_course_ids_cache[ $cache_key ];
+    }
+
     $course_ids = array();
 
     foreach ( $group_ids as $group_id ) {
@@ -116,7 +139,8 @@ final class GHCA_Compliance_Program {
       }
     }
 
-    return array_values( array_unique( array_filter( $course_ids ) ) );
+    self::$group_course_ids_cache[ $cache_key ] = array_values( array_unique( array_filter( $course_ids ) ) );
+    return self::$group_course_ids_cache[ $cache_key ];
   }
 
   /** @return array<int,array<string,mixed>> */
@@ -164,6 +188,14 @@ final class GHCA_Compliance_Program {
 
   /** @return array<string,mixed> */
   public static function get_user_status( int $user_id ): array {
+    if ( isset( self::$user_status_cache[ $user_id ] ) ) {
+      return self::$user_status_cache[ $user_id ];
+    }
+    return self::$user_status_cache[ $user_id ] = self::compute_user_status( $user_id );
+  }
+
+  /** @return array<string,mixed> */
+  private static function compute_user_status( int $user_id ): array {
     $empty = array(
       'active'             => false,
       'configured'         => self::is_configured(),

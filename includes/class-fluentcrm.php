@@ -4,8 +4,53 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class GHCA_ACD_FluentCRM {
+
+  /**
+   * Request-scoped map of lowercased email → subscriber id (null = looked up,
+   * no subscriber). get_contact_admin_url() is called once per dashboard row,
+   * so without this every row costs one wp_fc_subscribers query.
+   *
+   * @var array<string,int|null> */
+  private static $contact_id_cache = array();
+
   public static function init(): void {
     add_action( 'init', array( __CLASS__, 'handle_reminder_log' ) );
+  }
+
+  /**
+   * Bulk-resolve subscriber ids for a set of emails in one query, so the
+   * per-row get_contact_admin_url() calls below become memory reads.
+   * Mirrors get_contact_admin_url()'s gates: callers who could never render
+   * a CRM link must not gain a query they don't have today.
+   *
+   * @param array<int,string> $emails
+   */
+  public static function prime_contact_cache( array $emails ): void {
+    if ( ! self::is_active() || ! current_user_can( 'manage_options' ) || ! class_exists( '\FluentCrm\App\Models\Subscriber' ) ) {
+      return;
+    }
+
+    $wanted = array();
+    foreach ( $emails as $email ) {
+      $key = strtolower( trim( (string) $email ) );
+      if ( '' !== $key && ! array_key_exists( $key, self::$contact_id_cache ) ) {
+        $wanted[ $key ] = true;
+      }
+    }
+    if ( empty( $wanted ) ) {
+      return;
+    }
+
+    // Pre-mark as "no subscriber" so emails absent from FluentCRM don't fall
+    // through to a per-email query later.
+    foreach ( array_keys( $wanted ) as $key ) {
+      self::$contact_id_cache[ $key ] = null;
+    }
+
+    $subscribers = \FluentCrm\App\Models\Subscriber::whereIn( 'email', array_keys( $wanted ) )->get();
+    foreach ( $subscribers as $subscriber ) {
+      self::$contact_id_cache[ strtolower( (string) $subscriber->email ) ] = (int) $subscriber->id;
+    }
   }
 
   public static function is_active(): bool {
@@ -21,12 +66,21 @@ final class GHCA_ACD_FluentCRM {
       return '';
     }
 
-    $subscriber = \FluentCrm\App\Models\Subscriber::where( 'email', $email )->first();
-    if ( ! $subscriber ) {
+    // MySQL email matching is case-insensitive (*_ci collation) and the
+    // subscribers table has a unique email index, so a lowercased key maps
+    // one-to-one with what the per-email query would have returned.
+    $key = strtolower( trim( $email ) );
+    if ( ! array_key_exists( $key, self::$contact_id_cache ) ) {
+      $subscriber = \FluentCrm\App\Models\Subscriber::where( 'email', $email )->first();
+      self::$contact_id_cache[ $key ] = $subscriber ? (int) $subscriber->id : null;
+    }
+
+    $subscriber_id = self::$contact_id_cache[ $key ];
+    if ( ! $subscriber_id ) {
       return '';
     }
 
-    return admin_url( 'admin.php?page=fluentcrm-admin#/subscribers/' . (int) $subscriber->id );
+    return admin_url( 'admin.php?page=fluentcrm-admin#/subscribers/' . $subscriber_id );
   }
 
   public static function log_reminder_note( int $employee_user_id, string $course_title = '' ): bool {
