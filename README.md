@@ -1,6 +1,6 @@
 # Gridhouse Admin Compliance Dashboard
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Author:** Gridhouse Digital
 **Text Domain:** `ghca-acd`
 **Requires:** WordPress 6.0+, PHP 7.4+, LearnDash 4.0+
