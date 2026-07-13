@@ -15,16 +15,24 @@ final class GHCA_ACD_Settings {
   public static function init(): void {
     add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
     add_action( 'admin_menu', array( __CLASS__, 'register_page' ) );
-    add_action( 'update_option_' . GHCA_Compliance_Program::OPTION_NEW_HIRE_GROUPS, array( __CLASS__, 'bust_dashboard_cache' ) );
-    add_action( 'update_option_' . GHCA_Compliance_Program::OPTION_NEW_HIRE_DAYS, array( __CLASS__, 'bust_dashboard_cache' ) );
-    add_action( 'update_option_' . GHCA_Dashboard_Branding::OPTION, array( __CLASS__, 'bust_dashboard_cache' ) );
-    add_action( 'update_option_' . GHCA_Course_Lifespans::OPTION_LIFESPANS, array( __CLASS__, 'bust_dashboard_cache' ) );
-    add_action( 'update_option_' . GHCA_Course_Lifespans::OPTION_WARNING_DAYS, array( __CLASS__, 'bust_dashboard_cache' ) );
-    add_action( 'update_option_' . self::OPTION_PERM_EDIT_RECORDS, array( __CLASS__, 'bust_dashboard_cache' ) );
-    add_action( 'update_option_' . self::OPTION_PERM_MANAGE_ANNOUNCEMENTS, array( __CLASS__, 'bust_dashboard_cache' ) );
-    add_action( 'update_option_' . self::OPTION_PERM_UNRESTRICTED_VIEW, array( __CLASS__, 'bust_dashboard_cache' ) );
-    add_action( 'update_option_' . self::OPTION_PERM_MANAGE_USERS, array( __CLASS__, 'bust_dashboard_cache' ) );
-    add_action( 'update_option_' . self::OPTION_ANNUAL_CYCLE, array( __CLASS__, 'bust_dashboard_cache' ) );
+    // Both hooks per option: WordPress fires add_option_{name} (not
+    // update_option_{name}) the first time a not-yet-persisted option is saved.
+    $bust_options = array(
+      GHCA_Compliance_Program::OPTION_NEW_HIRE_GROUPS,
+      GHCA_Compliance_Program::OPTION_NEW_HIRE_DAYS,
+      GHCA_Dashboard_Branding::OPTION,
+      GHCA_Course_Lifespans::OPTION_LIFESPANS,
+      GHCA_Course_Lifespans::OPTION_WARNING_DAYS,
+      self::OPTION_PERM_EDIT_RECORDS,
+      self::OPTION_PERM_MANAGE_ANNOUNCEMENTS,
+      self::OPTION_PERM_UNRESTRICTED_VIEW,
+      self::OPTION_PERM_MANAGE_USERS,
+      self::OPTION_ANNUAL_CYCLE,
+    );
+    foreach ( $bust_options as $option_name ) {
+      add_action( 'update_option_' . $option_name, array( __CLASS__, 'bust_dashboard_cache' ) );
+      add_action( 'add_option_' . $option_name, array( __CLASS__, 'bust_dashboard_cache' ) );
+    }
     add_filter( 'ghca_admin_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
     add_filter( 'ghca_employee_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
   }
