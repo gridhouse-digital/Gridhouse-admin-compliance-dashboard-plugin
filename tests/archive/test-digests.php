@@ -63,6 +63,30 @@ archive_check( GHCA_ACD_Archive_Digester::snapshot( $snapshot ) === '320bee9b2e2
 $item = array( 'completion_status' => 'completed', 'course_id' => '10', 'item_ordinal' => 0 );
 archive_check( GHCA_ACD_Archive_Digester::item( $item ) === '9068e030ad612bab1712a5f12725d30f4b83511a30c1bb737b9d8c09e8f71131', 'ghca-item-v1 golden vector' );
 
+// Independent literal-byte vectors for the two P2 persisted digest contracts.
+$artifact_dedupe_bytes = "ghca-artifact-dedupe-v1\n{\"archive_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"artifact_kind\":\"ledger\",\"build_attempt_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"role_key\":\"ledger\"}";
+archive_check(
+	hash( 'sha256', $artifact_dedupe_bytes ) === '21863c252ab802bb2958eb91a672a58d6179d72721170b8ec22eb85db4a38fde',
+	'GOLDEN-ARTIFACT-DEDUPE-INDEPENDENT frozen ghca-artifact-dedupe-v1 bytes hash independently'
+);
+archive_check(
+	GHCA_ACD_Archive_Digester::artifact_dedupe( array(
+		'archive_id' => str_repeat( 'a', 32 ), 'artifact_kind' => 'ledger',
+		'build_attempt_id' => str_repeat( 'b', 32 ), 'role_key' => 'ledger',
+	) ) === '21863c252ab802bb2958eb91a672a58d6179d72721170b8ec22eb85db4a38fde',
+	'GOLDEN-ARTIFACT-DEDUPE-PRODUCTION production artifact dedupe matches the independent vector'
+);
+
+$ledger_manifest_bytes = "ghca-ledger-manifest-v1\n{\"item_digests\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]}";
+archive_check(
+	hash( 'sha256', $ledger_manifest_bytes ) === 'c6347420d9e36cb02c747e9567a513ca057b51d89096da04733bb0448f8ecaee',
+	'GOLDEN-LEDGER-MANIFEST-INDEPENDENT frozen ghca-ledger-manifest-v1 bytes hash independently'
+);
+archive_check(
+	GHCA_ACD_Archive_Digester::ledger_manifest( array( str_repeat( 'a', 64 ), str_repeat( 'b', 64 ) ) ) === 'c6347420d9e36cb02c747e9567a513ca057b51d89096da04733bb0448f8ecaee',
+	'GOLDEN-LEDGER-MANIFEST-PRODUCTION production ledger manifest matches the independent vector'
+);
+
 $event = array(
 	'actor_kind'                 => 'system',
 	'actor_user_id'              => null,

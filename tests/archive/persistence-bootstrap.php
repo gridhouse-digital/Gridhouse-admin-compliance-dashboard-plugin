@@ -120,6 +120,8 @@ require_once $persistence_root . '/contracts/interface-archive-event-store.php';
 require_once $persistence_root . '/infrastructure/class-wpdb-archive-event-store.php';
 require_once $persistence_root . '/infrastructure/class-wpdb-archive-command-store.php';
 require_once $persistence_root . '/infrastructure/class-wpdb-archive-task-store.php';
+require_once $persistence_root . '/infrastructure/class-wpdb-archive-snapshot-store.php';
+require_once $persistence_root . '/infrastructure/class-wpdb-archive-artifact-repository.php';
 require_once $persistence_root . '/infrastructure/class-wpdb-archive-projection-repository.php';
 require_once $persistence_root . '/infrastructure/class-archive-case-projector.php';
 require_once $persistence_root . '/infrastructure/class-archive-revision-projector.php';
@@ -337,16 +339,20 @@ function ghca_persist_stack( $db, string $now = '2026-07-16T12:00:00Z', string $
 	$event_store   = new GHCA_ACD_WPDB_Archive_Event_Store( $db );
 	$command_store = new GHCA_ACD_WPDB_Archive_Command_Store( $db );
 	$task_store    = new GHCA_ACD_WPDB_Archive_Task_Store( $db );
+	$snapshot_store = new GHCA_ACD_WPDB_Archive_Snapshot_Store( $db );
+	$artifact_repository = new GHCA_ACD_WPDB_Archive_Artifact_Repository( $db );
 	$repository    = new GHCA_ACD_WPDB_Archive_Projection_Repository( $db );
 	$projector     = new GHCA_ACD_Archive_Projector( $repository );
 	$clock         = new GHCA_Persist_Fixed_Clock( $now );
 	$ids           = new GHCA_Persist_Sequential_Ids( $id_namespace );
-	$uow           = new GHCA_ACD_Archive_Unit_Of_Work( $db, $event_store, $command_store, $task_store, $projector, $clock, $ids );
+	$uow           = new GHCA_ACD_Archive_Unit_Of_Work( $db, $event_store, $command_store, $task_store, $snapshot_store, $artifact_repository, $projector, $clock, $ids );
 	return array(
 		'db'            => $db,
 		'event_store'   => $event_store,
 		'command_store' => $command_store,
 		'task_store'    => $task_store,
+		'snapshot_store' => $snapshot_store,
+		'artifact_repository' => $artifact_repository,
 		'repository'    => $repository,
 		'projector'     => $projector,
 		'clock'         => $clock,

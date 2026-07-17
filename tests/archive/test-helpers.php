@@ -15,7 +15,9 @@ function archive_check( bool $condition, string $message ): void {
 	global $archive_test_failures, $archive_test_checks;
 	$archive_test_checks++;
 	if ( $condition ) {
-		echo "PASS: {$message}\n";
+		if ( '1' !== getenv( 'GHCA_TEST_QUIET' ) ) {
+			echo "PASS: {$message}\n";
+		}
 		return;
 	}
 	$archive_test_failures++;

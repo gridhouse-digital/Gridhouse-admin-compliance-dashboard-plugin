@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+$env:GHCA_TEST_QUIET = "1"
 
 $php_versions = @(
     "$env:TEMP\ghca-php-7.4.33-nts-x64\php.exe",
@@ -40,7 +41,8 @@ foreach ($php in $php_versions) {
 
         $suites = @(
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-schema-migration.php",
-            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-persistence.php"
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-persistence.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-side-record-persistence.php"
         )
         foreach ($suite in $suites) {
             if ($php -match "7\.4") {
@@ -64,4 +66,4 @@ foreach ($php in $php_versions) {
 }
 
 $results | Format-Table -AutoSize
-Write-Host "ALL $($results.Count) SCHEMA/PERSISTENCE MATRIX CELLS PASSED"
+Write-Host "ALL $($results.Count) SCHEMA/PERSISTENCE/SIDE-RECORD MATRIX CELLS PASSED"

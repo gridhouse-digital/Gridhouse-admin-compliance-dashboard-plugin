@@ -10,6 +10,8 @@ final class GHCA_ACD_Archive_Digester {
 	const SOURCE_FINGERPRINT_PREFIX = 'ghca-source-fingerprint-v1';
 	const SNAPSHOT_PREFIX          = 'ghca-snapshot-v1';
 	const ITEM_PREFIX              = 'ghca-item-v1';
+	const ARTIFACT_DEDUPE_PREFIX   = 'ghca-artifact-dedupe-v1';
+	const LEDGER_MANIFEST_PREFIX   = 'ghca-ledger-manifest-v1';
 	const EVENT_PREFIX             = 'ghca-event-hash-v1';
 
 	/** @return array<int,string> */
@@ -79,6 +81,20 @@ final class GHCA_ACD_Archive_Digester {
 	/** @param array<string,mixed> $document */
 	public static function item( array $document ): string {
 		return self::digest_document( self::ITEM_PREFIX, $document );
+	}
+
+	/** @param array<string,mixed> $document */
+	public static function artifact_dedupe( array $document ): string {
+		self::assert_exact_fields( $document, array( 'archive_id', 'build_attempt_id', 'artifact_kind', 'role_key' ), 'Artifact dedupe document' );
+		return self::digest_document( self::ARTIFACT_DEDUPE_PREFIX, $document );
+	}
+
+	/** @param array<int,string> $item_digests */
+	public static function ledger_manifest( array $item_digests ): string {
+		foreach ( $item_digests as $digest ) {
+			self::assert_digest( $digest, 'Ledger item digest' );
+		}
+		return self::digest_document( self::LEDGER_MANIFEST_PREFIX, array( 'item_digests' => $item_digests ) );
 	}
 
 	/** @param array<string,mixed> $document */

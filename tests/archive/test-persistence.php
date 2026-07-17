@@ -194,7 +194,7 @@ list( $gate_caller, $gate_server ) = ghca_persist_split( 'RecordEvidenceSnapshot
 $gate_request = persist_make_uow_request( $sGate, 'RecordEvidenceSnapshot', $gate_caller, $gate_server, 'snapshot-gate' );
 persist_expect_failure( $wpdb, static function () use ( $stack, $gate_request ) {
 	return $stack['uow']->execute( $gate_request );
-}, 'GHCA_ACD_Archive_Persistence_Exception', 'atomic_side_records_unavailable', 'PERSIST-ATOMIC-SIDE-RECORD-GATE' );
+}, 'GHCA_ACD_Archive_Persistence_Exception', 'side_records_required', 'PERSIST-ATOMIC-SIDE-RECORD-REQUIRED' );
 
 // ---------------------------------------------------------------------------
 // Reset lifecycle on the finalized case (request/authorize/claim/complete).

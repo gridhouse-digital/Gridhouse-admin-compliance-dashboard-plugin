@@ -129,13 +129,6 @@ function ghca_persist_execute( array $stack, GHCA_Persist_Scenario $s, string $c
 		$caller,
 		$server
 	);
-	if ( ! empty( $opts['component_harness'] ) ) {
-		$response = ghca_persist_apply_component_transaction( $stack, $s, $command, $opts );
-		if ( empty( $opts['no_track'] ) ) {
-			$s->record_response( $response );
-		}
-		return $response;
-	}
 	$request = array(
 		'command'              => $command,
 		'case_key'             => $s->case_key,
@@ -148,121 +141,14 @@ function ghca_persist_execute( array $stack, GHCA_Persist_Scenario $s, string $c
 			$request[ $optional ] = $opts[ $optional ];
 		}
 	}
+	if ( array_key_exists( 'side_records', $opts ) ) {
+		$request['side_records'] = $opts['side_records'];
+	}
 	$response = $stack['uow']->execute( $request );
 	if ( empty( $opts['no_track'] ) ) {
 		$s->record_response( $response );
 	}
 	return $response;
-}
-
-/**
- * Test-only event-store/projector transaction for later-slice commands whose
- * production Unit of Work correctly refuses to append without side records.
- * It exists only to exercise the already-delegated generic store/projectors;
- * it creates no receipt or task and is never loaded by production runtime.
- *
- * @param array<string,mixed> $stack
- * @param array<string,mixed> $opts
- * @return array<string,mixed>
- */
-function ghca_persist_apply_component_transaction( array $stack, GHCA_Persist_Scenario $s, GHCA_ACD_Archive_Command $command, array $opts = array() ) {
-	$db = $stack['db'];
-	if ( false === $db->query( 'START TRANSACTION' ) || '' !== (string) $db->last_error ) {
-		throw new RuntimeException( 'component transaction could not start' );
-	}
-	try {
-		$stream = $stack['event_store']->find_stream_for_update( $s->case_key->digest() );
-		if ( null === $stream ) {
-			throw new RuntimeException( 'component transaction requires an existing stream' );
-		}
-		$prior = $stack['event_store']->load_events( (string) $stream['stream_id'] );
-		$case  = GHCA_ACD_Archive_Case::rehydrate( $prior );
-		$events = $command->decide( $case );
-		$document = $command->canonical();
-		$actor = $document['actor'];
-		$sequence = (string) $stream['head_sequence'];
-		$chain = null === $stream['head_event_digest'] ? null : (string) $stream['head_event_digest'];
-		$recorded = array();
-		$now = $stack['clock']->now_gmt();
-		$correlation_id = $s->id( 'component-correlation-' . $document['command_id'] );
-		foreach ( $events as $event ) {
-			$sequence = GHCA_ACD_Archive_Db_Format::increment_sequence( $sequence );
-			$payload = $event->payload();
-			$archive_id = null;
-			foreach ( array( 'archive_id', 'target_archive_id', 'bound_archive_id' ) as $field ) {
-				if ( array_key_exists( $field, $payload ) ) {
-					$archive_id = $payload[ $field ];
-					break;
-				}
-			}
-			$build_attempt_id = GHCA_ACD_Archive_Event_Types::ARCHIVE_RETRY_REQUESTED === $event->type()
-				? $payload['new_build_attempt_id']
-				: ( array_key_exists( 'build_attempt_id', $payload ) ? $payload['build_attempt_id'] : null );
-			$recorded_event = $event->with_recording_context( array(
-				'canonical_format_version' => 1,
-				'event_id'                 => $stack['ids']->generate(),
-				'stream_id'                => (string) $stream['stream_id'],
-				'case_key_digest'          => (string) $stream['case_key_digest'],
-				'case_key_format_version'  => 1,
-				'stream_sequence'          => $sequence,
-				'archive_id'               => $archive_id,
-				'build_attempt_id'         => $build_attempt_id,
-				'reset_operation_id'       => array_key_exists( 'reset_operation_id', $payload ) ? $payload['reset_operation_id'] : null,
-				'actor_kind'               => $actor['actor_kind'],
-				'actor_user_id'            => $actor['actor_user_id'],
-				'initiating_user_id'       => $actor['initiating_user_id'],
-				'source_channel'           => $actor['source_channel'],
-				'authority_code'           => $actor['authority_code'],
-				'authority_context'        => $actor['authority_context'],
-				'occurred_at_gmt'          => $now,
-				'effective_at_gmt'         => null,
-				'correlation_id'           => $correlation_id,
-				'causation_event_id'       => null,
-				'command_id'               => $document['command_id'],
-				'upstream_operation_id'    => array_key_exists( 'upstream_operation_id', $payload ) ? $payload['upstream_operation_id'] : null,
-				'idempotency_scope_digest' => $document['idempotency_scope_digest'],
-				'idempotency_key_digest'   => $document['idempotency_key_digest'],
-				'command_digest'           => $command->digest(),
-				'reason_code'              => null,
-				'reason_text'              => null,
-				'previous_event_digest'    => $chain,
-				'recorded_at_gmt'          => $now,
-			) );
-			$recorded[] = $recorded_event;
-			$chain = $recorded_event->event_digest();
-		}
-		$stack['event_store']->append_events( $recorded );
-		$stack['projector']->apply_new_events( $stream, $prior, $recorded, $now );
-		$last = $recorded[ count( $recorded ) - 1 ];
-		$stack['event_store']->advance_stream_head(
-			(string) $stream['stream_id'],
-			(string) $stream['head_sequence'],
-			null === $stream['head_event_digest'] ? null : (string) $stream['head_event_digest'],
-			$last->stream_sequence(),
-			$last->event_digest(),
-			$now
-		);
-		if ( false === $db->query( 'COMMIT' ) || '' !== (string) $db->last_error ) {
-			throw new RuntimeException( 'component transaction commit failed' );
-		}
-		$first = $recorded[0];
-		return array(
-			'case_key_digest'         => (string) $stream['case_key_digest'],
-			'command_id'              => $document['command_id'],
-			'command_type'            => $command->type(),
-			'first_event_id'          => $first->event_id(),
-			'first_stream_sequence'   => $first->stream_sequence(),
-			'head_event_digest'       => $last->event_digest(),
-			'last_event_id'           => $last->event_id(),
-			'last_stream_sequence'    => $last->stream_sequence(),
-			'response_schema_version' => 1,
-			'result_code'             => 'component_committed',
-			'stream_id'               => (string) $stream['stream_id'],
-		);
-	} catch ( Throwable $error ) {
-		$db->query( 'ROLLBACK' );
-		throw $error;
-	}
 }
 
 /**
@@ -320,6 +206,190 @@ function persist_start_build( array $stack, GHCA_Persist_Scenario $s, array $ove
 	return persist_single( $stack, $s, 'StartBuild', 'start_build', $payload, $opts );
 }
 
+/** @return array<string,mixed> */
+function ghca_persist_artifact_descriptor( GHCA_Persist_Scenario $s, string $kind, string $artifact_id, string $content_digest, int $ordinal = 0 ): array {
+	$role = 'certificate' === $kind ? 'course:' . ( 101 + $ordinal ) : $kind;
+	$extension = 'ledger' === $kind ? 'json' : 'pdf';
+	return array(
+		'artifact_id'              => $artifact_id,
+		'artifact_kind'            => $kind,
+		'artifact_schema_version'  => 1,
+		'byte_count'               => 512 + $ordinal,
+		'content_digest'           => $content_digest,
+		'content_digest_algorithm' => 'sha256',
+		'filename'                 => $kind . '-' . ( $ordinal + 1 ) . '.' . $extension,
+		'media_type'               => 'ledger' === $kind ? 'application/json' : 'application/pdf',
+		'producer_key'             => 'ghca.fixture',
+		'producer_version'         => '1.0.0',
+		'role_key'                 => $role,
+		'storage_adapter'          => 'private_local',
+		'storage_key'              => 'archive/' . $s->program . '/' . $artifact_id . '.' . $extension,
+	);
+}
+
+/** @param array<string,mixed> $payload @return array<string,mixed> */
+function ghca_persist_snapshot_side_records( array $stack, GHCA_Persist_Scenario $s, array &$payload ): array {
+	$assets = array();
+	$descriptors = array();
+	foreach ( $payload['certificate_asset_ids'] as $index => $artifact_id ) {
+		$course_id = (string) ( 101 + $index );
+		$assets[] = array(
+			'artifact_id'      => $artifact_id,
+			'byte_count'       => 512 + $index,
+			'content_digest'   => $payload['certificate_content_digests'][ $index ],
+			'producer_key'     => 'ghca.fixture',
+			'producer_version' => '1.0.0',
+			'role_key'         => 'course:' . $course_id,
+			'source_identifier' => 'certificate:' . $course_id,
+		);
+		$descriptors[] = ghca_persist_artifact_descriptor( $s, 'certificate', $artifact_id, $payload['certificate_content_digests'][ $index ], $index );
+	}
+	$request_event = null;
+	foreach ( $stack['event_store']->load_events( (string) $s->stream_id ) as $candidate ) {
+		$candidate_payload = $candidate->payload();
+		if ( in_array( $candidate->type(), array(
+			GHCA_ACD_Archive_Event_Types::ARCHIVE_REQUESTED,
+			GHCA_ACD_Archive_Event_Types::REPLACEMENT_ARCHIVE_REQUESTED,
+		), true ) && $candidate_payload['archive_id'] === $payload['archive_id'] ) {
+			$request_event = $candidate;
+		}
+	}
+	if ( null === $request_event ) {
+		throw new RuntimeException( 'Snapshot fixture requires its authoritative request event.' );
+	}
+	$request_envelope = $request_event->recorded_document();
+	$courses = array();
+	foreach ( array( 101, 102 ) as $ordinal => $course_id ) {
+		$courses[] = array(
+			'category_order'          => 0,
+			'certificate_artifact_id' => $payload['certificate_asset_ids'][ $ordinal ],
+			'certificate_required'    => true,
+			'completed_at_gmt'        => '2026-07-13T11:00:00Z',
+			'completion_status'        => 'completed',
+			'course_id'                => (string) $course_id,
+			'course_order'             => $ordinal,
+			'course_stable_key'        => 'course-' . $course_id,
+			'course_title'             => 'Fixture Course ' . $course_id,
+			'enrollment_status'        => 'enrolled',
+			'pass_state'               => 'passed',
+			'quiz_attempts'            => array( array(
+				'attempt_ordinal' => 0, 'attempted_at_gmt' => '2026-07-13T10:30:00Z',
+				'passed' => true, 'score_basis_points' => 9000,
+			) ),
+			'quiz_score_basis_points' => 9000,
+			'source_provenance'       => array(
+				'adapter_key' => 'learndash', 'record_id' => 'course:' . $course_id, 'record_version' => '1',
+			),
+			'started_at_gmt'          => '2026-07-13T10:00:00Z',
+			'time_spent_seconds'       => '3600',
+		);
+	}
+	$document = array(
+		'calculated' => array(
+			'calculation_version' => 1,
+			'categories' => array( 'annual' => 'compliant' ),
+			'compliance_status' => 'compliant',
+			'exceptions' => array(),
+			'matrix' => array( 'annual' => array( 'complete' => true ) ),
+			'total_course_count' => count( $courses ),
+			'total_training_seconds' => '7200',
+		),
+		'canonical_format' => 'ghca-cjson-1',
+		'captured_at_gmt' => $stack['clock']->now_gmt(),
+		'case' => array(
+			'archive_id'       => $payload['archive_id'],
+			'case_key_digest'  => $s->case_key->digest(),
+			'cycle_key'        => $s->case_canonical['cycle_key'],
+			'employee_user_id' => $s->case_canonical['employee_user_id_decimal'],
+			'program_key'      => $s->program,
+			'revision_number'  => $payload['revision_number'],
+			'site_id'          => $s->case_canonical['site_id_decimal'],
+			'snapshot_id'      => $payload['snapshot_id'],
+			'stream_id'        => (string) $s->stream_id,
+			'tenant_id'        => $s->case_canonical['tenant_id'],
+		),
+		'completeness' => array(
+			'missing_fields' => array(), 'observed_count' => count( $courses ),
+			'policy_code' => $payload['completeness_policy'], 'policy_version' => 1,
+			'required_count' => count( $courses ), 'result' => 'complete', 'warnings' => array(),
+		),
+		'courses' => $courses,
+		'cycle' => $payload['resolved_cycle'],
+		'organization' => array(
+			'agency_name' => 'Fixture Agency', 'site_name' => 'Fixture Site', 'tenant_id' => $s->case_canonical['tenant_id'],
+		),
+		'policy' => array(
+			'audit_mapping' => array( 'annual' => array( 'course_ids' => array( '101', '102' ) ) ),
+			'completeness_policy' => $payload['completeness_policy'],
+			'course_lifespan_rules' => array( 'default_days' => 365 ),
+			'policy_digest'       => $payload['policy_digest'],
+			'quiz_policy' => array( 'minimum_basis_points' => 8000 ),
+			'relevant_settings' => array( 'timezone' => $payload['resolved_cycle']['timezone'] ),
+			'tracked_course_ids' => array( '101', '102' ),
+		),
+		'review' => array(
+			'actor_user_id' => $request_envelope['actor_user_id'],
+			'authority_code' => $request_envelope['authority_code'],
+			'initiating_user_id' => $request_envelope['initiating_user_id'],
+			'request_event_id' => $request_event->event_id(),
+			'requested_at_gmt' => $request_envelope['occurred_at_gmt'],
+			'reviewed_source_fingerprint' => $payload['reviewed_source_fingerprint'],
+			'subject_scope_digest' => $payload['subject_scope_digest'],
+		),
+		'schema_version' => 1,
+		'source' => array(
+			'captured_source_fingerprint' => $payload['captured_source_fingerprint'],
+			'evidence_assets'              => $assets,
+			'learndash_version'            => '4.21.0',
+			'plugin_version'               => '1.0.0',
+			'reviewed_source_fingerprint' => $payload['reviewed_source_fingerprint'],
+			'source_adapter_key'           => 'learndash',
+			'source_adapter_version'       => '1.0.0',
+			'source_fingerprint_version'  => 1,
+			'source_record_ids'            => array( 'employee' => $s->case_canonical['employee_user_id_decimal'] ),
+			'wordpress_version'            => '6.8.2',
+		),
+		'subject' => array(
+			'display_name' => 'Fixture Employee', 'email' => 'fixture@example.test',
+			'employee_user_id' => $s->case_canonical['employee_user_id_decimal'],
+			'external_employee_key' => 'employee-' . $s->case_canonical['employee_user_id_decimal'],
+			'group_ids' => array( '5' ), 'registered_at_gmt' => '2025-01-01T12:00:00Z',
+			'role_keys' => array( 'employee' ),
+		),
+	);
+	$payload['snapshot_digest'] = GHCA_ACD_Archive_Digester::snapshot( $document );
+	$payload['byte_count'] = strlen( GHCA_ACD_Archive_Canonical_JSON::encode( $document ) );
+	return array( 'artifacts' => $descriptors, 'snapshot' => array( 'snapshot_document' => $document ) );
+}
+
+/** @param array<string,mixed> $payload @param array<string,mixed> $snapshot_document @return array<int,array<string,mixed>> */
+function ghca_persist_ledger_documents( GHCA_Persist_Scenario $s, array $payload, array $snapshot_document ): array {
+	$items = array();
+	foreach ( $snapshot_document['courses'] as $ordinal => $course ) {
+		$items[] = array(
+			'archive_id'             => $payload['archive_id'],
+			'certificate_artifact_id' => $course['certificate_artifact_id'],
+			'completed_at_gmt'       => $course['completed_at_gmt'],
+			'completion_status'      => $course['completion_status'],
+			'course_id'              => $course['course_id'],
+			'course_stable_key'      => $course['course_stable_key'],
+			'course_title'           => $course['course_title'],
+			'employee_user_id'       => $snapshot_document['subject']['employee_user_id'],
+			'item_ordinal'           => $ordinal,
+			'item_schema_version'    => 1,
+			'ledger_artifact_id'     => $payload['ledger_artifact_id'],
+			'program_key'            => $snapshot_document['case']['program_key'],
+			'quiz_score_basis_points' => $course['quiz_score_basis_points'],
+			'snapshot_id'            => $payload['snapshot_id'],
+			'started_at_gmt'         => $course['started_at_gmt'],
+			'stream_id'              => (string) $s->stream_id,
+			'time_spent_seconds'     => $course['time_spent_seconds'],
+			'cycle_key'              => $snapshot_document['case']['cycle_key'],
+		);
+	}
+	return $items;
+}
+
 /** @param array<string,mixed> $stack @return array<string,mixed> */
 function persist_record_snapshot( array $stack, GHCA_Persist_Scenario $s, array $overrides = array() ) {
 	$payload = $s->payload( 'EvidenceSnapshotCaptured', array_merge( array(
@@ -327,7 +397,11 @@ function persist_record_snapshot( array $stack, GHCA_Persist_Scenario $s, array 
 		'snapshot_id' => $s->id( 'snapshot-1' ),
 		'certificate_asset_ids'       => array( $s->id( 'cert-1' ), $s->id( 'cert-2' ) ),
 	), $overrides ) );
-	return persist_single( $stack, $s, 'RecordEvidenceSnapshot', 'capture_evidence_snapshot', $payload, array( 'component_harness' => true ) );
+	if ( $payload['revision_number'] > 1 && ! array_key_exists( 'certificate_asset_ids', $overrides ) ) {
+		$payload['certificate_asset_ids'] = array( $s->id( 'cert-3' ), $s->id( 'cert-4' ) );
+	}
+	$side_records = ghca_persist_snapshot_side_records( $stack, $s, $payload );
+	return persist_single( $stack, $s, 'RecordEvidenceSnapshot', 'capture_evidence_snapshot', $payload, array( 'side_records' => $side_records ) );
 }
 
 /** @param array<string,mixed> $stack @return array<string,mixed> */
@@ -340,6 +414,16 @@ function persist_materialize( array $stack, GHCA_Persist_Scenario $s, string $ki
 			'ledger_artifact_id' => $s->id( 'ledger-1' ),
 		), $overrides ) );
 		$operation = 'materialize_ledger';
+		$snapshot = $stack['snapshot_store']->find( $payload['snapshot_id'] );
+		$payload['snapshot_digest'] = $snapshot['snapshot_digest'];
+		$ledger_items = ghca_persist_ledger_documents( $s, $payload, $snapshot['snapshot_document'] );
+		$item_digests = array();
+		foreach ( $ledger_items as $item ) {
+			$item_digests[] = GHCA_ACD_Archive_Digester::item( $item );
+		}
+		$payload['item_count'] = count( $ledger_items );
+		$payload['manifest_digest'] = GHCA_ACD_Archive_Digester::ledger_manifest( $item_digests );
+		$artifact_id = $payload['ledger_artifact_id'];
 	} else {
 		$payload = $s->payload( 'PacketMaterialized', array_merge( array(
 			'archive_id'         => $s->id( 'archive-1' ),
@@ -348,17 +432,32 @@ function persist_materialize( array $stack, GHCA_Persist_Scenario $s, string $ki
 			'packet_artifact_id' => $s->id( 'packet-1' ),
 		), $overrides ) );
 		$operation = 'materialize_packet';
+		$snapshot = $stack['snapshot_store']->find( $payload['snapshot_id'] );
+		$payload['snapshot_digest'] = $snapshot['snapshot_digest'];
+		$payload['certificate_content_digests'] = array();
+		foreach ( $snapshot['snapshot_document']['source']['evidence_assets'] as $asset ) {
+			$payload['certificate_content_digests'][] = $asset['content_digest'];
+		}
+		$ledger_items = array();
+		$artifact_id = $payload['packet_artifact_id'];
 	}
+	$side_records = array(
+		'artifact'     => ghca_persist_artifact_descriptor( $s, $kind, $artifact_id, $payload['content_digest'] ),
+		'ledger_items' => $ledger_items,
+	);
 	$caller = array( 'archive_id' => $payload['archive_id'], 'artifact_kind' => $kind );
 	$server = $payload;
 	unset( $server['payload_schema_version'], $server['archive_id'] );
 	return ghca_persist_execute( $stack, $s, 'RecordMaterializedArtifact', $caller, $server, static function ( GHCA_ACD_Archive_Case $case ) use ( $operation, $payload ) {
 		return $case->{$operation}( $payload );
-	}, array( 'component_harness' => true ) );
+	}, array( 'side_records' => $side_records ) );
 }
 
 /** @param array<string,mixed> $stack @return array<string,mixed> */
 function persist_verify_finalize( array $stack, GHCA_Persist_Scenario $s, ?string $predecessor = null, string $slot = '1' ) {
+	$snapshot = $stack['snapshot_store']->find( $s->id( 'snapshot-' . $slot ) );
+	$ledger = $stack['artifact_repository']->find_descriptor( $s->id( 'ledger-' . $slot ) );
+	$packet = $stack['artifact_repository']->find_descriptor( $s->id( 'packet-' . $slot ) );
 	$binding = array(
 		'archive_id'                      => $s->id( 'archive-' . $slot ),
 		'snapshot_id'                     => $s->id( 'snapshot-' . $slot ),
@@ -369,6 +468,13 @@ function persist_verify_finalize( array $stack, GHCA_Persist_Scenario $s, ?strin
 	);
 	$verified  = $s->payload( 'ArchiveVerified', $binding );
 	$finalized = $s->payload( 'ArchiveFinalized', $binding );
+	foreach ( array( &$verified, &$finalized ) as &$document ) {
+		$document['snapshot_digest'] = $snapshot['snapshot_digest'];
+		$document['ledger_content_digest'] = $ledger['content_digest'];
+		$document['packet_content_digest'] = $packet['content_digest'];
+	}
+	unset( $document );
+	$verified['source_fingerprint'] = $snapshot['captured_source_fingerprint'];
 	if ( '1' !== $slot ) {
 		$verified['revision_number']  = 2;
 		$finalized['revision_number'] = 2;
@@ -377,7 +483,7 @@ function persist_verify_finalize( array $stack, GHCA_Persist_Scenario $s, ?strin
 	$server = array( 'verified' => $verified, 'finalized' => $finalized );
 	return ghca_persist_execute( $stack, $s, 'VerifyAndFinalize', $caller, $server, static function ( GHCA_ACD_Archive_Case $case ) use ( $verified, $finalized ) {
 		return $case->verify_and_finalize( $verified, $finalized );
-	}, array( 'component_harness' => true ) );
+	} );
 }
 
 /**

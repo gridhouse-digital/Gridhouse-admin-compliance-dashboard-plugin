@@ -10,15 +10,12 @@
  * authoritative rehydration, one closed command-bound domain decision, consecutive
  * sequence/predecessor-digest/server-time/event-digest assignment, append-only
  * event insertion, synchronous case/revision/reset/head projection, durable
- * task insertion, guarded stream-head advance, insert-once receipt storage,
+ * immutable side-record insertion, task insertion, guarded stream-head advance, insert-once receipt storage,
  * and commit-before-success.
  * Every failure rolls back every write and returns no successful transition.
  *
- * Snapshot/artifact/ledger side records belong to a later authorized slice.
- * Commands that require those records fail closed before appending an event.
- *
  * No WordPress hook, filesystem, network, or other external I/O may run
-	 * inside the transaction.
+ * inside the transaction.
  */
 final class GHCA_ACD_Archive_Unit_Of_Work {
 	const RESPONSE_SCHEMA_VERSION = 1;
@@ -38,6 +35,10 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 	private $command_store;
 	/** @var GHCA_ACD_WPDB_Archive_Task_Store */
 	private $task_store;
+	/** @var GHCA_ACD_WPDB_Archive_Snapshot_Store */
+	private $snapshot_store;
+	/** @var GHCA_ACD_WPDB_Archive_Artifact_Repository */
+	private $artifact_repository;
 	/** @var GHCA_ACD_Archive_Projector */
 	private $projector;
 	/** @var GHCA_ACD_Archive_Clock */
@@ -48,11 +49,13 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 	private $in_transaction = false;
 
 	/** @param wpdb|object $db */
-	public function __construct( $db, GHCA_ACD_Archive_Event_Store $event_store, GHCA_ACD_WPDB_Archive_Command_Store $command_store, GHCA_ACD_WPDB_Archive_Task_Store $task_store, GHCA_ACD_Archive_Projector $projector, GHCA_ACD_Archive_Clock $clock, GHCA_ACD_Archive_Id_Generator $id_generator ) {
+	public function __construct( $db, GHCA_ACD_Archive_Event_Store $event_store, GHCA_ACD_WPDB_Archive_Command_Store $command_store, GHCA_ACD_WPDB_Archive_Task_Store $task_store, GHCA_ACD_WPDB_Archive_Snapshot_Store $snapshot_store, GHCA_ACD_WPDB_Archive_Artifact_Repository $artifact_repository, GHCA_ACD_Archive_Projector $projector, GHCA_ACD_Archive_Clock $clock, GHCA_ACD_Archive_Id_Generator $id_generator ) {
 		if ( ! is_callable( array( $event_store, 'database' ) )
 			|| $event_store->database() !== $db
 			|| $command_store->database() !== $db
 			|| $task_store->database() !== $db
+			|| $snapshot_store->database() !== $db
+			|| $artifact_repository->database() !== $db
 			|| $projector->repository()->database() !== $db ) {
 			throw new LogicException( 'The unit of work requires every store to share its one database connection.' );
 		}
@@ -60,6 +63,8 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 		$this->event_store   = $event_store;
 		$this->command_store = $command_store;
 		$this->task_store    = $task_store;
+		$this->snapshot_store = $snapshot_store;
+		$this->artifact_repository = $artifact_repository;
 		$this->projector     = $projector;
 		$this->clock         = $clock;
 		$this->id_generator  = $id_generator;
@@ -74,7 +79,8 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 	 * - idempotency_scope:    canonical ghca-idempotency scope v1 document
 	 * - expected_head_digest: 64-hex digest, or null only at expected sequence 0
 	 * - correlation_id:       32-hex correlation identifier
-	 * Optional: causation_event_id, effective_at_gmt, reason_code, reason_text.
+	 * Optional: side_records, causation_event_id, effective_at_gmt,
+	 * reason_code, reason_text.
 	 *
 	 * @param array<string,mixed> $request
 	 * @return array<string,mixed> The stable committed response document.
@@ -138,8 +144,6 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 				$this->rollback();
 				return $response;
 			}
-			$this->assert_atomic_command_supported( $command->type() );
-
 			$head_sequence = (string) $stream['head_sequence'];
 			$head_digest   = null === $stream['head_event_digest'] ? null : (string) $stream['head_event_digest'];
 			if ( ! GHCA_ACD_Archive_Db_Format::sequences_equal( $command->expected_sequence(), $head_sequence ) ) {
@@ -165,9 +169,10 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 			$this->assert_decision_batch( $aggregate, $events );
 
 			$recorded = $this->record_batch( $events, $stream, $command, $request, $now );
+			$this->persist_or_verify_side_records( $request, $stream, $prior_events, $recorded, $now );
 			$this->event_store->append_events( $recorded );
 			$this->projector->apply_new_events( $stream, $prior_events, $recorded, $now );
-			$this->enqueue_tasks( $recorded, $now );
+			$this->enqueue_tasks( $recorded, $prior_events, $now );
 
 			$last = $recorded[ count( $recorded ) - 1 ];
 			$this->event_store->advance_stream_head(
@@ -290,6 +295,426 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Persist the side records required by the accepted command, or verify the
+	 * complete immutable set before finalization. This runs after authoritative
+	 * event IDs are assigned but before any event is appended.
+	 *
+	 * @param array<string,mixed> $request
+	 * @param array<string,mixed> $stream
+	 * @param array<int,GHCA_ACD_Archive_Event> $prior_events
+	 * @param array<int,GHCA_ACD_Archive_Event> $recorded
+	 */
+	private function persist_or_verify_side_records( array $request, array $stream, array $prior_events, array $recorded, string $now ): void {
+		$type = $request['command']->type();
+		$side = $request['side_records'];
+		if ( 'RecordEvidenceSnapshot' === $type ) {
+			$this->persist_snapshot_side_records( $side, $stream, $prior_events, $recorded[0], $now );
+			return;
+		}
+		if ( 'RecordMaterializedArtifact' === $type ) {
+			$this->persist_materialization_side_records( $side, $recorded[0], $now );
+			return;
+		}
+		if ( 'VerifyAndFinalize' === $type ) {
+			if ( null !== $side ) {
+				throw $this->invalid_side_record( 'unexpected_side_records', 'Finalization verifies retained side records and accepts no replacement side-record payload.' );
+			}
+			$this->assert_finalization_side_records( $stream, $prior_events, $recorded );
+			return;
+		}
+		if ( null !== $side ) {
+			throw $this->invalid_side_record( 'unexpected_side_records', 'This command does not accept side records.' );
+		}
+	}
+
+	/** @param mixed $side @param array<string,mixed> $stream @param array<int,GHCA_ACD_Archive_Event> $prior_events */
+	private function persist_snapshot_side_records( $side, array $stream, array $prior_events, GHCA_ACD_Archive_Event $event, string $now ): void {
+		if ( ! is_array( $side ) || ! $this->has_exact_fields( $side, array( 'artifacts', 'snapshot' ) )
+			|| ! is_array( $side['snapshot'] ) || ! is_array( $side['artifacts'] ) || ! $this->is_list( $side['artifacts'] ) ) {
+			throw $this->invalid_side_record( 'side_records_required', 'Snapshot capture requires one snapshot document and its ordered certificate descriptors.' );
+		}
+		if ( count( $side['artifacts'] ) > GHCA_ACD_WPDB_Archive_Snapshot_Store::MAX_EVIDENCE_ASSETS ) {
+			throw $this->invalid_side_record( 'side_evidence_asset_count_exceeded', 'The snapshot evidence-asset count exceeds the approved ceiling.' );
+		}
+		$payload = $event->payload();
+		if ( count( $side['artifacts'] ) !== count( $payload['certificate_asset_ids'] ) ) {
+			throw $this->invalid_side_record( 'snapshot_certificate_manifest_mismatch', 'The certificate descriptors do not match the snapshot event manifest.' );
+		}
+		$attempt_id = $this->current_build_attempt( $prior_events, $payload['archive_id'] );
+		if ( null === $attempt_id ) {
+			throw $this->invalid_side_record( 'snapshot_build_attempt_missing', 'The snapshot has no authoritative build-attempt binding.' );
+		}
+		$snapshot = $this->snapshot_store->insert( $side['snapshot'], $event );
+		$document = $snapshot['snapshot_document'];
+		$request_event = $this->find_prior_archive_request( $prior_events, $payload['archive_id'] );
+		if ( null === $request_event ) {
+			throw $this->invalid_side_record( 'snapshot_review_binding_mismatch', 'The snapshot has no authoritative reviewed request.' );
+		}
+		$request_payload = $request_event->payload();
+		$request_envelope = $request_event->recorded_document();
+		$review = $document['review'];
+		if ( $review['request_event_id'] !== $request_event->event_id()
+			|| $review['requested_at_gmt'] !== $request_envelope['occurred_at_gmt']
+			|| $review['actor_user_id'] !== $request_envelope['actor_user_id']
+			|| $review['initiating_user_id'] !== $request_envelope['initiating_user_id']
+			|| $review['authority_code'] !== $request_envelope['authority_code']
+			|| $review['reviewed_source_fingerprint'] !== $request_payload['reviewed_source_fingerprint']
+			|| $review['subject_scope_digest'] !== $request_payload['subject_scope_digest']
+			|| $document['cycle'] !== $request_payload['resolved_cycle']
+			|| $document['policy']['policy_digest'] !== $request_payload['policy_digest'] ) {
+			throw $this->invalid_side_record( 'snapshot_review_binding_mismatch', 'The snapshot review evidence contradicts its authoritative request.' );
+		}
+		foreach ( $side['artifacts'] as $index => $descriptor ) {
+			$asset = $document['source']['evidence_assets'][ $index ];
+			if ( ! is_array( $descriptor ) || ! isset(
+				$descriptor['artifact_id'], $descriptor['artifact_kind'], $descriptor['content_digest'], $descriptor['role_key'],
+				$descriptor['byte_count'], $descriptor['producer_key'], $descriptor['producer_version']
+			)
+				|| 'certificate' !== $descriptor['artifact_kind']
+				|| $descriptor['artifact_id'] !== $payload['certificate_asset_ids'][ $index ]
+				|| $descriptor['content_digest'] !== $payload['certificate_content_digests'][ $index ]
+				|| $descriptor['artifact_id'] !== $asset['artifact_id'] || $descriptor['content_digest'] !== $asset['content_digest']
+				|| $descriptor['role_key'] !== $asset['role_key'] || $descriptor['byte_count'] !== $asset['byte_count']
+				|| $descriptor['producer_key'] !== $asset['producer_key'] || $descriptor['producer_version'] !== $asset['producer_version'] ) {
+				throw $this->invalid_side_record( 'snapshot_certificate_manifest_mismatch', 'The certificate descriptors do not match the snapshot event manifest.' );
+			}
+			$this->artifact_repository->insert_descriptor( $descriptor, array(
+				'archive_id'       => $payload['archive_id'],
+				'build_attempt_id' => $attempt_id,
+				'created_at_gmt'   => $now,
+				'snapshot_digest'  => $payload['snapshot_digest'],
+				'snapshot_id'      => $payload['snapshot_id'],
+				'stream_id'        => (string) $stream['stream_id'],
+			) );
+		}
+	}
+
+	/** @param mixed $side */
+	private function persist_materialization_side_records( $side, GHCA_ACD_Archive_Event $event, string $now ): void {
+		if ( ! is_array( $side ) || ! $this->has_exact_fields( $side, array( 'artifact', 'ledger_items' ) )
+			|| ! is_array( $side['artifact'] ) || ! is_array( $side['ledger_items'] ) || ! $this->is_list( $side['ledger_items'] ) ) {
+			throw $this->invalid_side_record( 'side_records_required', 'Materialization requires one artifact descriptor and an ordered ledger-item list.' );
+		}
+		$payload = $event->payload();
+		$is_ledger = GHCA_ACD_Archive_Event_Types::LEDGER_MATERIALIZED === $event->type();
+		$artifact_id_field = $is_ledger ? 'ledger_artifact_id' : 'packet_artifact_id';
+		$kind = $is_ledger ? 'ledger' : 'packet';
+		$descriptor = $side['artifact'];
+		if ( ! isset( $descriptor['artifact_id'], $descriptor['artifact_kind'], $descriptor['content_digest'] )
+			|| $descriptor['artifact_id'] !== $payload[ $artifact_id_field ]
+			|| $descriptor['artifact_kind'] !== $kind
+			|| $descriptor['content_digest'] !== $payload['content_digest'] ) {
+			throw $this->invalid_side_record( 'artifact_event_binding_mismatch', 'The artifact descriptor contradicts its materialization event.' );
+		}
+		if ( ! $is_ledger && array() !== $side['ledger_items'] ) {
+			throw $this->invalid_side_record( 'packet_ledger_items_forbidden', 'A packet artifact cannot carry ledger-item side records.' );
+		}
+		$binding = array(
+			'archive_id'       => $payload['archive_id'],
+			'build_attempt_id' => $payload['build_attempt_id'],
+			'created_at_gmt'   => $now,
+			'snapshot_digest'  => $payload['snapshot_digest'],
+			'snapshot_id'      => $payload['snapshot_id'],
+			'stream_id'        => $event->stream_id(),
+		);
+		$snapshot = $this->snapshot_store->find( $payload['snapshot_id'] );
+		if ( null === $snapshot ) {
+			throw $this->invalid_side_record( 'artifact_snapshot_missing', 'Materialization requires the exact retained snapshot.' );
+		}
+		if ( (string) $snapshot['stream_id'] !== $event->stream_id()
+			|| (string) $snapshot['archive_id'] !== $payload['archive_id']
+			|| (string) $snapshot['snapshot_digest'] !== $payload['snapshot_digest'] ) {
+			throw $this->invalid_side_record( 'artifact_snapshot_binding_mismatch', 'The materialized artifact contradicts the retained snapshot.' );
+		}
+		$asset_digests = array();
+		foreach ( $snapshot['snapshot_document']['source']['evidence_assets'] as $asset ) {
+			$asset_digests[] = $asset['content_digest'];
+		}
+		if ( ! $is_ledger && $payload['certificate_content_digests'] !== $asset_digests ) {
+			throw $this->invalid_side_record( 'artifact_snapshot_binding_mismatch', 'The packet certificate manifest contradicts the retained snapshot.' );
+		}
+		if ( $is_ledger ) {
+			if ( count( $side['ledger_items'] ) > GHCA_ACD_WPDB_Archive_Artifact_Repository::MAX_LEDGER_ITEMS ) {
+				throw $this->invalid_side_record( 'side_ledger_item_count_exceeded', 'The ledger item count exceeds the approved ceiling.' );
+			}
+			$this->assert_ledger_matches_snapshot( $side['ledger_items'], $snapshot['snapshot_document'], false );
+		}
+		$this->artifact_repository->insert_descriptor( $descriptor, $binding );
+		if ( $is_ledger ) {
+			$this->artifact_repository->insert_ledger_items( $side['ledger_items'], array(
+				'archive_id'         => $payload['archive_id'],
+				'item_count'         => $payload['item_count'],
+				'ledger_artifact_id' => $payload['ledger_artifact_id'],
+				'manifest_digest'    => $payload['manifest_digest'],
+				'snapshot_id'        => $payload['snapshot_id'],
+				'stream_id'          => $event->stream_id(),
+			) );
+		}
+	}
+
+	/** @param array<string,mixed> $stream @param array<int,GHCA_ACD_Archive_Event> $prior_events @param array<int,GHCA_ACD_Archive_Event> $recorded */
+	private function assert_finalization_side_records( array $stream, array $prior_events, array $recorded ): void {
+		$verified = $recorded[0]->payload();
+		$finalized = $recorded[1]->payload();
+		$snapshot = null;
+		$snapshot_event = null;
+		$ledger = null;
+		$packet = null;
+		try {
+			$snapshot = $this->snapshot_store->find( $verified['snapshot_id'] );
+			if ( null === $snapshot ) {
+				throw $this->integrity_side_record( 'finalization_missing_snapshot', 'Finalization requires the exact retained evidence snapshot.' );
+			}
+			$snapshot_event = $this->find_prior_snapshot_capture( $prior_events, $verified['snapshot_id'] );
+			if ( null === $snapshot_event ) {
+				throw $this->integrity_side_record( 'finalization_missing_snapshot', 'Finalization requires the authoritative snapshot-capture event.' );
+			}
+			$ledger = $this->artifact_repository->find_descriptor( $verified['ledger_artifact_id'], array(
+				'archive_id' => $verified['archive_id'], 'artifact_kind' => 'ledger',
+				'content_digest' => $verified['ledger_content_digest'], 'snapshot_digest' => $verified['snapshot_digest'],
+				'snapshot_id' => $verified['snapshot_id'], 'stream_id' => (string) $stream['stream_id'],
+			) );
+			$packet = $this->artifact_repository->find_descriptor( $verified['packet_artifact_id'], array(
+				'archive_id' => $verified['archive_id'], 'artifact_kind' => 'packet',
+				'content_digest' => $verified['packet_content_digest'], 'snapshot_digest' => $verified['snapshot_digest'],
+				'snapshot_id' => $verified['snapshot_id'], 'stream_id' => (string) $stream['stream_id'],
+			) );
+			if ( null === $ledger || null === $packet ) {
+				throw $this->integrity_side_record( 'finalization_missing_artifact', 'Finalization requires the exact retained ledger and packet descriptors.' );
+			}
+			$this->assert_finalization_bindings( $stream, $prior_events, $snapshot, $snapshot_event, $ledger, $packet, $verified, $finalized );
+		} catch ( GHCA_ACD_Archive_Persistence_Exception $error ) {
+			if ( in_array( $error->reason_code(), array( 'finalization_missing_snapshot', 'finalization_missing_artifact' ), true ) ) {
+				throw $error;
+			}
+			if ( GHCA_ACD_Archive_Persistence_Exception::CATEGORY_INTEGRITY_BLOCKED === $error->category() ) {
+				throw $this->integrity_side_record( 'finalization_digest_mismatch', 'The retained side records failed exact finalization verification.' );
+			}
+			throw $error;
+		}
+	}
+
+	/** @param array<string,mixed> $stream @param array<int,GHCA_ACD_Archive_Event> $prior_events @param array<string,mixed> $snapshot @param array<string,mixed> $ledger @param array<string,mixed> $packet @param array<string,mixed> $verified @param array<string,mixed> $finalized */
+	private function assert_finalization_bindings( array $stream, array $prior_events, array $snapshot, GHCA_ACD_Archive_Event $snapshot_event, array $ledger, array $packet, array $verified, array $finalized ): void {
+		$document = $snapshot['snapshot_document'];
+		$capture_event = $snapshot_event->payload();
+		$ledger_event = $this->find_prior_materialization( $prior_events, GHCA_ACD_Archive_Event_Types::LEDGER_MATERIALIZED, $verified['ledger_artifact_id'] );
+		$packet_event = $this->find_prior_materialization( $prior_events, GHCA_ACD_Archive_Event_Types::PACKET_MATERIALIZED, $verified['packet_artifact_id'] );
+		if ( null === $ledger_event || null === $packet_event ) {
+			throw $this->integrity_side_record( 'finalization_missing_artifact', 'Finalization requires authoritative materialization events for both artifacts.' );
+		}
+		$items = $this->artifact_repository->load_ledger_items( $verified['ledger_artifact_id'] );
+		$this->assert_ledger_matches_snapshot( $items, $document, true );
+		$item_digests = array();
+		foreach ( $items as $item ) {
+			$item_digests[] = $item['item_digest'];
+		}
+		$asset_ids = array();
+		$asset_digests = array();
+		$certificate_build_attempt = $this->build_attempt_at_event( $prior_events, $snapshot_event );
+		if ( null === $certificate_build_attempt ) {
+			throw $this->integrity_side_record( 'finalization_digest_mismatch', 'The snapshot has no authoritative build-attempt context.' );
+		}
+		foreach ( $document['source']['evidence_assets'] as $asset ) {
+			$asset_ids[] = $asset['artifact_id'];
+			$asset_digests[] = $asset['content_digest'];
+			$certificate = $this->artifact_repository->find_descriptor( $asset['artifact_id'], array(
+				'archive_id' => $verified['archive_id'], 'artifact_kind' => 'certificate',
+				'build_attempt_id' => $certificate_build_attempt,
+				'content_digest' => $asset['content_digest'], 'snapshot_digest' => $verified['snapshot_digest'],
+				'snapshot_id' => $verified['snapshot_id'], 'stream_id' => (string) $stream['stream_id'],
+			) );
+			if ( null === $certificate ) {
+				throw $this->integrity_side_record( 'finalization_missing_artifact', 'Finalization requires every retained certificate descriptor.' );
+			}
+		}
+		$finalized_fields = array(
+			'archive_id', 'revision_number', 'snapshot_id', 'snapshot_digest', 'ledger_artifact_id',
+			'ledger_content_digest', 'packet_artifact_id', 'packet_content_digest', 'expected_predecessor_archive_id',
+		);
+		foreach ( $finalized_fields as $field ) {
+			if ( $finalized[ $field ] !== $verified[ $field ] ) {
+				throw $this->integrity_side_record( 'finalization_digest_mismatch', 'The verified and finalized event bindings are not exact.' );
+			}
+		}
+		$matches = (string) $snapshot['stream_id'] === (string) $stream['stream_id']
+			&& (string) $snapshot['source_event_id'] === $snapshot_event->event_id()
+			&& $snapshot_event->stream_id() === (string) $stream['stream_id']
+			&& (string) $snapshot['archive_id'] === $verified['archive_id']
+			&& (string) $snapshot['revision_number'] === (string) $verified['revision_number']
+			&& (string) $snapshot['snapshot_digest'] === $verified['snapshot_digest']
+			&& (string) $snapshot['captured_source_fingerprint'] === $verified['source_fingerprint']
+			&& $capture_event['archive_id'] === $verified['archive_id']
+			&& $capture_event['snapshot_id'] === $verified['snapshot_id']
+			&& $capture_event['revision_number'] === $verified['revision_number']
+			&& $capture_event['snapshot_schema_version'] === (int) $snapshot['snapshot_schema_version']
+			&& $capture_event['snapshot_digest'] === $verified['snapshot_digest']
+			&& $capture_event['byte_count'] === (int) $snapshot['byte_count']
+			&& $capture_event['reviewed_source_fingerprint'] === (string) $snapshot['reviewed_source_fingerprint']
+			&& $capture_event['captured_source_fingerprint'] === (string) $snapshot['captured_source_fingerprint']
+			&& $capture_event['policy_digest'] === (string) $snapshot['policy_digest']
+			&& $capture_event['completeness_policy'] === (string) $snapshot['completeness_policy']
+			&& $capture_event['subject_scope_digest'] === $document['review']['subject_scope_digest']
+			&& $capture_event['resolved_cycle'] === $document['cycle']
+			&& $capture_event['certificate_asset_ids'] === $asset_ids
+			&& $capture_event['certificate_content_digests'] === $asset_digests
+			&& (string) $stream['case_key_digest'] === $verified['active_identity_digest']
+			&& (string) $ledger['build_attempt_id'] === (string) $packet['build_attempt_id']
+			&& (string) $ledger['build_attempt_id'] === $ledger_event['build_attempt_id']
+			&& (string) $packet['build_attempt_id'] === $packet_event['build_attempt_id']
+			&& $ledger_event['archive_id'] === $verified['archive_id']
+			&& $packet_event['archive_id'] === $verified['archive_id']
+			&& $ledger_event['snapshot_id'] === $verified['snapshot_id']
+			&& $packet_event['snapshot_id'] === $verified['snapshot_id']
+			&& $ledger_event['snapshot_digest'] === $verified['snapshot_digest']
+			&& $packet_event['snapshot_digest'] === $verified['snapshot_digest']
+			&& $ledger_event['content_digest'] === $verified['ledger_content_digest']
+			&& $packet_event['content_digest'] === $verified['packet_content_digest']
+			&& $ledger_event['item_count'] === count( $items )
+			&& hash_equals( $ledger_event['manifest_digest'], GHCA_ACD_Archive_Digester::ledger_manifest( $item_digests ) )
+			&& $packet_event['certificate_content_digests'] === $asset_digests;
+		if ( ! $matches ) {
+			throw $this->integrity_side_record( 'finalization_digest_mismatch', 'The retained side records do not exactly match the finalization evidence.' );
+		}
+	}
+
+	/** @param array<int,array<string,mixed>> $items @param array<string,mixed> $snapshot */
+	private function assert_ledger_matches_snapshot( array $items, array $snapshot, bool $retained ): void {
+		$courses = $snapshot['courses'];
+		if ( count( $items ) !== count( $courses ) ) {
+			throw $retained
+				? $this->integrity_side_record( 'finalization_ledger_snapshot_mismatch', 'The retained ledger does not match the sealed snapshot.' )
+				: $this->invalid_side_record( 'ledger_snapshot_evidence_mismatch', 'The ledger does not match the sealed snapshot.' );
+		}
+		foreach ( $courses as $ordinal => $course ) {
+			$item = $items[ $ordinal ];
+			if ( isset( $item['item_document'] ) && is_array( $item['item_document'] ) ) {
+				$item = $item['item_document'];
+			}
+			$expected = array(
+				'archive_id'              => $snapshot['case']['archive_id'],
+				'certificate_artifact_id' => $course['certificate_artifact_id'],
+				'completed_at_gmt'        => $course['completed_at_gmt'],
+				'completion_status'       => $course['completion_status'],
+				'course_id'               => $course['course_id'],
+				'course_stable_key'       => $course['course_stable_key'],
+				'course_title'            => $course['course_title'],
+				'employee_user_id'        => $snapshot['subject']['employee_user_id'],
+				'item_ordinal'            => $ordinal,
+				'program_key'             => $snapshot['case']['program_key'],
+				'quiz_score_basis_points' => $course['quiz_score_basis_points'],
+				'snapshot_id'             => $snapshot['case']['snapshot_id'],
+				'started_at_gmt'          => $course['started_at_gmt'],
+				'stream_id'               => $snapshot['case']['stream_id'],
+				'time_spent_seconds'      => $course['time_spent_seconds'],
+				'cycle_key'               => $snapshot['case']['cycle_key'],
+			);
+			$matches = true;
+			foreach ( $expected as $field => $value ) {
+				if ( ! array_key_exists( $field, $item ) || $item[ $field ] !== $value ) {
+					$matches = false;
+					break;
+				}
+			}
+			if ( ! $matches ) {
+				throw $retained
+					? $this->integrity_side_record( 'finalization_ledger_snapshot_mismatch', 'The retained ledger does not match the sealed snapshot.' )
+					: $this->invalid_side_record( 'ledger_snapshot_evidence_mismatch', 'The ledger does not match the sealed snapshot.' );
+			}
+		}
+	}
+
+	/** @param array<int,GHCA_ACD_Archive_Event> $events */
+	private function find_prior_snapshot_capture( array $events, string $snapshot_id ): ?GHCA_ACD_Archive_Event {
+		foreach ( array_reverse( $events ) as $event ) {
+			$payload = $event->payload();
+			if ( GHCA_ACD_Archive_Event_Types::EVIDENCE_SNAPSHOT_CAPTURED === $event->type() && $payload['snapshot_id'] === $snapshot_id ) {
+				return $event;
+			}
+		}
+		return null;
+	}
+
+	/** @param array<int,GHCA_ACD_Archive_Event> $events */
+	private function find_prior_archive_request( array $events, string $archive_id ): ?GHCA_ACD_Archive_Event {
+		foreach ( array_reverse( $events ) as $event ) {
+			$payload = $event->payload();
+			if ( in_array( $event->type(), array(
+				GHCA_ACD_Archive_Event_Types::ARCHIVE_REQUESTED,
+				GHCA_ACD_Archive_Event_Types::REPLACEMENT_ARCHIVE_REQUESTED,
+			), true ) && $payload['archive_id'] === $archive_id ) {
+				return $event;
+			}
+		}
+		return null;
+	}
+
+	/** @param array<int,GHCA_ACD_Archive_Event> $events */
+	private function build_attempt_at_event( array $events, GHCA_ACD_Archive_Event $target ): ?string {
+		$attempt_id = null;
+		foreach ( $events as $event ) {
+			if ( $event->event_id() === $target->event_id() ) {
+				return $attempt_id;
+			}
+			$payload = $event->payload();
+			if ( GHCA_ACD_Archive_Event_Types::ARCHIVE_BUILD_STARTED === $event->type() && $payload['archive_id'] === $target->payload()['archive_id'] ) {
+				$attempt_id = $payload['build_attempt_id'];
+			}
+		}
+		return null;
+	}
+
+	/** @param array<int,GHCA_ACD_Archive_Event> $events @return array<string,mixed>|null */
+	private function find_prior_materialization( array $events, string $type, string $artifact_id ) {
+		$field = GHCA_ACD_Archive_Event_Types::LEDGER_MATERIALIZED === $type ? 'ledger_artifact_id' : 'packet_artifact_id';
+		foreach ( array_reverse( $events ) as $event ) {
+			$payload = $event->payload();
+			if ( $event->type() === $type && $payload[ $field ] === $artifact_id ) {
+				return $payload;
+			}
+		}
+		return null;
+	}
+
+	/** @param array<int,GHCA_ACD_Archive_Event> $events */
+	private function current_build_attempt( array $events, string $archive_id ): ?string {
+		foreach ( array_reverse( $events ) as $event ) {
+			$payload = $event->payload();
+			if ( GHCA_ACD_Archive_Event_Types::ARCHIVE_BUILD_STARTED === $event->type() && $payload['archive_id'] === $archive_id ) {
+				return $payload['build_attempt_id'];
+			}
+		}
+		return null;
+	}
+
+	/** @param array<string,mixed> $value @param array<int,string> $fields */
+	private function has_exact_fields( array $value, array $fields ): bool {
+		$actual = array_keys( $value );
+		sort( $actual, SORT_STRING );
+		sort( $fields, SORT_STRING );
+		return $actual === $fields;
+	}
+
+	/** @param array<mixed,mixed> $value */
+	private function is_list( array $value ): bool {
+		$expected = 0;
+		foreach ( $value as $key => $_item ) {
+			if ( $key !== $expected++ ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private function invalid_side_record( string $reason, string $message ): GHCA_ACD_Archive_Persistence_Exception {
+		return new GHCA_ACD_Archive_Persistence_Exception( GHCA_ACD_Archive_Persistence_Exception::CATEGORY_INVALID_COMMAND, $reason, $message );
+	}
+
+	private function integrity_side_record( string $reason, string $message ): GHCA_ACD_Archive_Persistence_Exception {
+		return new GHCA_ACD_Archive_Persistence_Exception( GHCA_ACD_Archive_Persistence_Exception::CATEGORY_INTEGRITY_BLOCKED, $reason, $message );
 	}
 
 	/**
@@ -416,6 +841,9 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 			);
 		}
 		$this->validate_scope_document( $request['idempotency_scope'], $request['command'], $request['case_key'] );
+		if ( ! array_key_exists( 'side_records', $request ) ) {
+			$request['side_records'] = null;
+		}
 		foreach ( array( 'causation_event_id', 'effective_at_gmt', 'reason_code', 'reason_text' ) as $optional ) {
 			if ( ! array_key_exists( $optional, $request ) ) {
 				$request[ $optional ] = null;
@@ -506,24 +934,40 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 		}
 	}
 
-	private function assert_atomic_command_supported( string $command_type ): void {
-		if ( in_array( $command_type, array( 'RecordEvidenceSnapshot', 'RecordMaterializedArtifact', 'VerifyAndFinalize' ), true ) ) {
-			throw new GHCA_ACD_Archive_Persistence_Exception(
-				GHCA_ACD_Archive_Persistence_Exception::CATEGORY_INVALID_COMMAND,
-				'atomic_side_records_unavailable',
-				'This command requires snapshot or artifact side records from a later authorized slice.'
-			);
-		}
-	}
-
-	/** @param array<int,GHCA_ACD_Archive_Event> $events */
-	private function enqueue_tasks( array $events, string $now_gmt ): void {
+	/** @param array<int,GHCA_ACD_Archive_Event> $events @param array<int,GHCA_ACD_Archive_Event> $prior_events */
+	private function enqueue_tasks( array $events, array $prior_events, string $now_gmt ): void {
+		$history = $prior_events;
 		foreach ( $events as $event ) {
 			$payload = $event->payload();
 			switch ( $event->type() ) {
 				case GHCA_ACD_Archive_Event_Types::ARCHIVE_REQUESTED:
 				case GHCA_ACD_Archive_Event_Types::REPLACEMENT_ARCHIVE_REQUESTED:
 					$this->enqueue_task( 'capture_evidence', $event, array( 'archive_id' => $payload['archive_id'], 'stream_id' => $event->stream_id() ), $now_gmt, $now_gmt );
+					break;
+				case GHCA_ACD_Archive_Event_Types::EVIDENCE_SNAPSHOT_CAPTURED:
+					$attempt_id = $this->current_build_attempt( $history, $payload['archive_id'] );
+					foreach ( array( 'materialize_ledger', 'materialize_packet' ) as $task_type ) {
+						$this->enqueue_task( $task_type, $event, array(
+							'archive_id'       => $payload['archive_id'],
+							'build_attempt_id' => $attempt_id,
+							'snapshot_id'      => $payload['snapshot_id'],
+							'stream_id'        => $event->stream_id(),
+						), $now_gmt, $now_gmt );
+					}
+					break;
+				case GHCA_ACD_Archive_Event_Types::LEDGER_MATERIALIZED:
+				case GHCA_ACD_Archive_Event_Types::PACKET_MATERIALIZED:
+					$counterpart = GHCA_ACD_Archive_Event_Types::LEDGER_MATERIALIZED === $event->type()
+						? GHCA_ACD_Archive_Event_Types::PACKET_MATERIALIZED
+						: GHCA_ACD_Archive_Event_Types::LEDGER_MATERIALIZED;
+					if ( $this->has_matching_materialization( $history, $counterpart, $payload ) ) {
+						$this->enqueue_task( 'verify_and_finalize', $event, array(
+							'archive_id'       => $payload['archive_id'],
+							'build_attempt_id' => $payload['build_attempt_id'],
+							'snapshot_id'      => $payload['snapshot_id'],
+							'stream_id'        => $event->stream_id(),
+						), $now_gmt, $now_gmt );
+					}
 					break;
 				case GHCA_ACD_Archive_Event_Types::ARCHIVE_RETRY_REQUESTED:
 					$task_types = 'capturing' === $payload['resume_phase']
@@ -555,7 +999,22 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 					), $now_gmt, $now_gmt );
 					break;
 			}
+			$history[] = $event;
 		}
+	}
+
+	/** @param array<int,GHCA_ACD_Archive_Event> $events @param array<string,mixed> $payload */
+	private function has_matching_materialization( array $events, string $event_type, array $payload ): bool {
+		foreach ( $events as $event ) {
+			$prior = $event->payload();
+			if ( $event->type() === $event_type
+				&& $prior['archive_id'] === $payload['archive_id']
+				&& $prior['snapshot_id'] === $payload['snapshot_id']
+				&& $prior['build_attempt_id'] === $payload['build_attempt_id'] ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** @param array<string,mixed> $payload */
@@ -579,7 +1038,7 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 			'trigger_command_id' => null,
 			'stream_id'          => $event->stream_id(),
 			'archive_id'         => $document['archive_id'],
-			'build_attempt_id'   => $document['build_attempt_id'],
+			'build_attempt_id'   => array_key_exists( 'build_attempt_id', $payload ) ? $payload['build_attempt_id'] : $document['build_attempt_id'],
 			'reset_operation_id' => $document['reset_operation_id'],
 			'task_type'          => $task_type,
 			'task_schema_version' => GHCA_ACD_WPDB_Archive_Task_Store::TASK_SCHEMA_VERSION,
