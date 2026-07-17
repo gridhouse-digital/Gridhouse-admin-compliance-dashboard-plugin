@@ -169,6 +169,151 @@ final class GHCA_ACD_Archive_Command {
 	/** @return array<string,mixed> */ public function server_facts(): array { return GHCA_ACD_Archive_Canonical_JSON::detach( $this->server_facts ); }
 
 	/**
+	 * Apply this accepted command through the one closed command-to-domain map.
+	 * Persistence callers never supply an arbitrary decision callback.
+	 *
+	 * @return array<int,GHCA_ACD_Archive_Event>
+	 */
+	public function decide( GHCA_ACD_Archive_Case $case ): array {
+		$caller = $this->caller_intent();
+		$server = $this->server_facts();
+		switch ( $this->type ) {
+			case 'RequestArchive':
+				return $case->request_archive( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RequestReplacementArchive':
+				return $case->request_replacement_archive( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'StartBuild':
+				return $case->start_build( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RecordEvidenceSnapshot':
+				return $case->capture_evidence_snapshot( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RecordMaterializedArtifact':
+				$payload = self::decision_payload( array_merge( array( 'archive_id' => $caller['archive_id'] ), $server ) );
+				return 'ledger' === $caller['artifact_kind']
+					? $case->materialize_ledger( $payload )
+					: $case->materialize_packet( $payload );
+			case 'VerifyAndFinalize':
+				return $case->verify_and_finalize( self::decision_payload( $server['verified'] ), self::decision_payload( $server['finalized'] ) );
+			case 'FailArchive':
+				return $case->fail_archive( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RetryArchive':
+				return $case->request_retry( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'CancelArchive':
+				return $case->cancel_archive( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RequestCorrection':
+				$invalidations = self::decision_invalidations( $server['invalidations'], $server['correction_operation_id'] );
+				$correction = self::decision_payload( array(
+					'target_archive_id'       => $caller['target_archive_id'],
+					'target_snapshot_id'      => $server['target_snapshot_id'],
+					'correction_operation_id' => $server['correction_operation_id'],
+					'reason_code'             => $caller['reason_code'],
+					'affected_scope_digest'   => $server['affected_scope_digest'],
+				) );
+				$revocation = self::decision_payload( array(
+					'target_archive_id'               => $caller['target_archive_id'],
+					'correction_operation_id'         => $server['correction_operation_id'],
+					'revocation_reason_code'          => $caller['reason_code'],
+					'invalidated_reset_operation_ids' => array_column( $server['invalidations'], 'reset_operation_id' ),
+				) );
+				return $case->correct( $invalidations, $correction, $revocation );
+			case 'RequestReset':
+				return $case->request_reset( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'DeferReset':
+				return $case->defer_reset( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RejectReset':
+				return $case->reject_reset( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'CancelReset':
+				return $case->cancel_reset( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'AuthorizeReset':
+				return $case->authorize_reset( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'ExpireResetAuthorization':
+				return $case->expire_reset_authorization( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'ClaimResetExecution':
+				return $case->claim_reset_execution( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'CompleteReset':
+				return $case->complete_reset( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RecordResetFailedSafe':
+				return $case->record_reset_failed_safe( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RecordResetOutcomeUncertain':
+				return $case->record_reset_outcome_uncertain( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'ReconcileResetAsCompleted':
+				return $case->reconcile_reset_as_completed( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'ReconcileResetAsNoChange':
+				return $case->reconcile_reset_as_no_change( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RequireResetRemediation':
+				return $case->require_reset_remediation( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RecordResetRemediatedRestored':
+				return $case->record_reset_remediated_restored( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'DetectSourceDrift':
+				$detected = self::decision_payload( array(
+					'incident_id'                 => $server['incident_id'],
+					'archive_id'                  => $caller['archive_id'],
+					'snapshot_id'                 => $server['snapshot_id'],
+					'expected_source_fingerprint' => $server['expected_source_fingerprint'],
+					'observed_source_fingerprint' => $caller['observed_source_fingerprint'],
+					'detection_point'             => $caller['detection_point'],
+					'changed_component_codes'     => $caller['changed_component_codes'],
+				) );
+				$failure = null === $server['failure'] ? null : self::decision_payload( $server['failure'] );
+				return $case->detect_source_drift( $detected, $failure, self::decision_invalidations( $server['invalidations'], $server['incident_id'] ) );
+			case 'ResolveSourceDriftRestored':
+				return $case->resolve_source_drift_restored( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'RebaseSourceDriftRecovery':
+				return $case->resolve_source_drift_rebased(
+					self::decision_payload( $server['resolved'] ),
+					self::decision_payload( $server['request'] ),
+					null === $server['cancellation'] ? null : self::decision_payload( $server['cancellation'] ),
+					null === $server['correction'] ? null : self::decision_payload( $server['correction'] ),
+					null === $server['revocation'] ? null : self::decision_payload( $server['revocation'] )
+				);
+			case 'DetectUnprotectedReset':
+				$detected = self::decision_payload( array(
+					'incident_id'                 => $server['incident_id'],
+					'scope'                       => $caller['scope'],
+					'before_source_fingerprint'   => $server['before_source_fingerprint'],
+					'observed_source_fingerprint' => $caller['observed_source_fingerprint'],
+					'detector_key'                => $caller['detector_key'],
+					'probe_version'               => $caller['probe_version'],
+				) );
+				return $case->detect_unprotected_reset( $detected, self::decision_invalidations( $server['invalidations'], $server['incident_id'] ) );
+			case 'DismissUnprotectedReset':
+				return $case->dismiss_unprotected_reset( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'ConfirmUnprotectedReset':
+				return $case->confirm_unprotected_reset( self::decision_payload( array_merge( $caller, $server ) ) );
+			case 'DetectIntegrityViolation':
+				$detected = self::decision_payload( array_merge( array( 'incident_id' => $server['incident_id'] ), $caller ) );
+				return $case->detect_integrity_violation( $detected, self::decision_invalidations( $server['invalidations'], $server['incident_id'] ) );
+			case 'RecordIntegrityDisposition':
+				return $case->record_integrity_disposition( self::decision_payload( array_merge( $caller, $server ) ) );
+		}
+		throw new LogicException( 'Accepted command type has no domain decision mapping.' );
+	}
+
+	/** @param array<string,mixed> $fields @return array<string,mixed> */
+	private static function decision_payload( array $fields ): array {
+		if ( ! array_key_exists( 'payload_schema_version', $fields ) ) {
+			$fields = array_merge( array( 'payload_schema_version' => 1 ), $fields );
+		}
+		return GHCA_ACD_Archive_Canonical_JSON::detach( $fields );
+	}
+
+	/**
+	 * @param array<int,array<string,mixed>> $entries
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function decision_invalidations( array $entries, string $reference_id ): array {
+		$payloads = array();
+		foreach ( $entries as $entry ) {
+			$payloads[] = self::decision_payload( array(
+				'reset_operation_id'        => $entry['reset_operation_id'],
+				'authorization_id'          => $entry['authorization_id'],
+				'invalidating_reference_id' => $reference_id,
+				'reason_code'               => $entry['reason_code'],
+			) );
+		}
+		return $payloads;
+	}
+
+	/**
 	 * Server facts are an object-valued field. When a command has no server
 	 * facts (e.g. FailArchive) the canonical document must still encode `{}`,
 	 * never `[]`, so the digest binds the correct JSON type.

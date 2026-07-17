@@ -37,16 +37,22 @@ foreach ($php in $php_versions) {
         Write-Host "Testing PHP: $php on DB Port: $port"
         Write-Host "========================================"
         $env:GHCA_TEST_DB_HOST = "127.0.0.1:$port"
-        
-        if ($php -match "7\.4") {
-            & $php -d extension_dir="ext" -d extension="mysqli" "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-schema-migration.php"
-        } else {
-            & $php "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-schema-migration.php"
-        }
-        
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Test failed on PHP $php, DB Port $port"
-            exit $LASTEXITCODE
+
+        $suites = @(
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-schema-migration.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-persistence.php"
+        )
+        foreach ($suite in $suites) {
+            if ($php -match "7\.4") {
+                & $php -d extension_dir="ext" -d extension="mysqli" $suite
+            } else {
+                & $php $suite
+            }
+
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "Test failed on PHP $php, DB Port $port, Suite $suite"
+                exit $LASTEXITCODE
+            }
         }
 
         $results += [PSCustomObject]@{
@@ -58,4 +64,4 @@ foreach ($php in $php_versions) {
 }
 
 $results | Format-Table -AutoSize
-Write-Host "ALL $($results.Count) SCHEMA MATRIX CELLS PASSED"
+Write-Host "ALL $($results.Count) SCHEMA/PERSISTENCE MATRIX CELLS PASSED"

@@ -1,6 +1,6 @@
 # Slice 1B Schema Checkpoint Traceability
 
-**Status:** implementation and self-review PASS; ready for owner review. Persistence repositories, Unit of Work, projections, tasks, runtime hooks, and feature enablement have not started.
+**Status:** historical schema-only checkpoint, accepted and preserved. Persistence subsequently continued in Slice 1B-P1; see `2026-07-16-dual-layer-archive-slice-1b-p1-traceability.md`. Runtime hooks and feature enablement remain unstarted.
 
 ## Scope and isolation
 

@@ -3,6 +3,8 @@
 final class GHCA_ACD_Archive_Digester {
 	const CASE_KEY_PREFIX          = 'ghca-case-key-v1';
 	const IDEMPOTENCY_PREFIX       = 'ghca-idempotency-v1';
+	const IDEMPOTENCY_SCOPE_PREFIX = 'ghca-idempotency-scope-v1';
+	const TASK_DEDUPE_PREFIX       = 'ghca-archive-task-dedupe-v1';
 	const COMMAND_PREFIX           = 'ghca-command-v1';
 	const CLIENT_INTENT_PREFIX     = 'ghca-client-intent-v1';
 	const SOURCE_FINGERPRINT_PREFIX = 'ghca-source-fingerprint-v1';
@@ -42,6 +44,16 @@ final class GHCA_ACD_Archive_Digester {
 			'idempotency_scope_digest' => $scope_digest,
 			'idempotency_key_digest'   => $key_digest,
 		) );
+	}
+
+	/** @param array<string,mixed> $document */
+	public static function idempotency_scope( array $document ): string {
+		return self::digest_document( self::IDEMPOTENCY_SCOPE_PREFIX, $document );
+	}
+
+	/** @param array<string,mixed> $document */
+	public static function task_dedupe( array $document ): string {
+		return self::digest_document( self::TASK_DEDUPE_PREFIX, $document );
 	}
 
 	/** @param array<string,mixed> $document */
