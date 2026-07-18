@@ -5,6 +5,7 @@ final class GHCA_ACD_Archive_Digester {
 	const IDEMPOTENCY_PREFIX       = 'ghca-idempotency-v1';
 	const IDEMPOTENCY_SCOPE_PREFIX = 'ghca-idempotency-scope-v1';
 	const TASK_DEDUPE_PREFIX       = 'ghca-archive-task-dedupe-v1';
+	const TASK_OUTCOME_PREFIX      = 'ghca-task-outcome-v1';
 	const COMMAND_PREFIX           = 'ghca-command-v1';
 	const CLIENT_INTENT_PREFIX     = 'ghca-client-intent-v1';
 	const SOURCE_FINGERPRINT_PREFIX = 'ghca-source-fingerprint-v1';
@@ -56,6 +57,22 @@ final class GHCA_ACD_Archive_Digester {
 	/** @param array<string,mixed> $document */
 	public static function task_dedupe( array $document ): string {
 		return self::digest_document( self::TASK_DEDUPE_PREFIX, $document );
+	}
+
+	/** @param array<string,mixed> $document */
+	public static function task_outcome( array $document ): string {
+		if ( array_keys( $document ) !== array( 'logical_outcome', 'task_id', 'task_schema_version' )
+			|| 'completed' !== $document['logical_outcome']
+			|| ! is_string( $document['task_id'] )
+			|| 1 !== preg_match( '/^[a-f0-9]{32}$/', $document['task_id'] )
+			|| 1 !== $document['task_schema_version'] ) {
+			throw new GHCA_ACD_Archive_Persistence_Exception(
+				GHCA_ACD_Archive_Persistence_Exception::CATEGORY_INVALID_COMMAND,
+				'task_outcome_idempotency_invalid',
+				'The task outcome idempotency constituents are invalid.'
+			);
+		}
+		return self::digest_document( self::TASK_OUTCOME_PREFIX, $document );
 	}
 
 	/** @param array<string,mixed> $document */

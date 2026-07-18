@@ -63,7 +63,7 @@ These are recommended sizing and reliability assumptions. They make the design t
 | Processing model | Synchronous command decision, event append, idempotency receipt, safety projection, and task enqueue; asynchronous evidence capture, certificate acquisition, ledger/PDF materialization, verification, and reset side effects. |
 | Architecture | A modular monolith inside the plugin. No broker or microservice is required for the baseline. |
 | Data tier | Employment/training PII and compliance evidence. The design assumes no patient PHI or PCI data. If PHI is introduced, encryption, access, retention, and incident controls require a separate review. |
-| PHP/WordPress | Preserve the plugin's documented WordPress 6.0+ and PHP 7.4+ compatibility. Do not use PHP enums, readonly properties, or language features above PHP 7.4. |
+| PHP/WordPress | Preserve the plugin's documented WordPress 6.0+ and PHP 8.3+ compatibility. Decision C2 raises the minimum without authorizing version-driven refactors; preserve the existing source style and contracts. |
 | Database portability | InnoDB is mandatory. Use portable `DATETIME`, `LONGTEXT` canonical JSON, `VARCHAR` state codes, and application validation; do not depend on native JSON, `ENUM`, `CHECK`, triggers, partial indexes, or foreign keys. |
 
 ### 3.1 Verifiable service objectives
@@ -917,7 +917,7 @@ Rules are normative:
 - `payload_json`, `metadata_json`, and `authority_context_json` must decode, pass their schema, re-encode byte-for-byte as `ghca-cjson-1`, and are hashed as decoded canonical values. Non-canonical stored bytes are an integrity failure.
 - Sequence `1` has `previous_event_digest = null`; every later event must equal the prior event digest in the same stream.
 - An event-format change creates a new immutable `canonical_format_version` and verifier. Old bytes are never rewritten or silently interpreted by the new format.
-- Golden vectors cover nulls, Unicode normalization policy, escaped characters, maximum 64-bit values, nested object ordering, list order, and predecessor chaining in PHP 7.4 plus every supported runtime.
+- Golden vectors cover nulls, Unicode normalization policy, escaped characters, maximum 64-bit values, nested object ordering, list order, and predecessor chaining on the minimum PHP 8.3 runtime plus every required runtime.
 
 ### 9.17 Stored event payload catalog v1
 
@@ -1531,7 +1531,7 @@ Use real separate database connections to test:
 - reset-authorization single consumption, scheduled/late-claim expiry, and correction/claim race; and
 - WordPress-user deletion not deleting history.
 
-CI matrix must include the approved minimum MySQL, approved MariaDB, and current MySQL 8.x, plus PHP 7.4 and the current supported PHP version.
+CI matrix must include the approved minimum MySQL, approved MariaDB, and current MySQL 8.x across the required PHP 8.3.30 and PHP 8.5.7 runtimes. PHP 8.4 is optional and is not claimed while no CLI exists.
 
 ### 19.3 Artifact and failure-injection tests
 

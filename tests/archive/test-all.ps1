@@ -2,9 +2,8 @@ $ErrorActionPreference = "Stop"
 $env:GHCA_TEST_QUIET = "1"
 
 $php_versions = @(
-    "$env:TEMP\ghca-php-7.4.33-nts-x64\php.exe",
-    "C:\laragon\bin\php\php-8.3.30-Win32-vs16-x64\php.exe",
-    "C:\laragon\bin\php\php-8.5.7-nts-Win32-vs17-x64\php.exe"
+    [PSCustomObject]@{ Path = "C:\laragon\bin\php\php-8.3.30-Win32-vs16-x64\php.exe"; Version = "8.3.30" },
+    [PSCustomObject]@{ Path = "C:\laragon\bin\php\php-8.5.7-nts-Win32-vs17-x64\php.exe"; Version = "8.5.7" }
 )
 
 $db_ports = @(
@@ -28,12 +27,22 @@ foreach ($var in $required_vars) {
     }
 }
 $results = @()
-foreach ($php in $php_versions) {
-    if (-not (Test-Path -LiteralPath $php)) {
-        Write-Error "Missing required PHP runtime: $php"
+foreach ($runtime in $php_versions) {
+    if (-not (Test-Path -LiteralPath $runtime.Path)) {
+        Write-Error "Missing required PHP runtime: $($runtime.Path)"
+        exit 1
+    }
+    $actual_version = & $runtime.Path -r "echo PHP_VERSION;"
+    if ($LASTEXITCODE -ne 0 -or $actual_version -ne $runtime.Version) {
+        Write-Error "Required PHP runtime mismatch: expected $($runtime.Version) at $($runtime.Path), got $actual_version"
+        exit 1
+    }
+    if (-not ((& $runtime.Path -m) -contains "mysqli")) {
+        Write-Error "Required PHP runtime cannot load mysqli: $($runtime.Path)"
         exit 1
     }
     foreach ($port in $db_ports) {
+        $php = $runtime.Path
         Write-Host "========================================"
         Write-Host "Testing PHP: $php on DB Port: $port"
         Write-Host "========================================"
@@ -42,14 +51,13 @@ foreach ($php in $php_versions) {
         $suites = @(
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-schema-migration.php",
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-persistence.php",
-            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-side-record-persistence.php"
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-side-record-persistence.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3-digests.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3-worker.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3-storage.php"
         )
         foreach ($suite in $suites) {
-            if ($php -match "7\.4") {
-                & $php -d extension_dir="ext" -d extension="mysqli" $suite
-            } else {
-                & $php $suite
-            }
+            & $php $suite
 
             if ($LASTEXITCODE -ne 0) {
                 Write-Error "Test failed on PHP $php, DB Port $port, Suite $suite"
@@ -66,4 +74,4 @@ foreach ($php in $php_versions) {
 }
 
 $results | Format-Table -AutoSize
-Write-Host "ALL $($results.Count) SCHEMA/PERSISTENCE/SIDE-RECORD MATRIX CELLS PASSED"
+Write-Host "ALL $($results.Count) P1/P2/P3A MATRIX CELLS PASSED"

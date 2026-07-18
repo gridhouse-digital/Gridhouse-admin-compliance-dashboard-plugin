@@ -10,6 +10,7 @@
 final class GHCA_ACD_Archive_Canonical_JSON {
 	const FORMAT_VERSION  = 1;
 	const MAX_BYTES       = 1048576;
+	const MAX_BOUNDED_BYTES = 8388608;
 	const MAX_DEPTH       = 32;
 	const MAX_VALUES      = 10000;
 	const MAX_STRING_BYTES = 262144;
@@ -30,9 +31,15 @@ final class GHCA_ACD_Archive_Canonical_JSON {
 
 	/** @param mixed $value */
 	public static function encode( $value ): string {
+		return self::encode_bounded( $value, self::MAX_BYTES );
+	}
+
+	/** @param mixed $value */
+	public static function encode_bounded( $value, int $max_bytes ): string {
+		self::assert_bounded_limit( $max_bytes );
 		$items  = 0;
 		$result = self::encode_value( $value, 0, $items );
-		if ( strlen( $result ) > self::MAX_BYTES ) {
+		if ( strlen( $result ) > $max_bytes ) {
 			throw new InvalidArgumentException( 'Canonical JSON exceeds the byte limit.' );
 		}
 		return $result;
@@ -53,7 +60,13 @@ final class GHCA_ACD_Archive_Canonical_JSON {
 
 	/** @return mixed */
 	public static function decode( string $json ) {
-		if ( strlen( $json ) > self::MAX_BYTES ) {
+		return self::decode_bounded( $json, self::MAX_BYTES );
+	}
+
+	/** @return mixed */
+	public static function decode_bounded( string $json, int $max_bytes ) {
+		self::assert_bounded_limit( $max_bytes );
+		if ( strlen( $json ) > $max_bytes ) {
 			throw new InvalidArgumentException( 'JSON exceeds the byte limit.' );
 		}
 		self::assert_utf8( $json, 'JSON input' );
@@ -70,6 +83,15 @@ final class GHCA_ACD_Archive_Canonical_JSON {
 	public static function decode_canonical( string $json ) {
 		$value = self::decode( $json );
 		if ( self::encode( $value ) !== $json ) {
+			throw new InvalidArgumentException( 'Stored JSON is not canonical ghca-cjson-1.' );
+		}
+		return $value;
+	}
+
+	/** @return mixed */
+	public static function decode_canonical_bounded( string $json, int $max_bytes ) {
+		$value = self::decode_bounded( $json, $max_bytes );
+		if ( self::encode_bounded( $value, $max_bytes ) !== $json ) {
 			throw new InvalidArgumentException( 'Stored JSON is not canonical ghca-cjson-1.' );
 		}
 		return $value;
@@ -207,6 +229,12 @@ final class GHCA_ACD_Archive_Canonical_JSON {
 	private static function assert_utf8( string $value, string $label ): void {
 		if ( 1 !== preg_match( '//u', $value ) ) {
 			throw new InvalidArgumentException( $label . ' is not valid UTF-8.' );
+		}
+	}
+
+	private static function assert_bounded_limit( int $max_bytes ): void {
+		if ( $max_bytes < 1 || $max_bytes > self::MAX_BOUNDED_BYTES ) {
+			throw new InvalidArgumentException( 'Canonical JSON byte limit is invalid.' );
 		}
 	}
 

@@ -6,6 +6,8 @@
 **Initial delivery:** Phase 0 decision closure, then Slice 1A pure event kernel only  
 **Production/runtime enablement:** Not authorized by this handoff
 
+**Decision C2 amendment:** The repository owner superseded Decision C1 before implementation and raised the distributed plugin and Dual-Layer Archive minimum to PHP 8.3. Required verification runtimes are PHP 8.3.30 and PHP 8.5.7; PHP 8.4 remains optional and unavailable while no CLI exists. This compatibility-policy amendment does not authorize PHP 8.3 refactors or runtime activation.
+
 ## 1. Mission
 
 Implement the approved Event Sourcing foundation for the Dual-Layer Archive without changing current plugin behavior.
@@ -73,7 +75,7 @@ If those assumptions change materially, stop for design review.
 
 The current plugin:
 
-- requires WordPress 6.0+, PHP 7.4+, and LearnDash 4.0+;
+- requires WordPress 6.0+, PHP 8.3+, and LearnDash 4.0+;
 - uses manually loaded, global `final GHCA_*` classes and static `init()` bridges;
 - has no Composer runtime or PHPUnit configuration;
 - currently uses standalone PHP test scripts;
@@ -81,7 +83,7 @@ The current plugin:
 - currently registers only roles in its activation hook; and
 - must remain behaviorally unchanged during Slice 1A.
 
-Current local PHP installations are 8.3, 8.4, and 8.5. PHP 7.4 is not locally installed, so PHP 7.4 compatibility requires an approved CI/container runner before the slice can be called complete.
+The required local CLIs are PHP 8.3.30 and PHP 8.5.7. The configured PHP 8.4 directory contains no `php.exe`, so PHP 8.4 remains unavailable and is not required by Decision C2.
 
 `rg.exe` may fail with Access Denied in this Windows environment. Fall back immediately to `Get-ChildItem`, `Get-Content`, and `Select-String`.
 
@@ -130,7 +132,7 @@ Implement only the pure deterministic classes and their tests. Create the smalle
 - `includes/archive/infrastructure/class-archive-digester.php`
 - a test-only archive bootstrap and fixtures under `tests/archive/`.
 
-Add files only when needed by a failing test. Preserve PHP 7.4 syntax: no enums, readonly properties, constructor property promotion, union types, attributes, or PHP 8-only functions.
+Add files only when needed by a failing test. Decision C2 raises the minimum to PHP 8.3 but does not authorize syntax modernization: preserve the existing source style and do not introduce enums, readonly properties, constructor property promotion, union types, attributes, or other version-driven refactors in this slice.
 
 Keep the production plugin Composer-free. Use the existing standalone-test style for Slice 1A unless a dev-only PHPUnit/Composer toolchain is separately proposed and approved; never load a development autoloader from the plugin runtime.
 
@@ -166,7 +168,7 @@ Slice 1A is complete only when:
 
 - all 35 event types have explicit payload-schema validation;
 - unknown event/type/schema versions fail closed;
-- canonical bytes match frozen golden vectors on PHP 7.4 and the current supported PHP runtime;
+- canonical bytes match frozen golden vectors on PHP 8.3.30 and PHP 8.5.7;
 - JSON rejects invalid UTF-8, duplicate object keys, floats, invalid integer ranges, unexpected fields, excess depth/size, and non-canonical stored encodings;
 - aggregate replay is deterministic and independent of wall clock/WordPress state;
 - every permitted and prohibited transition in the Architecture PRD has a named test;
@@ -291,7 +293,7 @@ Stop and report rather than guessing when:
 - any foundational Section 4 decision is unresolved;
 - source documents conflict;
 - a change would alter a frozen identity/event/digest contract after vectors exist;
-- supported PHP 7.4 or approved database-matrix testing is unavailable;
+- required PHP 8.3.30 or PHP 8.5.7 execution or approved database-matrix testing is unavailable;
 - a required source table is non-InnoDB;
 - a WordPress/LearnDash helper implicitly commits, uses another connection, or performs unbounded external work;
 - an implementation requires event/snapshot/artifact update or deletion;
@@ -324,7 +326,7 @@ At the end of each slice, return:
 3. implemented events/transitions and a PRD invariant-to-test matrix;
 4. migration/schema version, if applicable;
 5. every command run with exact pass/fail/skip counts;
-6. PHP 7.4 and current-PHP golden-vector results;
+6. PHP 8.3.30 and PHP 8.5.7 golden-vector results;
 7. real-database concurrency/failure-injection/replay evidence, if applicable;
 8. proof feature flags remain off and no runtime endpoint/hook behavior changed;
 9. deviations from the technical design, each treated as a review blocker;

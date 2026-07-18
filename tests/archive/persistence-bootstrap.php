@@ -117,17 +117,22 @@ $persistence_root = dirname( __DIR__, 2 ) . '/includes/archive';
 require_once $persistence_root . '/infrastructure/class-archive-persistence-exception.php';
 require_once $persistence_root . '/infrastructure/class-archive-db-format.php';
 require_once $persistence_root . '/contracts/interface-archive-event-store.php';
+require_once $persistence_root . '/contracts/interface-archive-artifact-store.php';
 require_once $persistence_root . '/infrastructure/class-wpdb-archive-event-store.php';
 require_once $persistence_root . '/infrastructure/class-wpdb-archive-command-store.php';
 require_once $persistence_root . '/infrastructure/class-wpdb-archive-task-store.php';
 require_once $persistence_root . '/infrastructure/class-wpdb-archive-snapshot-store.php';
 require_once $persistence_root . '/infrastructure/class-wpdb-archive-artifact-repository.php';
+require_once $persistence_root . '/infrastructure/class-archive-artifact-store-exception.php';
+require_once $persistence_root . '/infrastructure/class-private-archive-artifact-store.php';
 require_once $persistence_root . '/infrastructure/class-wpdb-archive-projection-repository.php';
 require_once $persistence_root . '/infrastructure/class-archive-case-projector.php';
 require_once $persistence_root . '/infrastructure/class-archive-revision-projector.php';
 require_once $persistence_root . '/infrastructure/class-archive-reset-projector.php';
 require_once $persistence_root . '/infrastructure/class-archive-projector.php';
 require_once $persistence_root . '/application/class-archive-unit-of-work.php';
+require_once $persistence_root . '/application/class-archive-worker-coordinator.php';
+require_once $persistence_root . '/application/class-archive-orphan-reconciler.php';
 
 function ghca_persist_quote_identifier( $identifier ) {
 	return '`' . str_replace( '`', '``', $identifier ) . '`';

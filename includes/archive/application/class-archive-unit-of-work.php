@@ -80,7 +80,7 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 	 * - expected_head_digest: 64-hex digest, or null only at expected sequence 0
 	 * - correlation_id:       32-hex correlation identifier
 	 * Optional: side_records, causation_event_id, effective_at_gmt,
-	 * reason_code, reason_text.
+	 * reason_code, reason_text, task_fence.
 	 *
 	 * @param array<string,mixed> $request
 	 * @return array<string,mixed> The stable committed response document.
@@ -90,13 +90,16 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 		$command = $request['command'];
 		$intent  = $command->client_intent();
 		$dedupe  = $intent->dedupe_digest();
+		$fenced  = null !== $request['task_fence'];
 
 		$attempts = 0;
 		while ( true ) {
 			$attempts++;
-			$receipt = $this->command_store->find_receipt( $dedupe );
-			if ( null !== $receipt ) {
-				return $this->command_store->match_receipt( $receipt, $intent, $request['idempotency_scope'] );
+			if ( ! $fenced ) {
+				$receipt = $this->command_store->find_receipt( $dedupe );
+				if ( null !== $receipt ) {
+					return $this->command_store->match_receipt( $receipt, $intent, $request['idempotency_scope'] );
+				}
 			}
 			try {
 				return $this->run_transaction( $request, $intent, $dedupe );
@@ -105,6 +108,12 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 					continue;
 				}
 				if ( 'receipt_insert_race' === $error->reason_code() ) {
+					if ( $fenced ) {
+						if ( $attempts < 3 ) {
+							continue;
+						}
+						throw $error;
+					}
 					$receipt = $this->command_store->find_receipt( $dedupe );
 					if ( null !== $receipt ) {
 						return $this->command_store->match_receipt( $receipt, $intent, $request['idempotency_scope'] );
@@ -125,6 +134,15 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 		$this->begin();
 		try {
 			$now    = $this->clock->now_gmt();
+			if ( null !== $request['task_fence'] ) {
+				$fence = $request['task_fence'];
+				$this->task_store->assert_live_lease_for_update(
+					$fence['task_id'],
+					$fence['lease_owner'],
+					$fence['lease_token'],
+					$now
+				);
+			}
 			$digest = $case_key->digest();
 			$stream = $this->event_store->find_stream_for_update( $digest );
 			if ( null === $stream ) {
@@ -843,6 +861,23 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 		$this->validate_scope_document( $request['idempotency_scope'], $request['command'], $request['case_key'] );
 		if ( ! array_key_exists( 'side_records', $request ) ) {
 			$request['side_records'] = null;
+		}
+		if ( ! array_key_exists( 'task_fence', $request ) ) {
+			$request['task_fence'] = null;
+		}
+		if ( null !== $request['task_fence'] ) {
+			$fence = $request['task_fence'];
+			if ( ! is_array( $fence )
+				|| array_keys( $fence ) !== array( 'task_id', 'lease_owner', 'lease_token' )
+				|| ! is_string( $fence['task_id'] ) || 1 !== preg_match( '/^[a-f0-9]{32}$/', $fence['task_id'] )
+				|| ! is_string( $fence['lease_owner'] ) || 1 !== preg_match( '/^[a-f0-9]{32}$/', $fence['lease_owner'] )
+				|| ! is_string( $fence['lease_token'] ) || 1 !== preg_match( '/^[a-f0-9]{32}$/', $fence['lease_token'] ) ) {
+				throw new GHCA_ACD_Archive_Persistence_Exception(
+					GHCA_ACD_Archive_Persistence_Exception::CATEGORY_INVALID_COMMAND,
+					'invalid_task_fence',
+					'The worker task fence is invalid.'
+				);
+			}
 		}
 		foreach ( array( 'causation_event_id', 'effective_at_gmt', 'reason_code', 'reason_text' ) as $optional ) {
 			if ( ! array_key_exists( $optional, $request ) ) {

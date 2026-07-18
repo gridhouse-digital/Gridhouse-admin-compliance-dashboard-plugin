@@ -308,9 +308,11 @@ $lease_owner_a = $sA->id( 'worker-a' );
 $lease_owner_b = $sA->id( 'worker-b' );
 $lease_token_a = $sA->id( 'lease-a' );
 $lease_token_b = $sA->id( 'lease-b' );
-$claimed_a = $stack['task_store']->claim( $capture_task['task_id'], $lease_owner_a, $lease_token_a, '2026-07-16T12:01:00Z', '2026-07-16T12:11:00Z' );
-$claimed_b = $stack2['task_store']->claim( $capture_task['task_id'], $lease_owner_b, $lease_token_b, '2026-07-16T12:02:00Z', '2026-07-16T12:12:00Z' );
-archive_check( $claimed_a && ! $claimed_b, 'TASK-LEASE-FENCING exactly one real connection claims a live task lease' );
+$task_table = $wpdb->prefix . 'ghca_acd_archive_tasks';
+ghca_persist_query( $wpdb, $wpdb->prepare( "UPDATE {$task_table} SET available_at_gmt = '2099-01-01 00:00:00' WHERE task_id <> %s AND task_state IN ('pending','retry')", $capture_task['task_id'] ), 'isolate deterministic task claim' );
+$claimed_a = $stack['task_store']->claim_available( $lease_owner_a, $lease_token_a, '2026-07-16T12:01:00Z' );
+$claimed_b = $stack2['task_store']->claim_available( $lease_owner_b, $lease_token_b, '2026-07-16T12:02:00Z' );
+archive_check( null !== $claimed_a && $capture_task['task_id'] === $claimed_a['task_id'] && null === $claimed_b, 'TASK-LEASE-FENCING exactly one real connection claims a live task lease' );
 persist_expect_failure( $wpdb, static function () use ( $stack2, $capture_task, $lease_owner_b, $lease_token_a ) {
 	$stack2['task_store']->complete( $capture_task['task_id'], $lease_owner_b, $lease_token_a, '2026-07-16T12:03:00Z' );
 }, 'GHCA_ACD_Archive_Persistence_Exception', 'task_completion_fence_failed', 'TASK-LEASE-WRONG-OWNER-COMPLETION' );
@@ -318,15 +320,15 @@ persist_expect_failure( $wpdb, static function () use ( $stack2, $capture_task, 
 	$stack2['task_store']->complete( $capture_task['task_id'], $lease_owner_a, $lease_token_b, '2026-07-16T12:03:00Z' );
 }, 'GHCA_ACD_Archive_Persistence_Exception', 'task_completion_fence_failed', 'TASK-LEASE-STALE-COMPLETION' );
 persist_expect_failure( $wpdb, static function () use ( $stack2, $capture_task, $lease_owner_b, $lease_token_a ) {
-	$stack2['task_store']->heartbeat( $capture_task['task_id'], $lease_owner_b, $lease_token_a, '2026-07-16T12:03:00Z', '2026-07-16T12:13:00Z' );
+	$stack2['task_store']->heartbeat( $capture_task['task_id'], $lease_owner_b, $lease_token_a, '2026-07-16T12:02:00Z', '2026-07-16T12:04:00Z' );
 }, 'GHCA_ACD_Archive_Persistence_Exception', 'task_heartbeat_fence_failed', 'TASK-LEASE-WRONG-OWNER-HEARTBEAT' );
 persist_expect_failure( $wpdb, static function () use ( $stack, $capture_task, $lease_owner_a, $lease_token_a ) {
-	$stack['task_store']->heartbeat( $capture_task['task_id'], $lease_owner_a, $lease_token_a, '2026-07-16T12:03:00Z', '2026-07-16T12:10:00Z' );
+	$stack['task_store']->heartbeat( $capture_task['task_id'], $lease_owner_a, $lease_token_a, '2026-07-16T12:02:00Z', '2026-07-16T12:03:00Z' );
 }, 'GHCA_ACD_Archive_Persistence_Exception', 'task_heartbeat_fence_failed', 'TASK-LEASE-NON-EXTENDING-HEARTBEAT' );
-$stack['task_store']->heartbeat( $capture_task['task_id'], $lease_owner_a, $lease_token_a, '2026-07-16T12:04:00Z', '2026-07-16T12:14:00Z' );
+$stack['task_store']->heartbeat( $capture_task['task_id'], $lease_owner_a, $lease_token_a, '2026-07-16T12:02:00Z', '2026-07-16T12:04:00Z' );
 $heartbeat_task = $stack['task_store']->find( $capture_task['task_id'] );
-archive_check( '2026-07-16 12:14:00' === $heartbeat_task['lease_until_gmt'], 'TASK-LEASE-HEARTBEAT the exact live owner/token pair extends the lease' );
-$stack['task_store']->complete( $capture_task['task_id'], $lease_owner_a, $lease_token_a, '2026-07-16T12:05:00Z' );
+archive_check( '2026-07-16 12:04:00' === $heartbeat_task['lease_until_gmt'], 'TASK-LEASE-HEARTBEAT the exact live owner/token pair extends the lease' );
+$stack['task_store']->complete( $capture_task['task_id'], $lease_owner_a, $lease_token_a, '2026-07-16T12:03:00Z' );
 $completed_capture = $stack['task_store']->find( $capture_task['task_id'] );
 archive_check( 'completed' === $completed_capture['task_state'] && '1' === (string) $completed_capture['attempt_count'] && null === $completed_capture['lease_token'], 'TASK-LEASE-FENCING the exact lease token completes and clears the task lease' );
 
@@ -338,24 +340,24 @@ $reclaim_task = $wpdb->get_row( $wpdb->prepare(
 ), ARRAY_A );
 $reclaim_token_a = $sLease->id( 'lease-old' );
 $reclaim_token_b = $sLease->id( 'lease-new' );
-$stack['task_store']->claim( $reclaim_task['task_id'], $lease_owner_a, $reclaim_token_a, '2026-07-16T12:01:00Z', '2026-07-16T12:02:00Z' );
+$stack['task_store']->claim_available( $lease_owner_a, $reclaim_token_a, '2026-07-16T12:01:00Z' );
 $reclaim_before_expiry_checks = $stack['task_store']->find( $reclaim_task['task_id'] );
 persist_expect_failure( $wpdb, static function () use ( $stack, $reclaim_task, $lease_owner_a, $reclaim_token_a ) {
-	$stack['task_store']->heartbeat( $reclaim_task['task_id'], $lease_owner_a, $reclaim_token_a, '2026-07-16T12:03:00Z', '2026-07-16T12:13:00Z' );
+	$stack['task_store']->heartbeat( $reclaim_task['task_id'], $lease_owner_a, $reclaim_token_a, '2026-07-16T12:03:00Z', '2026-07-16T12:05:00Z' );
 }, 'GHCA_ACD_Archive_Persistence_Exception', 'task_heartbeat_fence_failed', 'TASK-LEASE-EXPIRED-HEARTBEAT' );
 persist_expect_failure( $wpdb, static function () use ( $stack, $reclaim_task, $lease_owner_a, $reclaim_token_a ) {
 	$stack['task_store']->complete( $reclaim_task['task_id'], $lease_owner_a, $reclaim_token_a, '2026-07-16T12:03:00Z' );
 }, 'GHCA_ACD_Archive_Persistence_Exception', 'task_completion_fence_failed', 'TASK-LEASE-EXPIRED-COMPLETION' );
 persist_expect_failure( $wpdb, static function () use ( $stack, $reclaim_task, $lease_owner_a, $reclaim_token_a ) {
-	$stack['task_store']->fail_and_reschedule( $reclaim_task['task_id'], $lease_owner_a, $reclaim_token_a, '2026-07-16T12:04:00Z', 'expired_worker', 'expired lease', '2026-07-16T12:03:00Z' );
-}, 'GHCA_ACD_Archive_Persistence_Exception', 'task_failure_fence_failed', 'TASK-LEASE-EXPIRED-RETRY' );
+	$stack['task_store']->retry( $reclaim_task['task_id'], $lease_owner_a, $reclaim_token_a, 'task_handler_failed', GHCA_ACD_Archive_Worker_Coordinator::FAILURE_MESSAGES['task_handler_failed'], '2026-07-16T12:03:00Z' );
+}, 'GHCA_ACD_Archive_Persistence_Exception', 'task_retry_fence_failed', 'TASK-LEASE-EXPIRED-RETRY' );
 archive_check( $reclaim_before_expiry_checks === $stack['task_store']->find( $reclaim_task['task_id'] ), 'TASK-LEASE-EXPIRED-MUTATIONS leave the expired leased row byte-identical' );
-$reclaimed = $stack2['task_store']->claim( $reclaim_task['task_id'], $lease_owner_b, $reclaim_token_b, '2026-07-16T12:03:00Z', '2026-07-16T12:13:00Z' );
-archive_check( $reclaimed, 'TASK-LEASE-RECLAIM an expired lease can be reclaimed by one compare-and-set claim' );
+$reclaimed = $stack2['task_store']->reclaim_expired( $lease_owner_b, $reclaim_token_b, '2026-07-16T12:03:00Z' );
+archive_check( null !== $reclaimed && $reclaim_task['task_id'] === $reclaimed['task_id'], 'TASK-LEASE-RECLAIM an expired lease can be reclaimed by one deterministic claim' );
 persist_expect_failure( $wpdb, static function () use ( $stack, $reclaim_task, $lease_owner_a, $reclaim_token_a ) {
 	$stack['task_store']->complete( $reclaim_task['task_id'], $lease_owner_a, $reclaim_token_a, '2026-07-16T12:04:00Z' );
 }, 'GHCA_ACD_Archive_Persistence_Exception', 'task_completion_fence_failed', 'TASK-LEASE-RECLAIM-STALE-TOKEN' );
-$stack2['task_store']->complete( $reclaim_task['task_id'], $lease_owner_b, $reclaim_token_b, '2026-07-16T12:05:00Z' );
+$stack2['task_store']->complete( $reclaim_task['task_id'], $lease_owner_b, $reclaim_token_b, '2026-07-16T12:04:00Z' );
 
 $sExactExpiry = new GHCA_Persist_Scenario( 'prog-task-exact-expiry' );
 persist_request_archive( $stack, $sExactExpiry );
@@ -365,9 +367,9 @@ $exact_expiry_task = $wpdb->get_row( $wpdb->prepare(
 ), ARRAY_A );
 $exact_token_a = $sExactExpiry->id( 'lease-exact-old' );
 $exact_token_b = $sExactExpiry->id( 'lease-exact-new' );
-$stack['task_store']->claim( $exact_expiry_task['task_id'], $lease_owner_a, $exact_token_a, '2026-07-16T12:20:00Z', '2026-07-16T12:21:00Z' );
-archive_check( $stack2['task_store']->claim( $exact_expiry_task['task_id'], $lease_owner_b, $exact_token_b, '2026-07-16T12:21:00Z', '2026-07-16T12:31:00Z' ), 'TASK-LEASE-EXACT-EXPIRY may be reclaimed when now equals lease expiry' );
-$stack2['task_store']->complete( $exact_expiry_task['task_id'], $lease_owner_b, $exact_token_b, '2026-07-16T12:22:00Z' );
+$stack['task_store']->claim_available( $lease_owner_a, $exact_token_a, '2026-07-16T12:20:00Z' );
+archive_check( null !== $stack2['task_store']->reclaim_expired( $lease_owner_b, $exact_token_b, '2026-07-16T12:22:00Z' ), 'TASK-LEASE-EXACT-EXPIRY may be reclaimed when now equals lease expiry' );
+$stack2['task_store']->complete( $exact_expiry_task['task_id'], $lease_owner_b, $exact_token_b, '2026-07-16T12:23:00Z' );
 
 $sTaskRetry = new GHCA_Persist_Scenario( 'prog-task-retry' );
 persist_request_archive( $stack, $sTaskRetry );
@@ -376,24 +378,29 @@ $retry_task = $wpdb->get_row( $wpdb->prepare(
 	(string) $sTaskRetry->stream_id
 ), ARRAY_A );
 $retry_token = $sTaskRetry->id( 'retry-token-1' );
-$stack['task_store']->claim( $retry_task['task_id'], $lease_owner_a, $retry_token, '2026-07-16T13:01:00Z', '2026-07-16T13:11:00Z' );
+$stack['task_store']->claim_available( $lease_owner_a, $retry_token, '2026-07-16T13:01:00Z' );
 persist_expect_failure( $wpdb, static function () use ( $stack2, $retry_task, $lease_owner_b, $retry_token ) {
-	$stack2['task_store']->fail_and_reschedule( $retry_task['task_id'], $lease_owner_b, $retry_token, '2026-07-16T13:03:00Z', 'retryable', 'try again', '2026-07-16T13:02:00Z' );
-}, 'GHCA_ACD_Archive_Persistence_Exception', 'task_failure_fence_failed', 'TASK-LEASE-WRONG-OWNER-RETRY' );
-$stack['task_store']->fail_and_reschedule( $retry_task['task_id'], $lease_owner_a, $retry_token, '2026-07-16T13:03:00Z', 'retryable', 'try again', '2026-07-16T13:02:00Z' );
+	$stack2['task_store']->retry( $retry_task['task_id'], $lease_owner_b, $retry_token, 'task_handler_failed', GHCA_ACD_Archive_Worker_Coordinator::FAILURE_MESSAGES['task_handler_failed'], '2026-07-16T13:02:00Z' );
+}, 'GHCA_ACD_Archive_Persistence_Exception', 'task_retry_fence_failed', 'TASK-LEASE-WRONG-OWNER-RETRY' );
+$stack['task_store']->retry( $retry_task['task_id'], $lease_owner_a, $retry_token, 'task_handler_failed', GHCA_ACD_Archive_Worker_Coordinator::FAILURE_MESSAGES['task_handler_failed'], '2026-07-16T13:02:00Z' );
 $retried_task = $stack['task_store']->find( $retry_task['task_id'] );
-archive_check( 'pending' === $retried_task['task_state'] && '1' === (string) $retried_task['attempt_count'] && 'retryable' === $retried_task['last_error_code'] && null === $retried_task['lease_token'], 'TASK-LEASE-RETRY the exact live owner/token pair reschedules and clears the lease' );
+archive_check( 'retry' === $retried_task['task_state'] && '1' === (string) $retried_task['attempt_count'] && 'task_handler_failed' === $retried_task['last_error_code'] && null === $retried_task['lease_token'], 'TASK-LEASE-RETRY the exact live owner/token pair reschedules and clears the lease' );
 
 $retry_rounds = array(
-	array( '2026-07-16T13:03:00Z', '2026-07-16T13:13:00Z', '2026-07-16T13:04:00Z', '2026-07-16T13:05:00Z' ),
-	array( '2026-07-16T13:05:00Z', '2026-07-16T13:15:00Z', '2026-07-16T13:06:00Z', '2026-07-16T13:07:00Z' ),
-	array( '2026-07-16T13:07:00Z', '2026-07-16T13:17:00Z', '2026-07-16T13:08:00Z', '2026-07-16T13:09:00Z' ),
-	array( '2026-07-16T13:09:00Z', '2026-07-16T13:19:00Z', '2026-07-16T13:10:00Z', '2026-07-16T13:11:00Z' ),
+	array( '2026-07-16T13:03:00Z', '2026-07-16T13:04:00Z' ),
+	array( '2026-07-16T13:09:00Z', '2026-07-16T13:10:00Z' ),
+	array( '2026-07-16T13:25:00Z', '2026-07-16T13:26:00Z' ),
+	array( '2026-07-16T14:26:00Z', '2026-07-16T14:27:00Z' ),
 );
 foreach ( $retry_rounds as $index => $round ) {
 	$round_token = $sTaskRetry->id( 'retry-token-' . ( $index + 2 ) );
-	archive_check( $stack['task_store']->claim( $retry_task['task_id'], $lease_owner_a, $round_token, $round[0], $round[1] ), 'TASK-LEASE-DEAD-LETTER attempt ' . ( $index + 2 ) . ' claims the pending task' );
-	$stack['task_store']->fail_and_reschedule( $retry_task['task_id'], $lease_owner_a, $round_token, $round[3], 'retryable', 'try again', $round[2] );
+	$round_claim = $stack['task_store']->claim_available( $lease_owner_a, $round_token, $round[0] );
+	archive_check( null !== $round_claim && $retry_task['task_id'] === $round_claim['task_id'], 'TASK-LEASE-DEAD-LETTER attempt ' . ( $index + 2 ) . ' claims the retry task' );
+	if ( $index < 3 ) {
+		$stack['task_store']->retry( $retry_task['task_id'], $lease_owner_a, $round_token, 'task_handler_failed', GHCA_ACD_Archive_Worker_Coordinator::FAILURE_MESSAGES['task_handler_failed'], $round[1] );
+	} else {
+		$stack['task_store']->dead_letter( $retry_task['task_id'], $lease_owner_a, $round_token, 'task_attempts_exhausted', GHCA_ACD_Archive_Worker_Coordinator::FAILURE_MESSAGES['task_attempts_exhausted'], $round[1] );
+	}
 }
 $dead_task = $stack['task_store']->find( $retry_task['task_id'] );
 archive_check( 'dead' === $dead_task['task_state'] && '5' === (string) $dead_task['attempt_count'] && null === $dead_task['lease_token'], 'TASK-LEASE-DEAD-LETTER the fifth failed attempt becomes dead and clears the lease' );
@@ -403,7 +410,6 @@ archive_check( 'dead' === $dead_task['task_state'] && '5' === (string) $dead_tas
 // ---------------------------------------------------------------------------
 $sTaskRead = new GHCA_Persist_Scenario( 'prog-task-read' );
 persist_request_archive( $stack, $sTaskRead );
-$task_table = $wpdb->prefix . 'ghca_acd_archive_tasks';
 $read_task = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$task_table} WHERE stream_id = %s", (string) $sTaskRead->stream_id ), ARRAY_A );
 
 ghca_persist_query( $wpdb, $wpdb->prepare( "UPDATE {$task_table} SET task_schema_version = 99 WHERE task_id = %s", $read_task['task_id'] ), 'tamper task schema version' );

@@ -3,6 +3,7 @@
  * Plugin Name: Gridhouse Admin Compliance Dashboard
  * Description: HR/compliance administrative dashboard shortcodes for LearnDash + Elementor.
  * Version: 1.2.0
+ * Requires PHP: 8.3
  * Author: Gridhouse Digital
  * Author URI: https://gridhouse.digital
  * Text Domain: ghca-acd

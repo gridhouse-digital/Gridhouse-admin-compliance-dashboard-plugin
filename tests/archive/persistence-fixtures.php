@@ -116,7 +116,7 @@ function ghca_persist_execute( array $stack, GHCA_Persist_Scenario $s, string $c
 	$idempotency_key = isset( $opts['idempotency_key'] ) ? $opts['idempotency_key'] : $s->next_idempotency_key();
 	$scope_document  = ghca_persist_scope_document( $s, $command_type );
 	$scope_digest    = GHCA_ACD_Archive_Digester::idempotency_scope( $scope_document );
-	$key_digest      = hash( 'sha256', $idempotency_key );
+	$key_digest      = isset( $opts['idempotency_key_digest'] ) ? $opts['idempotency_key_digest'] : hash( 'sha256', $idempotency_key );
 	$command_id      = isset( $opts['command_id'] ) ? $opts['command_id'] : $s->id( 'cmd-' . $idempotency_key );
 	$expected        = array_key_exists( 'expected_sequence', $opts ) ? $opts['expected_sequence'] : $s->head_sequence;
 	$command         = call_user_func(
@@ -143,6 +143,9 @@ function ghca_persist_execute( array $stack, GHCA_Persist_Scenario $s, string $c
 	}
 	if ( array_key_exists( 'side_records', $opts ) ) {
 		$request['side_records'] = $opts['side_records'];
+	}
+	if ( array_key_exists( 'task_fence', $opts ) ) {
+		$request['task_fence'] = $opts['task_fence'];
 	}
 	$response = $stack['uow']->execute( $request );
 	if ( empty( $opts['no_track'] ) ) {

@@ -11,6 +11,7 @@ $archive_files = array(
 	'/infrastructure/class-archive-empty-object.php',
 	'/infrastructure/class-archive-canonical-object.php',
 	'/infrastructure/class-archive-canonical-json.php',
+	'/infrastructure/class-archive-persistence-exception.php',
 	'/infrastructure/class-archive-digester.php',
 	'/domain/class-archive-transition-exception.php',
 	'/domain/class-archive-event-types.php',
