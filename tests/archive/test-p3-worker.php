@@ -204,7 +204,11 @@ foreach ( array( 'schema', 'payload', 'type' ) as $invalid_kind ) {
 	);
 	$result = $coordinator->run_once();
 	$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$task_table} WHERE task_id = %s", $invalid_task['task_id'] ), ARRAY_A );
-	archive_check( 'dead' === $result['status'] && $expected_reason === $row['last_error_code'] && 0 === $invalid_calls, 'TASK-INVALID-' . strtoupper( $invalid_kind ) . '-DEAD-ZERO-HANDLER' );
+	if ( 'type' === $invalid_kind ) {
+		archive_check( 'idle' === $result['status'] && 'pending' === $row['task_state'] && null === $row['last_error_code'] && 0 === $invalid_calls, 'TASK-INVALID-TYPE-UNINSTALLED-UNTOUCHED' );
+	} else {
+		archive_check( 'dead' === $result['status'] && $expected_reason === $row['last_error_code'] && 0 === $invalid_calls, 'TASK-INVALID-' . strtoupper( $invalid_kind ) . '-DEAD-ZERO-HANDLER' );
+	}
 }
 
 ghca_persist_fresh_schema( $wpdb );
@@ -215,7 +219,8 @@ $unsupported_coordinator = new GHCA_ACD_Archive_Worker_Coordinator(
 	p3_task_id( 'unsupported-handler-worker' ), array(), static function () { throw new RuntimeException( 'must not commit' ); }
 );
 $unsupported_result = $unsupported_coordinator->run_once();
-archive_check( 'dead' === $unsupported_result['status'] && 'task_type_unsupported' === $store->find( $unsupported_task['task_id'] )['last_error_code'], 'WORKER-UNSUPPORTED-HANDLER-DEAD invokes no external side effect' );
+$unsupported_row = $store->find( $unsupported_task['task_id'] );
+archive_check( 'idle' === $unsupported_result['status'] && 'pending' === $unsupported_row['task_state'] && null === $unsupported_row['last_error_code'], 'WORKER-UNINSTALLED-HANDLER-UNTOUCHED invokes no external side effect' );
 
 ghca_persist_fresh_schema( $wpdb );
 $store = new GHCA_ACD_WPDB_Archive_Task_Store( $wpdb );

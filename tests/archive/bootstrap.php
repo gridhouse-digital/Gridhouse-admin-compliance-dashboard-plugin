@@ -25,6 +25,10 @@ $archive_files = array(
 	'/domain/class-archive-event.php',
 	'/infrastructure/class-archive-event-stream-verifier.php',
 	'/domain/class-archive-case.php',
+	'/application/class-archive-task-catalog.php',
+	'/application/class-archive-ledger-materializer.php',
+	'/application/class-archive-ledger-task-handler.php',
+	'/application/class-archive-build-coordinator.php',
 );
 foreach ( $archive_files as $archive_file ) {
 	if ( is_file( $archive_root . $archive_file ) ) {

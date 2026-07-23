@@ -72,21 +72,26 @@ archive_check(
 	'P3-BOUNDARY-NO-IMMUTABLE-ROW-MUTATION adds no event, snapshot, artifact-descriptor, or ledger-row mutation'
 );
 
-$handler_or_runner = false;
-foreach ( $archive_paths as $path ) {
-	$basename = basename( $path );
-	if ( false !== strpos( $basename, 'handler' ) || false !== strpos( $basename, 'worker-runner' ) ) {
-		$handler_or_runner = true;
-		break;
-	}
+$handler_paths = array_values( array_filter( $archive_paths, static function ( string $path ): bool {
+	return false !== stripos( basename( $path ), 'handler' );
+} ) );
+sort( $handler_paths, SORT_STRING );
+$allowed_handler_path = str_replace( '\\', '/', $archive_root . '/application/class-archive-ledger-task-handler.php' );
+$handler_classes = array();
+preg_match_all( '/class\s+(GHCA_ACD_[A-Za-z0-9_]*Handler)\b/', $archive_sources, $handler_class_matches );
+if ( isset( $handler_class_matches[1] ) ) {
+	$handler_classes = array_values( array_unique( $handler_class_matches[1] ) );
+	sort( $handler_classes, SORT_STRING );
 }
 archive_check(
-	! $handler_or_runner && 0 === preg_match( '/class\s+GHCA_ACD_[A-Za-z0-9_]*(?:Handler|Worker_Runner)\b/', $archive_sources ),
-	'P3-BOUNDARY-NO-PRODUCTION-HANDLER-OR-RUNNER keeps dispatch test-injected and directly callable'
+	array( $allowed_handler_path ) === $handler_paths
+		&& array( 'GHCA_ACD_Archive_Ledger_Task_Handler' ) === $handler_classes,
+	'P3B1-BOUNDARY-ONLY-LEDGER-HANDLER permits only the approved ledger handler file and class'
 );
 archive_check(
-	! $handler_or_runner && is_string( $entrypoint ) && 0 === preg_match( '/archive/i', $entrypoint ),
-	'P3-BOUNDARY-RESET-REMAINS-DISABLED has no reset handler, runner, or runtime activation path'
+	0 === preg_match( '/worker-runner|class\s+GHCA_ACD_[A-Za-z0-9_]*Worker_Runner\b|class-[^\r\n\/]*(?:reset|capture|packet|verify)[^\r\n\/]*handler|class\s+GHCA_ACD_[A-Za-z0-9_]*(?:Reset|Capture|Packet|Verify)[A-Za-z0-9_]*Handler\b/i', $archive_sources . "\n" . implode( "\n", $archive_paths ) )
+		&& is_string( $entrypoint ) && 0 === preg_match( '/archive/i', $entrypoint ),
+	'P3B1-BOUNDARY-NO-DEFERRED-HANDLER-OR-RUNNER keeps reset, capture, packet, verify, runner, and runtime activation paths disabled'
 );
 
 archive_finish();

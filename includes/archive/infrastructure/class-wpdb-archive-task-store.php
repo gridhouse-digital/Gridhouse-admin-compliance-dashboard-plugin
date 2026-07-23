@@ -75,6 +75,7 @@ final class GHCA_ACD_WPDB_Archive_Task_Store {
 		if ( ! is_array( $payload ) || GHCA_ACD_Archive_Canonical_JSON::encode( $payload ) !== $task['payload_json'] ) {
 			throw $this->internal( 'invalid_task_payload', 'Task payload JSON must be canonical.' );
 		}
+		GHCA_ACD_Archive_Task_Catalog::validate_claimed_payload( $task, $payload );
 		$formats = array();
 		foreach ( $expected as $column ) {
 			$formats[] = in_array( $column, array( 'task_schema_version', 'attempt_count', 'max_attempts' ), true ) ? '%d' : '%s';
@@ -97,13 +98,13 @@ final class GHCA_ACD_WPDB_Archive_Task_Store {
 	}
 
 	/** @return array<string,mixed>|null */
-	public function reclaim_expired( string $lease_owner, string $lease_token, string $now_gmt ) {
-		return $this->claim_selected( true, $lease_owner, $lease_token, $now_gmt );
+	public function reclaim_expired( string $lease_owner, string $lease_token, string $now_gmt, ?array $installed_types = null ) {
+		return $this->claim_selected( true, $lease_owner, $lease_token, $now_gmt, $installed_types );
 	}
 
 	/** @return array<string,mixed>|null */
-	public function claim_available( string $lease_owner, string $lease_token, string $now_gmt ) {
-		return $this->claim_selected( false, $lease_owner, $lease_token, $now_gmt );
+	public function claim_available( string $lease_owner, string $lease_token, string $now_gmt, ?array $installed_types = null ) {
+		return $this->claim_selected( false, $lease_owner, $lease_token, $now_gmt, $installed_types );
 	}
 
 	/** @return array<string,mixed> */
@@ -147,7 +148,7 @@ final class GHCA_ACD_WPDB_Archive_Task_Store {
 			$valid_binding = is_array( $payload )
 				&& GHCA_ACD_Archive_Canonical_JSON::encode( $payload ) === $row['payload_json']
 				&& isset( $payload['canonical_format_version'], $payload['task_schema_version'], $payload['task_type'], $payload['trigger_event_id'], $payload['stream_id'] )
-				&& GHCA_ACD_Archive_Canonical_JSON::FORMAT_VERSION === $payload['canonical_format_version']
+				&& $this->canonical_format_matches_task( $row['task_type'], $payload['canonical_format_version'] )
 				&& self::TASK_SCHEMA_VERSION === $payload['task_schema_version']
 				&& $row['task_type'] === $payload['task_type']
 				&& $row['trigger_event_id'] === $payload['trigger_event_id']
@@ -165,6 +166,7 @@ final class GHCA_ACD_WPDB_Archive_Task_Store {
 		if ( ! $valid_identity || ! $valid_binding || ! $this->is_digest( $row['dedupe_digest'] ) || ! hash_equals( $expected_dedupe, $row['dedupe_digest'] ) ) {
 			throw $this->integrity( 'task_payload_invalid', 'The retained task payload is invalid.' );
 		}
+		$payload = GHCA_ACD_Archive_Task_Catalog::validate_claimed_payload( $row, $payload );
 		$row['payload'] = $payload;
 		return $row;
 	}
@@ -280,21 +282,24 @@ final class GHCA_ACD_WPDB_Archive_Task_Store {
 	}
 
 	/** @return array<string,mixed>|null */
-	private function claim_selected( bool $expired, string $lease_owner, string $lease_token, string $now_gmt, int $retry = 0 ) {
+	private function claim_selected( bool $expired, string $lease_owner, string $lease_token, string $now_gmt, ?array $installed_types = null, int $retry = 0 ) {
 		$this->assert_id( $lease_owner );
 		$this->assert_id( $lease_token );
+		$installed_types = GHCA_ACD_Archive_Task_Catalog::normalize_installed_types( null === $installed_types ? self::TASK_TYPES : $installed_types );
 		$now_db   = GHCA_ACD_Archive_Db_Format::utc_to_db( $now_gmt );
 		$until_db = GHCA_ACD_Archive_Db_Format::utc_to_db( self::lease_until( $now_gmt ) );
 		$select_reason = $expired ? 'task_reclaim_select_failed' : 'task_available_select_failed';
+		$type_placeholders = implode( ',', array_fill( 0, count( $installed_types ), '%s' ) );
 		$this->begin();
 		try {
 			$where = $expired
 				? "task_state = 'leased' AND lease_until_gmt <= %s"
 				: "task_state IN ('pending','retry') AND available_at_gmt <= %s AND attempt_count < max_attempts";
+			$select_values = array_merge( array( $now_db ), $installed_types );
 			$row = $this->db->get_row( $this->db->prepare(
-				"SELECT * FROM {$this->tasks_table()} WHERE {$where}
+				"SELECT * FROM {$this->tasks_table()} WHERE {$where} AND task_type IN ({$type_placeholders})
 				 ORDER BY available_at_gmt ASC, task_row_id ASC LIMIT 1 FOR UPDATE",
-				$now_db
+				$select_values
 			), ARRAY_A );
 			$this->assert_no_database_error( $select_reason, 'The durable task selection query failed.' );
 			if ( null === $row ) {
@@ -308,12 +313,16 @@ final class GHCA_ACD_WPDB_Archive_Task_Store {
 			$where_update = $expired
 				? "task_id = %s AND task_state = 'leased' AND lease_until_gmt <= %s"
 				: "task_id = %s AND task_state IN ('pending','retry') AND available_at_gmt <= %s AND attempt_count < max_attempts";
+			$update_values = array_merge(
+				array( $new_attempt, $lease_owner, $lease_token, $until_db, $now_db, $row['task_id'], $now_db ),
+				$installed_types
+			);
 			$sql = $this->db->prepare(
 				"UPDATE {$this->tasks_table()}
 				 SET task_state = 'leased', attempt_count = %d, lease_owner = %s,
 				     lease_token = %s, lease_until_gmt = %s, updated_at_gmt = %s
-				 WHERE {$where_update}",
-				$new_attempt, $lease_owner, $lease_token, $until_db, $now_db, $row['task_id'], $now_db
+				 WHERE {$where_update} AND task_type IN ({$type_placeholders})",
+				$update_values
 			);
 			$result = $this->db->query( $sql );
 			$this->assert_no_database_error( 'task_claim_update_failed', 'The durable task claim update failed.' );
@@ -333,7 +342,7 @@ final class GHCA_ACD_WPDB_Archive_Task_Store {
 			$retryable = GHCA_ACD_Archive_Db_Format::is_retryable_transaction_error( $this->db );
 			$this->rollback();
 			if ( $retryable && $retry < 2 ) {
-				return $this->claim_selected( $expired, $lease_owner, $lease_token, $now_gmt, $retry + 1 );
+				return $this->claim_selected( $expired, $lease_owner, $lease_token, $now_gmt, $installed_types, $retry + 1 );
 			}
 			throw $error;
 		}
@@ -462,7 +471,7 @@ final class GHCA_ACD_WPDB_Archive_Task_Store {
 			$valid_nullable_ids = $valid_nullable_ids && array_key_exists( $field, $row ) && ( null === $row[ $field ] || $this->is_id( $row[ $field ] ) );
 		}
 		$valid_payload_binding = isset( $payload['canonical_format_version'], $payload['task_schema_version'], $payload['task_type'], $payload['trigger_event_id'], $payload['stream_id'] )
-			&& GHCA_ACD_Archive_Canonical_JSON::FORMAT_VERSION === $payload['canonical_format_version']
+			&& $this->canonical_format_matches_task( $row['task_type'], $payload['canonical_format_version'] )
 			&& self::TASK_SCHEMA_VERSION === $payload['task_schema_version']
 			&& $row['task_type'] === $payload['task_type']
 			&& $row['trigger_event_id'] === $payload['trigger_event_id']
@@ -478,6 +487,7 @@ final class GHCA_ACD_WPDB_Archive_Task_Store {
 			|| ! $valid_payload_binding ) {
 			$this->invalid_stored_row();
 		}
+		GHCA_ACD_Archive_Task_Catalog::validate_claimed_payload( $row, $payload );
 		$this->assert_stored_task_state( $row, (int) $attempt );
 		$this->assert_stored_task_datetimes( $row );
 		$expected_dedupe = GHCA_ACD_Archive_Digester::task_dedupe( array(
@@ -574,6 +584,13 @@ final class GHCA_ACD_WPDB_Archive_Task_Store {
 
 	private function invalid_stored_row(): void {
 		throw $this->integrity( 'invalid_stored_task_row', 'The retained task row violates the v1 persistence contract.' );
+	}
+
+	/** @param mixed $format */
+	private function canonical_format_matches_task( string $task_type, $format ): bool {
+		return GHCA_ACD_Archive_Task_Catalog::LEDGER_TASK_TYPE === $task_type
+			? 'ghca-cjson-1' === $format
+			: GHCA_ACD_Archive_Canonical_JSON::FORMAT_VERSION === $format;
 	}
 
 	/** @param mixed $value */

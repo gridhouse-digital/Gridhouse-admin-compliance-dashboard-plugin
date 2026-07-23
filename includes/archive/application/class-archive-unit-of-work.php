@@ -981,14 +981,20 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 					break;
 				case GHCA_ACD_Archive_Event_Types::EVIDENCE_SNAPSHOT_CAPTURED:
 					$attempt_id = $this->current_build_attempt( $history, $payload['archive_id'] );
-					foreach ( array( 'materialize_ledger', 'materialize_packet' ) as $task_type ) {
-						$this->enqueue_task( $task_type, $event, array(
-							'archive_id'       => $payload['archive_id'],
-							'build_attempt_id' => $attempt_id,
-							'snapshot_id'      => $payload['snapshot_id'],
-							'stream_id'        => $event->stream_id(),
-						), $now_gmt, $now_gmt );
-					}
+					$this->enqueue_task( 'materialize_ledger', $event, array(
+						'archive_id'               => $payload['archive_id'],
+						'build_attempt_id'         => $attempt_id,
+						'canonical_format_version' => 'ghca-cjson-1',
+						'ledger_artifact_id'       => $this->id_generator->generate(),
+						'snapshot_id'              => $payload['snapshot_id'],
+						'stream_id'                => $event->stream_id(),
+					), $now_gmt, $now_gmt );
+					$this->enqueue_task( 'materialize_packet', $event, array(
+						'archive_id'       => $payload['archive_id'],
+						'build_attempt_id' => $attempt_id,
+						'snapshot_id'      => $payload['snapshot_id'],
+						'stream_id'        => $event->stream_id(),
+					), $now_gmt, $now_gmt );
 					break;
 				case GHCA_ACD_Archive_Event_Types::LEDGER_MATERIALIZED:
 				case GHCA_ACD_Archive_Event_Types::PACKET_MATERIALIZED:
@@ -1007,7 +1013,7 @@ final class GHCA_ACD_Archive_Unit_Of_Work {
 				case GHCA_ACD_Archive_Event_Types::ARCHIVE_RETRY_REQUESTED:
 					$task_types = 'capturing' === $payload['resume_phase']
 						? array( 'capture_evidence' )
-						: ( 'materializing' === $payload['resume_phase'] ? array( 'materialize_ledger', 'materialize_packet' ) : array( 'verify_and_finalize' ) );
+						: ( 'materializing' === $payload['resume_phase'] ? array( 'materialize_packet' ) : array( 'verify_and_finalize' ) );
 					foreach ( $task_types as $task_type ) {
 						$this->enqueue_task( $task_type, $event, array(
 							'archive_id'       => $payload['archive_id'],
