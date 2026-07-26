@@ -10,6 +10,16 @@
 
 **Date:** 2026-07-26
 
+### Owner Decision E02-A amendment — 2026-07-26
+
+**Approved.** `capture_evidence.canonical_format_version` is strictly integer `1`, replacing the incorrect string `"ghca-cjson-1"` in E02. This preserves existing retained task bytes, Unit-of-Work output, task-store validation, and dedupe identities. The Unit of Work and task store remain unchanged.
+
+This amendment applies only to the `capture_evidence` task payload. It does not change the P3B1 ledger payload, E07 `canonical_format`, canonical JSON implementation, snapshot format, digest domains, or any retained data.
+
+### Owner Decision E10-A amendment — 2026-07-26
+
+**Approved.** The snapshot store may recognize the existing `GHCA_ACD_Archive_Canonical_Object` as a JSON object in its private object-document predicate. This permits E07 decimal course-keyed `audit_mapping` and `course_lifespan_rules` to retain their approved canonical representation. It does not modify the schema, canonicalizer, digester, snapshot bytes, IDs, or retained data; arbitrary PHP objects remain invalid.
+
 ## 1. Purpose and authority boundary
 
 This record proposes Decisions E01-E18 for the smallest safe evidence-capture vertical slice. It is a decision record, not an implementation authorization or implementation plan.
@@ -112,7 +122,7 @@ It excludes certificate bytes/acquisition, packet or PDF rendering, ledger chang
 | Key | Exact type/value | Authoritative source |
 |---|---|---|
 | `archive_id` | 32 lowercase hexadecimal characters | triggering event payload |
-| `canonical_format_version` | literal `ghca-cjson-1` | Unit of Work |
+| `canonical_format_version` | strict integer `1` | Unit of Work |
 | `stream_id` | 32 lowercase hexadecimal characters | triggering event envelope |
 | `task_schema_version` | integer `1` | task store |
 | `task_type` | literal `capture_evidence` | Unit of Work |

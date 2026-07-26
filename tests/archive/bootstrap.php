@@ -8,6 +8,7 @@ $archive_root = dirname( __DIR__, 2 ) . '/includes/archive';
 $archive_files = array(
 	'/contracts/interface-archive-clock.php',
 	'/contracts/interface-archive-id-generator.php',
+	'/contracts/class-archive-evidence-source.php',
 	'/infrastructure/class-archive-empty-object.php',
 	'/infrastructure/class-archive-canonical-object.php',
 	'/infrastructure/class-archive-canonical-json.php',
@@ -26,6 +27,10 @@ $archive_files = array(
 	'/infrastructure/class-archive-event-stream-verifier.php',
 	'/domain/class-archive-case.php',
 	'/application/class-archive-task-catalog.php',
+	'/application/class-archive-evidence-source-exception.php',
+	'/application/class-archive-evidence-result-validator.php',
+	'/application/class-archive-evidence-snapshot-preparer.php',
+	'/application/class-archive-evidence-task-handler.php',
 	'/application/class-archive-ledger-materializer.php',
 	'/application/class-archive-ledger-task-handler.php',
 	'/application/class-archive-build-coordinator.php',

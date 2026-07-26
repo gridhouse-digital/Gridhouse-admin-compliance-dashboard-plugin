@@ -489,6 +489,7 @@ final class GHCA_ACD_WPDB_Archive_Snapshot_Store {
 	/** @param mixed $value */
 	private function is_object_document( $value ): bool {
 		return $value instanceof GHCA_ACD_Archive_Empty_Object
+			|| $value instanceof GHCA_ACD_Archive_Canonical_Object
 			|| ( is_array( $value ) && array() !== $value && ! $this->is_list( $value ) );
 	}
 

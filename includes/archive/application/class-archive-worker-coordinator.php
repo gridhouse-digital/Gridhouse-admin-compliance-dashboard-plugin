@@ -65,6 +65,11 @@ final class GHCA_ACD_Archive_Worker_Coordinator {
 			&& ( null === $ledger_validator || null === $build_coordinator ) ) {
 			throw new InvalidArgumentException( 'The installed ledger handler requires its fenced Build Coordinator.' );
 		}
+		if ( isset( $handlers[ GHCA_ACD_Archive_Task_Catalog::CAPTURE_TASK_TYPE ] )
+			&& $handlers[ GHCA_ACD_Archive_Task_Catalog::CAPTURE_TASK_TYPE ] instanceof GHCA_ACD_Archive_Evidence_Task_Handler
+			&& null === $build_coordinator ) {
+			throw new InvalidArgumentException( 'The installed evidence handler requires its fenced Build Coordinator.' );
+		}
 		foreach ( self::FAILURE_MESSAGES as $code => $message ) {
 			if ( 1 !== preg_match( '/^[a-z][a-z0-9_.-]{0,63}$/', $code ) || strlen( $message ) > 512 || 1 !== preg_match( '//u', $message ) ) {
 				throw new LogicException( 'Worker failure catalog is invalid.' );
@@ -95,7 +100,10 @@ final class GHCA_ACD_Archive_Worker_Coordinator {
 		if ( null === $task ) {
 			return array( 'status' => 'idle' );
 		}
-		if ( ! empty( $task['exhausted'] ) && GHCA_ACD_Archive_Task_Catalog::LEDGER_TASK_TYPE !== $task['task_type'] ) {
+		if ( ! empty( $task['exhausted'] ) && ! in_array( $task['task_type'], array(
+			GHCA_ACD_Archive_Task_Catalog::LEDGER_TASK_TYPE,
+			GHCA_ACD_Archive_Task_Catalog::CAPTURE_TASK_TYPE,
+		), true ) ) {
 			return $this->dead( $task, 'task_attempts_exhausted' );
 		}
 
@@ -128,6 +136,10 @@ final class GHCA_ACD_Archive_Worker_Coordinator {
 
 		if ( GHCA_ACD_Archive_Task_Catalog::LEDGER_TASK_TYPE === $task['task_type'] ) {
 			return $this->run_ledger( $task, $token, $heartbeat );
+		}
+		if ( GHCA_ACD_Archive_Task_Catalog::CAPTURE_TASK_TYPE === $task['task_type']
+			&& $this->handlers[ $task['task_type'] ] instanceof GHCA_ACD_Archive_Evidence_Task_Handler ) {
+			return $this->run_capture( $task, $token, $heartbeat );
 		}
 
 		try {
@@ -175,6 +187,202 @@ final class GHCA_ACD_Archive_Worker_Coordinator {
 			throw $error;
 		}
 		return array( 'status' => 'completed', 'task_id' => $task['task_id'], 'response' => $response );
+	}
+
+	/**
+	 * @param array<string,mixed> $task
+	 * @return array<string,mixed>
+	 */
+	private function run_capture( array $task, string $token, callable $heartbeat ): array {
+		$handler = $this->handlers[ GHCA_ACD_Archive_Task_Catalog::CAPTURE_TASK_TYPE ];
+		$key = GHCA_ACD_Archive_Digester::task_outcome( array(
+			'logical_outcome' => 'completed',
+			'task_id' => $task['task_id'],
+			'task_schema_version' => GHCA_ACD_WPDB_Archive_Task_Store::TASK_SCHEMA_VERSION,
+		) );
+		$fence = array( 'task_id' => $task['task_id'], 'lease_owner' => $this->lease_owner, 'lease_token' => $token );
+		try {
+			$decision = $this->build_coordinator->recover_capture( $task );
+			if ( null !== $decision ) {
+				return $this->finish_capture_decision( $task, $token, $handler, $key, $fence, $decision );
+			}
+			$this->tasks->assert_live_lease( $task['task_id'], $this->lease_owner, $token, $this->clock->now_gmt() );
+			try {
+				$context = $this->build_coordinator->start_capture( $task, $key, $fence );
+			} catch ( GHCA_ACD_Archive_Persistence_Exception $error ) {
+				if ( $this->is_fence_loss( $error, array( 'task_outcome_fence_failed', 'task_lease_lost' ) ) ) {
+					return $this->lease_lost( $task['task_id'] );
+				}
+				$context = $this->build_coordinator->capture_context( $task );
+				if ( ! $context['build_started'] ) { throw $error; }
+			}
+			$this->tasks->assert_live_lease( $task['task_id'], $this->lease_owner, $token, $this->clock->now_gmt() );
+			$prepared = $handler->prepare( $task, $context, $heartbeat );
+			$prepared = $handler->validate_prepared_result( $context, $prepared );
+			$this->tasks->assert_live_lease( $task['task_id'], $this->lease_owner, $token, $this->clock->now_gmt() );
+			if ( 'source_drift' === $prepared['decision'] ) {
+				$decision = $this->build_coordinator->recover_capture( $task );
+				if ( null !== $decision ) {
+					return $this->finish_capture_decision( $task, $token, $handler, $key, $fence, $decision );
+				}
+				$decision = $this->build_coordinator->detect_capture_drift( $task, $prepared['captured_source_fingerprint'], $key, $fence );
+				return $this->finish_capture_decision( $task, $token, $handler, $key, $fence, $decision );
+			}
+			return $this->commit_and_complete_capture( $task, $token, $prepared, $key, $fence );
+		} catch ( UnexpectedValueException $error ) {
+			return $this->dead( $task, 'task_prepared_result_invalid' );
+		} catch ( GHCA_ACD_Archive_Persistence_Exception $error ) {
+			if ( $this->is_fence_loss( $error, array(
+				'task_heartbeat_fence_failed', 'task_outcome_fence_failed', 'task_lease_lost', 'task_completion_fence_failed',
+			) ) ) {
+				return $this->lease_lost( $task['task_id'] );
+			}
+			if ( 'task_payload_invalid' === $error->reason_code() ) {
+				return $this->dead( $task, 'task_payload_invalid' );
+			}
+			return $this->dispose_capture_failure( $task, $token, $handler, $key, $fence, $error );
+		} catch ( GHCA_ACD_Archive_Evidence_Source_Exception $error ) {
+			return $this->dispose_capture_failure( $task, $token, $handler, $key, $fence, $error );
+		} catch ( Throwable $error ) {
+			return $this->dispose_capture_failure( $task, $token, $handler, $key, $fence, $error );
+		}
+	}
+
+	/**
+	 * @param array<string,mixed> $task
+	 * @param array<string,mixed> $prepared
+	 * @param array<string,string> $fence
+	 * @return array<string,mixed>
+	 */
+	private function commit_and_complete_capture( array $task, string $token, array $prepared, string $key, array $fence ): array {
+		$this->tasks->assert_live_lease( $task['task_id'], $this->lease_owner, $token, $this->clock->now_gmt() );
+		$response = $this->build_coordinator->record_capture( $task, $prepared, $key, $fence );
+		$outcome = array( 'logical_outcome' => 'completed', 'outcome' => array( 'result_code' => 'committed' ) );
+		$this->assert_handler_outcome( $outcome );
+		$this->tasks->complete( $task['task_id'], $this->lease_owner, $token, $this->clock->now_gmt() );
+		return array( 'status' => 'completed', 'task_id' => $task['task_id'], 'response' => $response );
+	}
+
+	/**
+	 * @param array<string,mixed> $task
+	 * @param array<string,string> $fence
+	 * @param array<string,mixed> $decision
+	 * @return array<string,mixed>
+	 */
+	private function finish_capture_decision( array $task, string $token, GHCA_ACD_Archive_Evidence_Task_Handler $handler, string $key, array $fence, array $decision ): array {
+		if ( isset( $decision['decision'], $decision['prepared'] ) && 'captured' === $decision['decision'] ) {
+			$context = $this->build_coordinator->capture_context( $task );
+			$prepared = $handler->validate_prepared_result( $context, $decision['prepared'] );
+			return $this->commit_and_complete_capture( $task, $token, $prepared, $key, $fence );
+		}
+		if ( isset( $decision['decision'], $decision['reason_code'] ) && 'failed' === $decision['decision'] ) {
+			$code = 'archive_build_attempts_exhausted' === $decision['reason_code'] ? 'task_attempts_exhausted' : $decision['reason_code'];
+			return $this->dead( $task, isset( self::FAILURE_MESSAGES[ $code ] ) ? $code : 'task_handler_failed' );
+		}
+		throw new GHCA_ACD_Archive_Persistence_Exception(
+			GHCA_ACD_Archive_Persistence_Exception::CATEGORY_INTEGRITY_BLOCKED,
+			'task_outcome_commit_failed',
+			'The authoritative task outcome could not be committed.'
+		);
+	}
+
+	/**
+	 * @param array<string,mixed> $task
+	 * @param array<string,string> $fence
+	 * @return array<string,mixed>
+	 */
+	private function dispose_capture_failure( array $task, string $token, GHCA_ACD_Archive_Evidence_Task_Handler $handler, string $key, array $fence, Throwable $error ): array {
+		try {
+			$decision = $this->build_coordinator->recover_capture( $task );
+			if ( null !== $decision ) {
+				return $this->finish_capture_decision( $task, $token, $handler, $key, $fence, $decision );
+			}
+		} catch ( GHCA_ACD_Archive_Persistence_Exception $recovery_error ) {
+			if ( $this->is_fence_loss( $recovery_error, array( 'task_lease_lost', 'task_completion_fence_failed' ) ) ) {
+				return $this->lease_lost( $task['task_id'] );
+			}
+			$error = $recovery_error;
+		}
+		$classification = $this->classify_capture_failure( $error );
+		$final = (int) $task['attempt_count'] >= GHCA_ACD_WPDB_Archive_Task_Store::MAX_ATTEMPTS;
+		if ( 'blocked' === $classification['kind'] ) {
+			return $this->retry_or_dead( $task, $classification['task_code'] );
+		}
+		if ( 'retryable' === $classification['kind'] && ! $final ) {
+			return $this->retry_or_dead( $task, $classification['task_code'] );
+		}
+		if ( 'retryable' === $classification['kind'] && $final ) {
+			try {
+				$context = $this->build_coordinator->capture_context( $task );
+				$prepared = $handler->prepare( $task, $context, $this->heartbeat_callback( $task, $token ) );
+				$prepared = $handler->validate_prepared_result( $context, $prepared );
+				if ( 'snapshot' === $prepared['decision'] ) {
+					return $this->commit_and_complete_capture( $task, $token, $prepared, $key, $fence );
+				}
+				$decision = $this->build_coordinator->detect_capture_drift( $task, $prepared['captured_source_fingerprint'], $key, $fence );
+				return $this->finish_capture_decision( $task, $token, $handler, $key, $fence, $decision );
+			} catch ( Throwable $recovery_error ) {
+				try {
+					$decision = $this->build_coordinator->recover_capture( $task );
+					if ( null !== $decision ) {
+						return $this->finish_capture_decision( $task, $token, $handler, $key, $fence, $decision );
+					}
+				} catch ( Throwable $ignored ) {
+					return $this->dead( $task, 'task_outcome_commit_failed' );
+				}
+				$classification = $this->classify_capture_failure( $recovery_error );
+				if ( 'blocked' === $classification['kind'] ) {
+					return $this->retry_or_dead( $task, $classification['task_code'] );
+				}
+				if ( 'retryable' === $classification['kind'] ) {
+					$classification['lifecycle_code'] = 'archive_build_attempts_exhausted';
+				}
+			}
+		}
+		try {
+			$this->tasks->assert_live_lease( $task['task_id'], $this->lease_owner, $token, $this->clock->now_gmt() );
+			$decision = $this->build_coordinator->fail_capture( $task, $classification['lifecycle_code'], $key, $fence );
+			return $this->finish_capture_decision( $task, $token, $handler, $key, $fence, $decision );
+		} catch ( GHCA_ACD_Archive_Persistence_Exception $commit_error ) {
+			if ( $this->is_fence_loss( $commit_error, array( 'task_outcome_fence_failed', 'task_lease_lost' ) ) ) {
+				return $this->lease_lost( $task['task_id'] );
+			}
+			return $final ? $this->dead( $task, 'task_outcome_commit_failed' ) : $this->retry_or_dead( $task, 'task_outcome_commit_failed' );
+		}
+	}
+
+	/** @return array{kind:string,task_code:string,lifecycle_code:?string} */
+	private function classify_capture_failure( Throwable $error ): array {
+		if ( $error instanceof GHCA_ACD_Archive_Evidence_Source_Exception ) {
+			if ( GHCA_ACD_Archive_Evidence_Source_Exception::CATEGORY_OPERATIONAL_BLOCKED === $error->category()
+				|| GHCA_ACD_Archive_Evidence_Source_Exception::CATEGORY_INTEGRITY === $error->category() ) {
+				return array( 'kind' => 'blocked', 'task_code' => 'task_handler_failed', 'lifecycle_code' => null );
+			}
+			if ( GHCA_ACD_Archive_Evidence_Source_Exception::CATEGORY_RETRYABLE === $error->category() ) {
+				return array( 'kind' => 'retryable', 'task_code' => 'task_handler_failed', 'lifecycle_code' => null );
+			}
+			$mapping = array(
+				'archive_build_binding_invalid' => 'archive_build_binding_invalid',
+				'archive_snapshot_invalid' => 'archive_snapshot_invalid',
+				'archive_evidence_prohibited' => 'archive_evidence_incomplete',
+				'archive_evidence_incomplete' => 'archive_evidence_incomplete',
+				'archive_certificate_invalid' => 'archive_certificate_invalid',
+			);
+			if ( isset( $mapping[ $error->reason_code() ] ) ) {
+				return array( 'kind' => 'permanent', 'task_code' => 'task_handler_failed', 'lifecycle_code' => $mapping[ $error->reason_code() ] );
+			}
+		}
+		if ( $error instanceof GHCA_ACD_Archive_Persistence_Exception ) {
+			if ( GHCA_ACD_Archive_Persistence_Exception::CATEGORY_INTEGRITY_BLOCKED === $error->category() ) {
+				return array( 'kind' => 'blocked', 'task_code' => 'task_outcome_commit_failed', 'lifecycle_code' => null );
+			}
+			if ( GHCA_ACD_Archive_Persistence_Exception::CATEGORY_INVALID_COMMAND === $error->category()
+				&& in_array( $error->reason_code(), array( 'archive_build_binding_invalid', 'archive_snapshot_invalid' ), true ) ) {
+				return array( 'kind' => 'permanent', 'task_code' => 'task_handler_failed', 'lifecycle_code' => $error->reason_code() );
+			}
+			return array( 'kind' => 'retryable', 'task_code' => 'task_outcome_commit_failed', 'lifecycle_code' => null );
+		}
+		return array( 'kind' => 'blocked', 'task_code' => 'task_handler_failed', 'lifecycle_code' => null );
 	}
 
 	/**

@@ -58,7 +58,10 @@ foreach ($runtime in $php_versions) {
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b-task-contracts.php",
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b-build-coordinator.php",
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b-ledger-handler.php",
-            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b-ledger-failures.php"
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b-ledger-failures.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2a-evidence.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2a-evidence-persistence.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2a-evidence-concurrency.php"
         )
         foreach ($suite in $suites) {
             & $php $suite
@@ -78,4 +81,4 @@ foreach ($runtime in $php_versions) {
 }
 
 $results | Format-Table -AutoSize
-Write-Host "ALL $($results.Count) P1/P2/P3A/P3B1 MATRIX CELLS PASSED"
+Write-Host "ALL $($results.Count) P1/P2/P3A/P3B1/P3B2a MATRIX CELLS PASSED"

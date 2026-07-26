@@ -76,22 +76,39 @@ $handler_paths = array_values( array_filter( $archive_paths, static function ( s
 	return false !== stripos( basename( $path ), 'handler' );
 } ) );
 sort( $handler_paths, SORT_STRING );
-$allowed_handler_path = str_replace( '\\', '/', $archive_root . '/application/class-archive-ledger-task-handler.php' );
+$allowed_handler_paths = array(
+	str_replace( '\\', '/', $archive_root . '/application/class-archive-evidence-task-handler.php' ),
+	str_replace( '\\', '/', $archive_root . '/application/class-archive-ledger-task-handler.php' ),
+);
+sort( $allowed_handler_paths, SORT_STRING );
 $handler_classes = array();
 preg_match_all( '/class\s+(GHCA_ACD_[A-Za-z0-9_]*Handler)\b/', $archive_sources, $handler_class_matches );
 if ( isset( $handler_class_matches[1] ) ) {
 	$handler_classes = array_values( array_unique( $handler_class_matches[1] ) );
 	sort( $handler_classes, SORT_STRING );
 }
+$allowed_handler_classes = array(
+	'GHCA_ACD_Archive_Evidence_Task_Handler',
+	'GHCA_ACD_Archive_Ledger_Task_Handler',
+);
+sort( $allowed_handler_classes, SORT_STRING );
 archive_check(
-	array( $allowed_handler_path ) === $handler_paths
-		&& array( 'GHCA_ACD_Archive_Ledger_Task_Handler' ) === $handler_classes,
-	'P3B1-BOUNDARY-ONLY-LEDGER-HANDLER permits only the approved ledger handler file and class'
+	$allowed_handler_paths === $handler_paths && $allowed_handler_classes === $handler_classes,
+	'P3B2A-BOUNDARY-ONLY-APPROVED-HANDLERS permits only the approved ledger and evidence handler files and classes'
 );
 archive_check(
 	0 === preg_match( '/worker-runner|class\s+GHCA_ACD_[A-Za-z0-9_]*Worker_Runner\b|class-[^\r\n\/]*(?:reset|capture|packet|verify)[^\r\n\/]*handler|class\s+GHCA_ACD_[A-Za-z0-9_]*(?:Reset|Capture|Packet|Verify)[A-Za-z0-9_]*Handler\b/i', $archive_sources . "\n" . implode( "\n", $archive_paths ) )
 		&& is_string( $entrypoint ) && 0 === preg_match( '/archive/i', $entrypoint ),
 	'P3B1-BOUNDARY-NO-DEFERRED-HANDLER-OR-RUNNER keeps reset, capture, packet, verify, runner, and runtime activation paths disabled'
+);
+archive_check(
+	0 === preg_match( '/wp-load\.php|wp-config\.php|global\s+\$wpdb|\bDB_(?:NAME|USER|PASSWORD|HOST)\b/i', $archive_sources ),
+	'P3B2A-NO-CURRENT-SITE-ACCESS adds no current-site bootstrap, global database handle, or credential source'
+);
+archive_check(
+	0 === preg_match( '/\b(?:add_action|add_filter|register_activation_hook|register_deactivation_hook|wp_schedule_event|wp_schedule_single_event|register_rest_route)\s*\(|\bWP_CLI\s*::/i', $archive_sources )
+		&& is_string( $entrypoint ) && 0 === preg_match( '/archive/i', $entrypoint ),
+	'P3B2A-NO-RUNTIME-WIRING adds no entrypoint, hook, scheduler, controller, CLI, or activation composition'
 );
 
 archive_finish();
