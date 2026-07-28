@@ -16,7 +16,7 @@ final class GHCA_P3B2A_Fake_Evidence_Source implements GHCA_ACD_Archive_Evidence
 		$this->failure = $failure;
 	}
 
-	public function read_consistent_evidence( array $capture_identity, array $limits ): array {
+	public function read_consistent_evidence( array $capture_identity, array $limits, callable $checkpoint ): array {
 		$this->calls++;
 		if ( null !== $this->failure ) { throw $this->failure; }
 		return GHCA_ACD_Archive_Canonical_JSON::detach( $this->document );
@@ -32,7 +32,7 @@ final class GHCA_P3B2A_Sequence_Evidence_Source implements GHCA_ACD_Archive_Evid
 	/** @param array<int,mixed> $outcomes */
 	public function __construct( array $outcomes ) { $this->outcomes = $outcomes; }
 
-	public function read_consistent_evidence( array $capture_identity, array $limits ): array {
+	public function read_consistent_evidence( array $capture_identity, array $limits, callable $checkpoint ): array {
 		$outcome = $this->outcomes[ $this->calls ] ?? end( $this->outcomes );
 		$this->calls++;
 		if ( $outcome instanceof Throwable ) { throw $outcome; }
@@ -160,12 +160,50 @@ function p3b2ap_document( GHCA_Persist_Scenario $scenario, string $policy_digest
 }
 
 /** @return array<string,mixed> */
-function p3b2ap_fixture( $db, string $seed, string $now, bool $drift = false, bool $certificate = false ): array {
+function p3b2ap_multi_course_document( GHCA_Persist_Scenario $scenario, string $policy_digest ): array {
+	$document = p3b2ap_document( $scenario, $policy_digest );
+	$second = $document['courses'][0];
+	$second['course_id'] = '2';
+	$second['course_order'] = 1;
+	$second['course_stable_key'] = 'course-2';
+	$second['course_title'] = 'Fixture Course 2';
+	$second['source_provenance']['record_id'] = '7002';
+	$document['courses'][] = $second;
+	$document['policy']['tracked_course_ids'] = array( '2', '101' );
+	$document['policy']['audit_mapping'] = GHCA_ACD_Archive_Canonical_Object::from_members( array(
+		array( '2', array(
+			'category_order' => 0, 'course_order' => 1, 'credit_minutes' => '30',
+			'is_orientation' => false, 'odp_category_key' => 'annual', 'oltl_category_key' => 'general',
+		) ),
+		array( '101', array(
+			'category_order' => 0, 'course_order' => 0, 'credit_minutes' => '60',
+			'is_orientation' => false, 'odp_category_key' => 'annual', 'oltl_category_key' => 'general',
+		) ),
+	) );
+	$document['policy']['course_lifespan_rules'] = GHCA_ACD_Archive_Canonical_Object::from_members( array(
+		array( '2', array( 'lifespan_days' => '365', 'warning_days' => '90' ) ),
+		array( '101', array( 'lifespan_days' => '365', 'warning_days' => '90' ) ),
+	) );
+	$document['source']['source_record_ids']['course_activity_ids'] = array( '7001', '7002' );
+	$document['source']['source_record_ids']['course_post_ids'] = array( '2', '101' );
+	$document['calculated']['categories']['annual']['completed_course_ids'] = array( '2', '101' );
+	$document['calculated']['categories']['annual']['credit_minutes'] = '90';
+	$document['calculated']['total_course_count'] = 2;
+	$document['calculated']['total_training_seconds'] = '7200';
+	$document['completeness']['observed_count'] = 2;
+	$document['completeness']['required_count'] = 2;
+	return $document;
+}
+
+/** @return array<string,mixed> */
+function p3b2ap_fixture( $db, string $seed, string $now, bool $drift = false, bool $certificate = false, bool $multi_course = false ): array {
 	ghca_persist_fresh_schema( $db );
 	$stack = ghca_persist_stack( $db, $now, 'p3b2a-' . $seed );
 	$scenario = new GHCA_Persist_Scenario( 'p3b2a_' . $seed );
 	$policy_digest = remediation_digest( '2' );
-	$document = p3b2ap_document( $scenario, $policy_digest, $certificate );
+	$document = $multi_course
+		? p3b2ap_multi_course_document( $scenario, $policy_digest )
+		: p3b2ap_document( $scenario, $policy_digest, $certificate );
 	$fingerprint = GHCA_ACD_Archive_Digester::source_fingerprint( $document );
 	$request = $scenario->payload( 'ArchiveRequested', array(
 		'archive_id' => $scenario->id( 'archive-1' ),
@@ -249,6 +287,19 @@ archive_check(
 	true === $object_predicate->invoke( $fixture['stack']['snapshot_store'], $snapshot['snapshot_document']['policy']['audit_mapping'] )
 	&& false === $object_predicate->invoke( $fixture['stack']['snapshot_store'], new stdClass() ),
 	'P3B2A-E10A-ARBITRARY-PHP-OBJECT-REJECTED accepts only canonical object representations'
+);
+
+$multi_fixture = p3b2ap_fixture( $wpdb, 'multi_order', '2026-07-26T15:30:00Z', false, false, true );
+$multi_result = p3b2ap_worker( $multi_fixture, 'multi-order' )->run_once();
+$multi_snapshot_id = substr( hash( 'sha256', 'ghca-p3b2a-capture-id-v1|Snapshot|' . $multi_fixture['task']['task_id'] ), 0, 32 );
+$multi_snapshot = $multi_fixture['stack']['snapshot_store']->find( $multi_snapshot_id );
+archive_check(
+	'completed' === $multi_result['status']
+		&& array( '2', '101' ) === $multi_snapshot['snapshot_document']['policy']['tracked_course_ids']
+		&& array( '101', '2' ) === array_column( $multi_snapshot['snapshot_document']['courses'], 'course_id' )
+		&& GHCA_ACD_Archive_Canonical_JSON::encode( $multi_snapshot['snapshot_document'] ) === $multi_snapshot['snapshot_json']
+		&& GHCA_ACD_Archive_Digester::snapshot( $multi_snapshot['snapshot_document'] ) === $multi_snapshot['snapshot_digest'],
+	'P3B2A-NUMERIC-MEMBERSHIP-SET-PERSISTS-WITH-DISPLAY-ORDER preserves immutable bytes through database reload'
 );
 
 // Crash after snapshot command commit but before task completion replays without another source call.

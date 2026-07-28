@@ -44,7 +44,7 @@ final class GHCA_ACD_Archive_Evidence_Task_Handler {
 	 */
 	public function prepare( array $task, array $context, callable $heartbeat ): array {
 		$heartbeat();
-		$evidence = $this->source->read_consistent_evidence( $context['capture_identity'], self::LIMITS );
+		$evidence = $this->source->read_consistent_evidence( $context['capture_identity'], self::LIMITS, $heartbeat );
 		$heartbeat();
 		$evidence = $this->validator->validate( $evidence, $context['capture_identity'] );
 		$fingerprint = GHCA_ACD_Archive_Digester::source_fingerprint( $evidence );

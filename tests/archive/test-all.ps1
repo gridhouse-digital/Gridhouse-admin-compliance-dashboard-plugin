@@ -47,6 +47,9 @@ foreach ($runtime in $php_versions) {
         Write-Host "Testing PHP: $php on DB Port: $port"
         Write-Host "========================================"
         $env:GHCA_TEST_DB_HOST = "127.0.0.1:$port"
+        $env:GHCA_TEST_SOURCE_DB_NAME = "$($env:GHCA_TEST_DB_NAME)_source"
+        $env:GHCA_TEST_SOURCE_DB_USER = "ghcasrc$([guid]::NewGuid().ToString('N').Substring(0, 24))"
+        $env:GHCA_TEST_SOURCE_DB_PASSWORD = [guid]::NewGuid().ToString('N')
 
         $suites = @(
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-schema-migration.php",
@@ -61,7 +64,10 @@ foreach ($runtime in $php_versions) {
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b-ledger-failures.php",
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2a-evidence.php",
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2a-evidence-persistence.php",
-            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2a-evidence-concurrency.php"
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2a-evidence-concurrency.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2b-evidence-source.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2b-evidence-source-persistence.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2b-evidence-source-concurrency.php"
         )
         foreach ($suite in $suites) {
             & $php $suite
@@ -81,4 +87,4 @@ foreach ($runtime in $php_versions) {
 }
 
 $results | Format-Table -AutoSize
-Write-Host "ALL $($results.Count) P1/P2/P3A/P3B1/P3B2a MATRIX CELLS PASSED"
+Write-Host "ALL $($results.Count) P1/P2/P3A/P3B1/P3B2a/P3B2b MATRIX CELLS PASSED"

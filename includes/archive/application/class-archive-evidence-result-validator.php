@@ -142,6 +142,7 @@ final class GHCA_ACD_Archive_Evidence_Result_Validator {
 				if ( ! $this->decimal( $value['lifespan_days'] ) || ! $this->decimal( $value['warning_days'] ) ) { $this->invalid(); }
 			}
 		}
+		usort( $keys, array( $this, 'compare_decimal' ) );
 		if ( $keys !== $tracked ) { $this->invalid(); }
 	}
 
@@ -164,7 +165,7 @@ final class GHCA_ACD_Archive_Evidence_Result_Validator {
 
 	/** @param mixed $courses @param array<string,mixed> $policy @param array<string,mixed> $cycle */
 	private function validate_courses( $courses, array $policy, array $cycle ): void {
-		if ( ! is_array( $courses ) || ! $this->is_list( $courses ) || count( $courses ) > 10000 || count( $courses ) !== count( $policy['tracked_course_ids'] ) ) {
+		if ( ! is_array( $courses ) || ! $this->is_list( $courses ) || count( $courses ) > 10000 ) {
 			$this->incomplete( 'normalize_limit' );
 		}
 		$ids = array();
@@ -204,6 +205,8 @@ final class GHCA_ACD_Archive_Evidence_Result_Validator {
 			$previous = $order;
 			$ids[] = $course['course_id'];
 		}
+		if ( count( array_unique( $ids, SORT_STRING ) ) !== count( $ids ) ) { $this->invalid(); }
+		usort( $ids, array( $this, 'compare_decimal' ) );
 		if ( $ids !== $policy['tracked_course_ids'] ) { $this->invalid(); }
 	}
 

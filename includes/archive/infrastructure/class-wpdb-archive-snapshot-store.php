@@ -187,6 +187,10 @@ final class GHCA_ACD_WPDB_Archive_Snapshot_Store {
 				$certificate_roles[] = 'course:' . $course['course_id'];
 			}
 		}
+		usort( $course_ids, static function ( string $left, string $right ): int {
+			$length = strlen( $left ) <=> strlen( $right );
+			return 0 !== $length ? $length : strcmp( $left, $right );
+		} );
 		$asset_ids = array();
 		$asset_roles = array();
 		foreach ( $source['evidence_assets'] as $asset ) {

@@ -111,4 +111,26 @@ archive_check(
 	'P3B2A-NO-RUNTIME-WIRING adds no entrypoint, hook, scheduler, controller, CLI, or activation composition'
 );
 
+$p3b2b_paths = array_values( array_filter( $archive_paths, static function ( string $path ): bool {
+	return false !== stripos( basename( $path ), 'evidence-read-session' )
+		|| false !== stripos( basename( $path ), 'learndash-archive-evidence-source' );
+} ) );
+sort( $p3b2b_paths, SORT_STRING );
+$allowed_p3b2b_paths = array(
+	str_replace( '\\', '/', $archive_root . '/infrastructure/class-learndash-archive-evidence-source.php' ),
+	str_replace( '\\', '/', $archive_root . '/infrastructure/class-wpdb-archive-evidence-read-session.php' ),
+);
+sort( $allowed_p3b2b_paths, SORT_STRING );
+archive_check(
+	$allowed_p3b2b_paths === $p3b2b_paths
+		&& class_exists( 'GHCA_ACD_LearnDash_Archive_Evidence_Source' )
+		&& class_exists( 'GHCA_ACD_WPDB_Archive_Evidence_Read_Session' ),
+	'P3B2B-BOUNDARY-ONLY-APPROVED-SOURCE-FILES permits only the approved LearnDash source and read-session classes'
+);
+archive_check(
+	0 === preg_match( '/\b(?:get_option|switch_to_blog|wp_remote_|DB_(?:NAME|USER|PASSWORD|HOST))\b|global\s+\$wpdb/i', $archive_sources )
+		&& 0 === preg_match( '/\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|TRUNCATE)\b/i', file_get_contents( $archive_root . '/infrastructure/class-learndash-archive-evidence-source.php' ) ),
+	'P3B2B-NO-RUNTIME-DISCOVERY-OR-SOURCE-MUTATION keeps source configuration injected and evidence reads dark'
+);
+
 archive_finish();

@@ -36,6 +36,42 @@ function p3b2a_golden_identity(): array {
 	);
 }
 
+/** @return array<string,mixed> */
+function p3b2a_multi_course_document(): array {
+	$document = p3b2a_golden_document();
+	$second = $document['courses'][0];
+	$second['course_id'] = '2';
+	$second['course_order'] = 1;
+	$second['course_title'] = 'Second Course';
+	$second['source_provenance']['record_id'] = '7002';
+	$second['source_provenance']['record_version'] = '9002';
+	$document['courses'][] = $second;
+	$document['policy']['tracked_course_ids'] = array( '2', '101' );
+	$document['policy']['audit_mapping'] = GHCA_ACD_Archive_Canonical_Object::from_members( array(
+		array( '2', array(
+			'category_order' => 0, 'course_order' => 1, 'credit_minutes' => '30', 'is_orientation' => false,
+			'odp_category_key' => 'individual_rights', 'oltl_category_key' => 'general',
+		) ),
+		array( '101', array(
+			'category_order' => 0, 'course_order' => 0, 'credit_minutes' => '60', 'is_orientation' => false,
+			'odp_category_key' => 'individual_rights', 'oltl_category_key' => 'general',
+		) ),
+	) );
+	$document['policy']['course_lifespan_rules'] = GHCA_ACD_Archive_Canonical_Object::from_members( array(
+		array( '2', array( 'lifespan_days' => '365', 'warning_days' => '90' ) ),
+		array( '101', array( 'lifespan_days' => '365', 'warning_days' => '90' ) ),
+	) );
+	$document['source']['source_record_ids']['course_activity_ids'] = array( '7001', '7002' );
+	$document['source']['source_record_ids']['course_post_ids'] = array( '2', '101' );
+	$document['calculated']['categories']['individual_rights']['completed_course_ids'] = array( '2', '101' );
+	$document['calculated']['categories']['individual_rights']['credit_minutes'] = '90';
+	$document['calculated']['total_course_count'] = 2;
+	$document['calculated']['total_training_seconds'] = '7200';
+	$document['completeness']['observed_count'] = 2;
+	$document['completeness']['required_count'] = 2;
+	return $document;
+}
+
 /** @param callable():void $operation */
 function p3b2a_expect_source_failure( callable $operation, string $reason, string $context ): bool {
 	try {
@@ -65,6 +101,36 @@ archive_check(
 	&& p3b2a_golden_json() === GHCA_ACD_Archive_Canonical_JSON::encode( $validated ),
 	'P3B2A-SOURCE-FINGERPRINT-CROSS-RUNTIME emits byte-identical evidence on the required runtime'
 );
+
+$multi_course = p3b2a_multi_course_document();
+$multi_course_validated = $validator->validate( $multi_course, $identity );
+archive_check(
+	array( '2', '101' ) === $multi_course_validated['policy']['tracked_course_ids']
+		&& array( '101', '2' ) === array_column( $multi_course_validated['courses'], 'course_id' ),
+	'P3B2A-TRACKED-MEMBERSHIP-INDEPENDENT-OF-DISPLAY-ORDER accepts numeric membership with retained display order'
+);
+$membership_variants = array();
+$missing_course = $multi_course;
+array_pop( $missing_course['courses'] );
+$membership_variants['MISSING'] = $missing_course;
+$duplicate_course = $multi_course;
+$duplicate_course['courses'][1] = $duplicate_course['courses'][0];
+$duplicate_course['courses'][1]['course_order'] = 1;
+$membership_variants['DUPLICATE'] = $duplicate_course;
+$additional_course = $multi_course;
+$third = $additional_course['courses'][1];
+$third['course_id'] = '3';
+$third['course_order'] = 2;
+$additional_course['courses'][] = $third;
+$membership_variants['ADDITIONAL'] = $additional_course;
+foreach ( $membership_variants as $name => $variant ) {
+	archive_check(
+		p3b2a_expect_source_failure( static function () use ( $validator, $variant, $identity ): void {
+			$validator->validate( $variant, $identity );
+		}, 'archive_snapshot_invalid', 'source_validate' ),
+		'P3B2A-COURSE-MEMBERSHIP-' . $name . '-REJECTED preserves exact set equality'
+	);
+}
 
 $payload = array(
 	'archive_id' => $identity['archive_id'],

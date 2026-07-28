@@ -1303,4 +1303,43 @@ The earlier 24/24 P3-digest handoff is withdrawn; it did not report `tests/archi
 
 Nothing was staged, committed, pushed, deployed, activated, or added to runtime wiring. `.claude/` remained untouched.
 
+## 11. 2026-07-28 formal re-review remediation amendments
+
+The owner authorized the following narrow clarifications without reopening B01-B18:
+
+1. `policy.tracked_course_ids` is numeric-ID ascending, while retained `courses` remains ordered by `(category_order, course_order, course_id)`. Validators compare exact numeric-sorted membership sets and do not rewrite display order.
+2. Serialized source values reject PHP references, recursive/cyclic graphs, objects, resources, depth greater than 32, more than 10,000 values, and strings greater than 262,144 bytes. The tracked-course ceiling is enforced before course-dependent SQL placeholders.
+3. Cleanup always attempts rollback and close. A rollback failure or exception has priority as `transaction_rollback`; otherwise a close failure or exception is `connection_close`; otherwise the original pending/fence result is retained.
+4. Principal preflight accepts only one exact `USAGE` grant and one exact source-schema `SELECT` grant for the same account. Combined privileges, other schemas, table grants, duplicate grants, and `WITH GRANT OPTION` are rejected.
+5. Missing, malformed, spoofed, or inconsistent certificate assignment/reference records use only `archive_certificate_invalid` / `certificate_gate`.
+6. `maximum_transaction_milliseconds` accepts positive integers through 2,000 inclusive and rejects 2,001, zero, negative, string, null, or otherwise malformed values before source queries.
+7. Structural/version/schema/engine/principal mismatches remain `archive_source_schema_unsupported` / `source_preflight`; connection/query execution failures during preflight use the existing retryable `archive_source_read_failed` / `source_query` tuple.
+8. The permanent matrix runner must execute all three P3B2b suites in every cell and create process-local disposable source-schema credentials.
+
+The owner separately approved modifying `class-wpdb-archive-snapshot-store.php` only so tracked and retained course IDs are compared as exact numeric-sorted membership sets while retained course display order and every other snapshot validation remain unchanged. The approved P3B2a regressions cover accepted order independence plus missing, duplicate, and additional membership rejection and immutable database reload.
+
 **Status: owner-approved; P3B2b implementation authorized within B17.**
+
+## 12. 2026-07-28 remaining formal-review remediation amendments
+
+The owner directed these mechanical corrections without reopening B01-B18:
+
+1. Exceptions thrown by either transaction-start statement are translated to `retryable` / `archive_source_read_failed` / `transaction_start` with only the canonical sanitized message. A failed `SET TRANSACTION` closes without rollback; an attempted `START TRANSACTION` is treated as possibly started and is rolled back before close.
+2. Validly formed but contradictory site/blog bindings and mixed base/blog/table prefixes are `invalid` / `archive_build_binding_invalid` / `authoritative_load`. Invalid identifier grammar, cross-schema names, and unsupported physical schema remain `operational_blocked` / `archive_source_schema_unsupported` / `source_preflight`.
+3. The 2,000 millisecond monotonic elapsed budget ends only after mandatory rollback and successful connection close. Cleanup always finishes first. Rollback failure retains first priority, close failure second, an existing pending/fence throwable third, and only an otherwise successful over-budget result becomes `retryable` / `archive_source_query_failed` / `source_query`.
+
+The named regressions are:
+
+- `P3B2B-SET-TRANSACTION-THROWING-IS-SANITIZED-RETRYABLE`
+- `P3B2B-START-TRANSACTION-THROWING-IS-SANITIZED-RETRYABLE`
+- `P3B2B-TRANSACTION-START-EXCEPTION-MESSAGES-ARE-CANONICAL-AND-SANITIZED`
+- `P3B2B-SITE-BLOG-MISMATCH-IS-AUTHORITATIVE-BINDING-INVALID`
+- `P3B2B-MIXED-BASE-BLOG-AND-TABLE-PREFIXES-ARE-AUTHORITATIVE-BINDING-INVALID`
+- `P3B2B-INVALID-IDENTIFIER-AND-CROSS-SCHEMA-RETAIN-SOURCE-PREFLIGHT`
+- `P3B2B-UNSUPPORTED-PHYSICAL-SCHEMA-RETAINS-SOURCE-PREFLIGHT`
+- `P3B2B-DEADLINE-CROSSED-DURING-ROLLBACK-FAILS-AFTER-CLOSE`
+- `P3B2B-DEADLINE-CROSSED-DURING-CLOSE-FAILS-AFTER-CLOSE`
+- `P3B2B-ROLLBACK-THEN-CLOSE-FAILURES-RETAIN-PRIORITY-OVER-DEADLINE`
+- `P3B2B-EXACT-FENCE-THROWABLE-REMAINS-UNCHANGED-AFTER-DEADLINE-CLEANUP`
+
+**Status: formally accepted by the owner on 2026-07-28 after remediation re-review.**

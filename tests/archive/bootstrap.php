@@ -29,6 +29,8 @@ $archive_files = array(
 	'/application/class-archive-task-catalog.php',
 	'/application/class-archive-evidence-source-exception.php',
 	'/application/class-archive-evidence-result-validator.php',
+	'/infrastructure/class-wpdb-archive-evidence-read-session.php',
+	'/infrastructure/class-learndash-archive-evidence-source.php',
 	'/application/class-archive-evidence-snapshot-preparer.php',
 	'/application/class-archive-evidence-task-handler.php',
 	'/application/class-archive-ledger-materializer.php',
