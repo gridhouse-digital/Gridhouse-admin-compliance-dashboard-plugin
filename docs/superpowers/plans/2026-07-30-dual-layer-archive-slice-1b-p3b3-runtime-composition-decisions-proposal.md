@@ -18,6 +18,10 @@ The accepted event, digest, Unit-of-Work, task, fencing, immutable-artifact, evi
 
 Approval of this proposal would authorize only a later implementation inside the mechanical allowlist in C23. That implementation must initially stop at **constructed but dark**. Moving to **enabled for controlled testing** or **production activated** requires the separate evidence and owner gates stated in this record.
 
+### 1.1 Owner-approved C23 retained-test amendment — 2026-07-31
+
+The owner authorized one narrow mechanical addition to C23 after the first definitive matrix run exposed two retained assertions that still required zero entrypoint archive references. `tests/archive/test-persistence.php` and `tests/archive/test-side-record-persistence.php` may change only to require exactly one literal C03 statement, remove that exact statement from the inspected bytes, and require zero remaining case-insensitive archive references. Their existing test identifiers and all prohibitions on hooks, filters, activation hooks, cron, schedulers, transients, `wp-load.php`, `wp-config.php`, current-site bootstrap, and enabled feature flags remain unchanged. No other change to either file is authorized.
+
 ## 2. Mandatory preflight evidence
 
 | Check | Result |

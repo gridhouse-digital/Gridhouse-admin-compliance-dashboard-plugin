@@ -55,7 +55,6 @@ function p3b2bp_setup( $admin ): array {
 	p3b2bp_query( $admin, "DROP USER IF EXISTS {$user_host}" );
 	p3b2bp_query( $admin, "CREATE DATABASE {$schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" );
 	p3b2bp_query( $admin, $admin->prepare( "CREATE USER {$user_host} IDENTIFIED BY %s", $password ) );
-	p3b2bp_query( $admin, "GRANT SELECT ON {$schema}.* TO {$user_host}" );
 
 	$tables = array(
 		'users_table' => 'wp_users',
@@ -141,6 +140,9 @@ function p3b2bp_setup( $admin ): array {
 		KEY activity_id (activity_id),
 		KEY activity_meta_key (activity_meta_key(191))
 	) ENGINE=InnoDB' );
+	foreach ( $tables as $table ) {
+		p3b2bp_query( $admin, 'GRANT SELECT ON ' . $qualified( $table ) . " TO {$user_host}" );
+	}
 
 	$started = (string) gmmktime( 14, 0, 0, 6, 30, 2026 );
 	$completed = (string) gmmktime( 15, 0, 0, 6, 30, 2026 );
@@ -346,7 +348,7 @@ try {
 		&& 1 !== preg_match( '/\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRIGGER|EVENT|EXECUTE|FILE|PROCESS|SUPER|REPLICATION|GRANT OPTION)\b/', $grant_text );
 	archive_check(
 		$grant_safe,
-		'P3B2B-RESTRICTED-SOURCE-GRANT-IS-SELECT-ONLY proves the disposable adapter principal has only schema SELECT'
+		'P3B2B-RESTRICTED-SOURCE-GRANT-IS-SELECT-ONLY proves the disposable adapter principal has only seven table-level SELECT grants'
 	);
 
 	$archive_events_before = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}ghca_acd_archive_events" );

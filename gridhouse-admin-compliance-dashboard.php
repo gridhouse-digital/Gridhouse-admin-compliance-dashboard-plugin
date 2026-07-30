@@ -175,6 +175,8 @@ final class GHCA_Admin_Compliance_Dashboard {
   }
 }
 
+require_once __DIR__ . '/includes/archive/bootstrap.php';
+
 GHCA_Admin_Compliance_Dashboard::init();
 
 register_activation_hook( __FILE__, static function (): void {

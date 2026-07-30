@@ -44,6 +44,7 @@ define( 'WP_DEBUG_DISPLAY', false );
 define( 'WP_LANG_DIR', ABSPATH . 'wp-content/languages' );
 
 function is_multisite() { return false; }
+function get_current_blog_id() { return 1; }
 function wp_is_fatal_error_handler_enabled() { return false; }
 function get_option( $option, $default = false ) { return $default; }
 function update_option() { return true; }

@@ -36,16 +36,19 @@ foreach ( $p3_paths as $path ) {
 }
 
 archive_check(
-	is_string( $entrypoint ) && 0 === preg_match( '/archive/i', $entrypoint ),
-	'P3-BOUNDARY-ENTRYPOINT-DARK has no archive reference in the plugin entrypoint'
+	is_string( $entrypoint )
+		&& 1 === substr_count( $entrypoint, "require_once __DIR__ . '/includes/archive/bootstrap.php';" )
+		&& 1 === preg_match_all( '/archive/i', $entrypoint ),
+	'P3B3-ENTRYPOINT-ONE-ARCHIVE-REFERENCE permits only the constructed-dark bootstrap reference in the plugin entrypoint'
 );
 archive_check(
 	0 === preg_match( '/\b(?:add_action|add_filter|register_activation_hook|register_deactivation_hook)\s*\(/i', $archive_sources ),
 	'P3-BOUNDARY-NO-WORDPRESS-HOOKS adds no hook or activation wiring'
 );
 archive_check(
-	0 === preg_match( '/\b(?:wp_schedule_event|wp_schedule_single_event|wp_next_scheduled|wp_clear_scheduled_hook|as_enqueue_async_action|as_schedule_single_action)\s*\(|\bWP_CLI\s*::/i', $archive_sources ),
-	'P3-BOUNDARY-NO-CRON-SCHEDULER-CLI adds no worker wake-up registration'
+	0 === preg_match( '/\b(?:wp_schedule_event|wp_schedule_single_event|wp_next_scheduled|wp_clear_scheduled_hook|as_enqueue_async_action|as_schedule_single_action)\s*\(/i', $archive_sources )
+		&& 1 === substr_count( $archive_sources, 'WP_CLI::add_command' ),
+	'P3B3-ONLY-APPROVED-WPCLI-COMMAND-REGISTERED permits one dormant worker command and no scheduler'
 );
 archive_check(
 	0 === preg_match( '/\bregister_rest_route\s*\(|(?:^|\/)class-[^\/]*controller\.php$/im', $archive_sources . "\n" . implode( "\n", $archive_paths ) ),
@@ -98,7 +101,8 @@ archive_check(
 );
 archive_check(
 	0 === preg_match( '/worker-runner|class\s+GHCA_ACD_[A-Za-z0-9_]*Worker_Runner\b|class-[^\r\n\/]*(?:reset|capture|packet|verify)[^\r\n\/]*handler|class\s+GHCA_ACD_[A-Za-z0-9_]*(?:Reset|Capture|Packet|Verify)[A-Za-z0-9_]*Handler\b/i', $archive_sources . "\n" . implode( "\n", $archive_paths ) )
-		&& is_string( $entrypoint ) && 0 === preg_match( '/archive/i', $entrypoint ),
+		&& is_string( $entrypoint )
+		&& 1 === substr_count( $entrypoint, "require_once __DIR__ . '/includes/archive/bootstrap.php';" ),
 	'P3B1-BOUNDARY-NO-DEFERRED-HANDLER-OR-RUNNER keeps reset, capture, packet, verify, runner, and runtime activation paths disabled'
 );
 archive_check(
@@ -106,9 +110,11 @@ archive_check(
 	'P3B2A-NO-CURRENT-SITE-ACCESS adds no current-site bootstrap, global database handle, or credential source'
 );
 archive_check(
-	0 === preg_match( '/\b(?:add_action|add_filter|register_activation_hook|register_deactivation_hook|wp_schedule_event|wp_schedule_single_event|register_rest_route)\s*\(|\bWP_CLI\s*::/i', $archive_sources )
-		&& is_string( $entrypoint ) && 0 === preg_match( '/archive/i', $entrypoint ),
-	'P3B2A-NO-RUNTIME-WIRING adds no entrypoint, hook, scheduler, controller, CLI, or activation composition'
+	0 === preg_match( '/\b(?:add_action|add_filter|register_activation_hook|register_deactivation_hook|wp_schedule_event|wp_schedule_single_event|register_rest_route)\s*\(/i', $archive_sources )
+		&& 1 === substr_count( $archive_sources, 'WP_CLI::add_command' )
+		&& is_string( $entrypoint )
+		&& 1 === substr_count( $entrypoint, "require_once __DIR__ . '/includes/archive/bootstrap.php';" ),
+	'P3B3-LOAD-DARK-REGISTERS-NO-ACTIVE-SURFACE adds only the fail-closed bootstrap and no hook, scheduler, controller, CLI, or activation registration'
 );
 
 $p3b2b_paths = array_values( array_filter( $archive_paths, static function ( string $path ): bool {
@@ -131,6 +137,34 @@ archive_check(
 	0 === preg_match( '/\b(?:get_option|switch_to_blog|wp_remote_|DB_(?:NAME|USER|PASSWORD|HOST))\b|global\s+\$wpdb/i', $archive_sources )
 		&& 0 === preg_match( '/\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|TRUNCATE)\b/i', file_get_contents( $archive_root . '/infrastructure/class-learndash-archive-evidence-source.php' ) ),
 	'P3B2B-NO-RUNTIME-DISCOVERY-OR-SOURCE-MUTATION keeps source configuration injected and evidence reads dark'
+);
+
+$p3b3_runtime_paths = array_values( array_filter( $archive_paths, static function ( string $path ): bool {
+	return false !== stripos( basename( $path ), 'archive-module' )
+		|| false !== stripos( basename( $path ), 'archive-code-version-attestor' )
+		|| false !== stripos( basename( $path ), 'wordpress-archive-runtime-descriptor' )
+		|| false !== stripos( basename( $path ), 'system-archive-clock' )
+		|| false !== stripos( basename( $path ), 'random-archive-id-generator' )
+		|| 'bootstrap.php' === strtolower( basename( $path ) );
+} ) );
+sort( $p3b3_runtime_paths, SORT_STRING );
+$allowed_p3b3_runtime_paths = array(
+	str_replace( '\\', '/', $archive_root . '/bootstrap.php' ),
+	str_replace( '\\', '/', $archive_root . '/class-archive-module.php' ),
+	str_replace( '\\', '/', $archive_root . '/infrastructure/class-archive-code-version-attestor.php' ),
+	str_replace( '\\', '/', $archive_root . '/infrastructure/class-random-archive-id-generator.php' ),
+	str_replace( '\\', '/', $archive_root . '/infrastructure/class-system-archive-clock.php' ),
+	str_replace( '\\', '/', $archive_root . '/infrastructure/class-wordpress-archive-runtime-descriptor.php' ),
+);
+sort( $allowed_p3b3_runtime_paths, SORT_STRING );
+archive_check(
+	$allowed_p3b3_runtime_paths === $p3b3_runtime_paths,
+	'P3B3-BOUNDARY-ONLY-APPROVED-RUNTIME-FILES permits only the approved constructed-dark runtime files'
+);
+archive_check(
+	0 === preg_match( '/\b(?:register_rest_route|wp_schedule_event|wp_schedule_single_event|as_enqueue_async_action|as_schedule_single_action)\s*\(/i', $archive_sources )
+		&& 1 === substr_count( $archive_sources, "WP_CLI::add_command( self::WORKER_COMMAND, array( \$this, 'cli_run' ) );" ),
+	'P3B3-NO-REST-ADMIN-AJAX-WPCRON-ACTION-SCHEDULER-OR-CONTROLLER keeps only the dormant approved CLI callback'
 );
 
 archive_finish();

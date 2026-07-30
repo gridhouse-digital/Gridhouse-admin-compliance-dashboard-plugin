@@ -67,7 +67,11 @@ foreach ($runtime in $php_versions) {
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2a-evidence-concurrency.php",
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2b-evidence-source.php",
             "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2b-evidence-source-persistence.php",
-            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2b-evidence-source-concurrency.php"
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b2b-evidence-source-concurrency.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b3-runtime-composition.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b3-activation-gates.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b3-worker-runtime.php",
+            "c:\laragon\www\Gridhouse-Healthcare-Academy\wp-content\plugins\gridhouse-admin-compliance-dashboard\tests\archive\test-p3b3-multisite.php"
         )
         foreach ($suite in $suites) {
             & $php $suite
@@ -87,4 +91,4 @@ foreach ($runtime in $php_versions) {
 }
 
 $results | Format-Table -AutoSize
-Write-Host "ALL $($results.Count) P1/P2/P3A/P3B1/P3B2a/P3B2b MATRIX CELLS PASSED"
+Write-Host "ALL $($results.Count) P1/P2/P3A/P3B1/P3B2a/P3B2b/P3B3 MATRIX CELLS PASSED"

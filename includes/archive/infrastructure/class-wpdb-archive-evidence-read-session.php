@@ -102,7 +102,7 @@ final class GHCA_ACD_WPDB_Archive_Evidence_Read_Session {
 			|| ! is_int( $descriptor['blog_id'] ) || $descriptor['blog_id'] < 1
 			|| ! is_string( $descriptor['site_id'] )
 			|| ! is_string( $descriptor['tenant_id'] ) || 1 !== preg_match( '/^[a-f0-9]{32}$/', $descriptor['tenant_id'] )
-			|| ! is_string( $expected_connection['current_user'] ) || '' === $expected_connection['current_user']
+			|| ! $this->valid_unquoted_account( $expected_connection['current_user'] )
 			|| ! is_int( $expected_connection['archive_connection_id'] ) || $expected_connection['archive_connection_id'] < 1 ) {
 			$this->unsupported();
 		}
@@ -251,36 +251,40 @@ final class GHCA_ACD_WPDB_Archive_Evidence_Read_Session {
 			$this->unsupported();
 		}
 		$grant_rows = $this->rows( 'SHOW GRANTS FOR CURRENT_USER()', $checkpoint, 'source_preflight' );
-		$account = null;
+		$quoted_user = null;
+		$quoted_host = null;
 		$usage_grant = false;
-		$select_grant = false;
-		$account_pattern = '(`(?:``|[^`])*`@`(?:``|[^`])*`)';
+		$select_grants = array();
+		$account_pattern = '`((?:``|[^`])*)`@`((?:``|[^`])*)`';
 		$usage_pattern = '/^GRANT USAGE ON \*\.\* TO ' . $account_pattern . "(?: IDENTIFIED BY PASSWORD '\\*[A-F0-9]{40}')?$/D";
-		$select_pattern = '/^GRANT SELECT ON `' . preg_quote( $this->descriptor['source_database'], '/' ) . '`\.\* TO ' . $account_pattern . '$/D';
+		$select_pattern = '/^GRANT SELECT ON `' . preg_quote( $this->descriptor['source_database'], '/' ) . '`\.`([A-Za-z_][A-Za-z0-9_]*)` TO ' . $account_pattern . '$/D';
+		$expected_tables = $this->physical_tables();
 		foreach ( $grant_rows as $grant_row ) {
 			if ( 1 !== count( $grant_row ) ) {
 				$this->unsupported();
 			}
 			$grant = (string) reset( $grant_row );
 			if ( preg_match( $usage_pattern, $grant, $match ) ) {
-				if ( $usage_grant || null !== $account && $account !== $match[1] ) {
+				if ( $usage_grant ) {
 					$this->unsupported();
 				}
 				$usage_grant = true;
-				$account = $match[1];
+				$this->assert_grant_account( $match[1], $match[2], $quoted_user, $quoted_host );
 				continue;
 			}
 			if ( preg_match( $select_pattern, $grant, $match ) ) {
-				if ( $select_grant || null !== $account && $account !== $match[1] ) {
+				$table = $match[1];
+				if ( ! in_array( $table, $expected_tables, true ) || isset( $select_grants[ $table ] ) ) {
 					$this->unsupported();
 				}
-				$select_grant = true;
-				$account = $match[1];
+				$this->assert_grant_account( $match[2], $match[3], $quoted_user, $quoted_host );
+				$select_grants[ $table ] = true;
 				continue;
 			}
 			$this->unsupported();
 		}
-		if ( 2 !== count( $grant_rows ) || ! $usage_grant || ! $select_grant ) {
+		if ( 8 !== count( $grant_rows ) || ! $usage_grant
+			|| array() !== array_diff( $expected_tables, array_keys( $select_grants ) ) ) {
 			$this->unsupported();
 		}
 
@@ -882,6 +886,42 @@ final class GHCA_ACD_WPDB_Archive_Evidence_Read_Session {
 	private function assert_identifier( $value, int $maximum ): void {
 		if ( ! is_string( $value ) || strlen( $value ) > $maximum
 			|| 1 !== preg_match( '/^[A-Za-z_][A-Za-z0-9_]*$/D', $value ) ) {
+			$this->unsupported();
+		}
+	}
+
+	/** @param mixed $value */
+	private function valid_unquoted_account( $value ): bool {
+		if ( ! is_string( $value ) || strlen( $value ) < 3 || strlen( $value ) > 384
+			|| 1 !== substr_count( $value, '@' ) || 1 === preg_match( '/[\x00-\x1F\x7F]/', $value ) ) {
+			return false;
+		}
+		list( $user, $host ) = explode( '@', $value, 2 );
+		return '' !== $user && '' !== $host;
+	}
+
+	/**
+	 * @param string|null $expected_user
+	 * @param string|null $expected_host
+	 */
+	private function assert_grant_account( string $quoted_user, string $quoted_host, &$expected_user, &$expected_host ): void {
+		$user = str_replace( '``', '`', $quoted_user );
+		$host = str_replace( '``', '`', $quoted_host );
+		if ( '' === $user || '' === $host
+			|| str_replace( '`', '``', $user ) !== $quoted_user
+			|| str_replace( '`', '``', $host ) !== $quoted_host
+			|| false !== strpos( $user, '@' ) || false !== strpos( $host, '@' )
+			|| 1 === preg_match( '/[\x00-\x1F\x7F]/', $user . $host )
+			|| ! $this->valid_unquoted_account( $user . '@' . $host )
+			|| $user . '@' . $host !== $this->expected_connection['current_user'] ) {
+			$this->unsupported();
+		}
+		if ( null === $expected_user ) {
+			$expected_user = $quoted_user;
+			$expected_host = $quoted_host;
+			return;
+		}
+		if ( $expected_user !== $quoted_user || $expected_host !== $quoted_host ) {
 			$this->unsupported();
 		}
 	}

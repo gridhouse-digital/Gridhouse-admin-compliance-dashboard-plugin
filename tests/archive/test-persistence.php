@@ -1106,7 +1106,9 @@ archive_check( $immutable, 'PERSIST-APPEND-ONLY committed event rows remain byte
 // PERSIST-NO-RUNTIME-WIRING
 // ---------------------------------------------------------------------------
 $entrypoint = file_get_contents( dirname( __DIR__, 2 ) . '/gridhouse-admin-compliance-dashboard.php' );
-archive_check( false === stripos( $entrypoint, 'archive' ), 'PERSIST-NO-RUNTIME-WIRING the plugin entrypoint contains zero archive references' );
+$archive_bootstrap_require = "require_once __DIR__ . '/includes/archive/bootstrap.php';";
+$entrypoint_without_archive_bootstrap = str_replace( $archive_bootstrap_require, '', $entrypoint );
+archive_check( 1 === substr_count( $entrypoint, $archive_bootstrap_require ) && 0 === preg_match( '/archive/i', $entrypoint_without_archive_bootstrap ), 'PERSIST-NO-RUNTIME-WIRING the plugin entrypoint contains only the exact constructed-dark archive bootstrap reference' );
 $wiring_hits = array();
 foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $archive_dir ) ) as $file ) {
 	if ( ! $file->isFile() || substr( $file->getFilename(), -4 ) !== '.php' ) {

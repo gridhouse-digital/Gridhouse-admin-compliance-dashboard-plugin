@@ -26,6 +26,8 @@ final class GHCA_P3B2B_Scripted_Source_DB {
 	public $table_engine = 'InnoDB';
 	/** @var array<int,array<string,mixed>>|null */
 	public $grants;
+	/** @var string */
+	public $authenticated_user = 'ghca_source@%';
 	/** @var string|null */
 	public $fail_results_containing;
 	/** @var string|null */
@@ -63,17 +65,23 @@ final class GHCA_P3B2B_Scripted_Source_DB {
 		if ( false !== strpos( $sql, 'CONNECTION_ID()' ) ) {
 			return array( array(
 				'connection_id' => '12',
-				'authenticated_user' => 'ghca_source@%',
+				'authenticated_user' => $this->authenticated_user,
 				'database_name' => 'ghca_acd_archive_test_unit_source',
 				'session_time_zone' => '+00:00',
 				'connection_charset' => 'utf8mb4',
 			) );
 		}
 		if ( false !== strpos( $sql, 'SHOW GRANTS FOR CURRENT_USER()' ) ) {
-			return $this->grants ?? array(
-				array( 'grant' => 'GRANT USAGE ON *.* TO `ghca_source`@`%`' ),
-				array( 'grant' => 'GRANT SELECT ON `ghca_acd_archive_test_unit_source`.* TO `ghca_source`@`%`' ),
-			);
+			if ( null !== $this->grants ) {
+				return $this->grants;
+			}
+			$grants = array( array( 'grant' => 'GRANT USAGE ON *.* TO `ghca_source`@`%`' ) );
+			foreach ( $this->tables as $table ) {
+				$grants[] = array(
+					'grant' => 'GRANT SELECT ON `ghca_acd_archive_test_unit_source`.`' . $table . '` TO `ghca_source`@`%`',
+				);
+			}
+			return $grants;
 		}
 		if ( false !== strpos( $sql, 'information_schema.tables' ) ) {
 			$rows = array();
@@ -462,11 +470,11 @@ function p3b2b_multi_course_identity(): array {
 	return $identity;
 }
 
-function p3b2b_session( GHCA_P3B2B_Scripted_Source_DB $db, ?callable $monotonic = null ): GHCA_ACD_WPDB_Archive_Evidence_Read_Session {
+function p3b2b_session( GHCA_P3B2B_Scripted_Source_DB $db, ?callable $monotonic = null, string $current_user = 'ghca_source@%' ): GHCA_ACD_WPDB_Archive_Evidence_Read_Session {
 	return new GHCA_ACD_WPDB_Archive_Evidence_Read_Session(
 		$db,
 		p3b2b_descriptor(),
-		array( 'archive_connection_id' => 99, 'current_user' => 'ghca_source@%' ),
+		array( 'archive_connection_id' => 99, 'current_user' => $current_user ),
 		array( 'wp_ghca_acd_archive_events' ),
 		$monotonic
 	);
@@ -986,7 +994,46 @@ foreach ( $grant_cases as $grants ) {
 }
 archive_check(
 	$grants_rejected,
-	'P3B2B-EXACT-USAGE-AND-SOURCE-SELECT-GRANTS-ONLY rejects combined, cross-database, table-level, and grant-option privileges'
+	'P3B2B-EXACT-USAGE-AND-SEVEN-TABLE-SELECT-GRANTS-ONLY rejects combined, cross-database, incomplete-table, and grant-option privileges'
+);
+
+$escaped_db = new GHCA_P3B2B_Scripted_Source_DB( p3b2b_fixture(), p3b2b_tables() );
+$escaped_db->authenticated_user = 'ghca`source@%';
+$escaped_db->grants = array( array( 'grant' => 'GRANT USAGE ON *.* TO `ghca``source`@`%`' ) );
+foreach ( p3b2b_tables() as $escaped_table ) {
+	$escaped_db->grants[] = array(
+		'grant' => 'GRANT SELECT ON `ghca_acd_archive_test_unit_source`.`' . $escaped_table . '` TO `ghca``source`@`%`',
+	);
+}
+$escaped_source = new GHCA_ACD_LearnDash_Archive_Evidence_Source(
+	p3b2b_session( $escaped_db, null, 'ghca`source@%' ),
+	p3b2b_versions()
+);
+$escaped_accepted = is_array( $escaped_source->read_consistent_evidence(
+	p3b2b_identity(),
+	array( 'maximum_queries' => 32, 'maximum_rows' => 10000, 'maximum_transaction_milliseconds' => 2000 ),
+	static function (): void {}
+) ) && $escaped_db->closed;
+$representation_db = new GHCA_P3B2B_Scripted_Source_DB( p3b2b_fixture(), p3b2b_tables() );
+$representation_source = new GHCA_ACD_LearnDash_Archive_Evidence_Source(
+	p3b2b_session( $representation_db, null, '`ghca_source`@`%`' ),
+	p3b2b_versions()
+);
+$representation_rejected = p3b2b_failure(
+	static function () use ( $representation_source ): void {
+		$representation_source->read_consistent_evidence(
+			p3b2b_identity(),
+			array( 'maximum_queries' => 32, 'maximum_rows' => 10000, 'maximum_transaction_milliseconds' => 2000 ),
+			static function (): void {}
+		);
+	},
+	'operational_blocked',
+	'archive_source_schema_unsupported',
+	'source_preflight'
+) && $representation_db->closed;
+archive_check(
+	$escaped_accepted && $representation_rejected,
+	'P3B3-SOURCE-ACCOUNT-UNQUOTED-CURRENT-USER-DECODED-ESCAPED-GRANT-EQUIVALENCE-AND-REPRESENTATION-MISMATCH proves normalized account authority'
 );
 
 $preflight_failures = true;

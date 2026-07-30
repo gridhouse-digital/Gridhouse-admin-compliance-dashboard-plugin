@@ -507,7 +507,9 @@ $production_text = '';
 foreach ( $production_files as $file ) {
 	$production_text .= file_get_contents( $file ) . "\n";
 }
-archive_check( 0 === preg_match( '/archive/i', $entrypoint ) && 0 === preg_match( '/\b(?:add_action|add_filter|register_activation_hook|wp_schedule_event)\s*\(/', $production_text ), 'SIDE-NO-RUNTIME-WIRING no entrypoint reference, hook, worker, cron, or activation wiring exists' );
+$archive_bootstrap_require = "require_once __DIR__ . '/includes/archive/bootstrap.php';";
+$entrypoint_without_archive_bootstrap = str_replace( $archive_bootstrap_require, '', $entrypoint );
+archive_check( 1 === substr_count( $entrypoint, $archive_bootstrap_require ) && 0 === preg_match( '/archive/i', $entrypoint_without_archive_bootstrap ) && 0 === preg_match( '/\b(?:add_action|add_filter|register_activation_hook|wp_schedule_event)\s*\(/', $production_text ), 'SIDE-NO-RUNTIME-WIRING only the exact constructed-dark entrypoint bootstrap exists; no hook, worker, cron, or activation wiring exists' );
 $snapshot_methods = get_class_methods( 'GHCA_ACD_WPDB_Archive_Snapshot_Store' );
 $artifact_methods = get_class_methods( 'GHCA_ACD_WPDB_Archive_Artifact_Repository' );
 archive_check(
