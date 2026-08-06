@@ -2,6 +2,9 @@
 
 /** WordPress/LearnDash/dashboard evidence mapping frozen as learndash-local/1.0.0. */
 final class GHCA_ACD_LearnDash_Archive_Evidence_Source implements GHCA_ACD_Archive_Evidence_Source {
+	public const CALCULATION_POLICY_KEY = 'time-independent';
+	public const CALCULATION_POLICY_VERSION = 1;
+
 	private const VERSION_DESCRIPTOR = array(
 		'learndash_version' => '5.1.6.1',
 		'plugin_version' => '1.2.0',
@@ -39,9 +42,34 @@ final class GHCA_ACD_LearnDash_Archive_Evidence_Source implements GHCA_ACD_Archi
 	public function read_consistent_evidence( array $capture_identity, array $limits, callable $checkpoint ): array {
 		$raw = $this->session->read( $capture_identity, $limits, $checkpoint );
 		$checkpoint();
-		$document = $this->normalize( $raw, $capture_identity );
+		$document = $this->normalize( $raw, $capture_identity, true );
 		$checkpoint();
 		return ( new GHCA_ACD_Archive_Evidence_Result_Validator() )->validate( $document, $capture_identity );
+	}
+
+	/**
+	 * @param array<string,mixed> $review_identity
+	 * @param array<string,int> $limits
+	 * @return array<string,mixed>
+	 */
+	public function read_consistent_review_evidence( array $review_identity, array $limits, callable $checkpoint ): array {
+		$actual = array_keys( $review_identity );
+		$expected = array( 'case_key', 'resolved_cycle' );
+		sort( $actual, SORT_STRING );
+		if ( $actual !== $expected || ! is_array( $review_identity['case_key'] ) || ! is_array( $review_identity['resolved_cycle'] ) ) {
+			$this->binding();
+		}
+		$raw = $this->session->read( $review_identity, $limits, $checkpoint );
+		$checkpoint();
+		$document = $this->normalize( $raw, $review_identity, false );
+		$checkpoint();
+		GHCA_ACD_Archive_Canonical_JSON::encode( $document );
+		return GHCA_ACD_Archive_Canonical_JSON::detach( $document );
+	}
+
+	/** @param array<string,int> $limits */
+	public function preflight( array $limits, callable $checkpoint ): void {
+		$this->session->preflight_only( $limits, $checkpoint );
 	}
 
 	/**
@@ -49,7 +77,7 @@ final class GHCA_ACD_LearnDash_Archive_Evidence_Source implements GHCA_ACD_Archi
 	 * @param array<string,mixed> $identity
 	 * @return array<string,mixed>
 	 */
-	private function normalize( array $raw, array $identity ): array {
+	private function normalize( array $raw, array $identity, bool $require_policy_digest ): array {
 		$this->exact( $raw, array(
 			'activities', 'activity_meta', 'certificates', 'configured_group_ids', 'courses',
 			'effective_group_ids', 'groups', 'options', 'postmeta', 'query_count', 'user', 'usermeta',
@@ -194,7 +222,7 @@ final class GHCA_ACD_LearnDash_Archive_Evidence_Source implements GHCA_ACD_Archi
 			'sha256',
 			"ghca-archive-policy-v1\n" . GHCA_ACD_Archive_Canonical_JSON::encode( $policy_constituent )
 		);
-		if ( ! isset( $identity['policy_digest'] ) || $policy_digest !== $identity['policy_digest'] ) {
+		if ( $require_policy_digest && ( ! isset( $identity['policy_digest'] ) || $policy_digest !== $identity['policy_digest'] ) ) {
 			$this->binding();
 		}
 
@@ -525,7 +553,7 @@ final class GHCA_ACD_LearnDash_Archive_Evidence_Source implements GHCA_ACD_Archi
 		}
 		unset( $members );
 		return array(
-			'calculation_version' => 1,
+			'calculation_version' => self::CALCULATION_POLICY_VERSION,
 			'categories' => array() === $category_members
 				? GHCA_ACD_Archive_Empty_Object::instance()
 				: GHCA_ACD_Archive_Canonical_Object::from_members( $category_members ),

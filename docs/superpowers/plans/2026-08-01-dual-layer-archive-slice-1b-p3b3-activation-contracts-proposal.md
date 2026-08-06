@@ -961,3 +961,30 @@ The exact recorded approval is:
 **Approve P3B3 Activation Decisions A01-A20 as written. This approval authorizes documentation of the contracts only; it does not authorize implementation, current-site access, controlled testing, or production activation.**
 
 Status: activation-contract decisions formally approved for documentation only. A separate explicit authorization remains required before implementing the A18 allowlist, accessing the current site, conducting controlled testing, or activating production behavior.
+
+## 12. Owner-approved A18 implementation amendment (2026-08-03)
+
+The owner separately authorized the constructed-dark A18 implementation and disposable verification. This implementation authorization does not authorize current-site access, controlled testing, feature activation, deployment, or production operation.
+
+The A18 allowlist is amended to add:
+
+- `includes/archive/contracts/class-archive-evidence-source.php`;
+- `includes/archive/infrastructure/class-learndash-archive-evidence-source.php`;
+- `includes/archive/infrastructure/class-wpdb-archive-evidence-read-session.php`; and
+- `tests/archive/test-p3b2a-evidence-persistence.php`, solely for the two retained fake evidence-source implementations to satisfy the amended interface without changing retained behavior, fixtures, assertions, documents, or digests.
+
+The amendment authorizes one separate review-read operation and one source-level preflight operation on the existing evidence-source contract. Review derives the policy digest from the normalized E07 policy constituent and rejects caller policy authority. Capture continues to require and compare the retained command policy digest. Both paths use the same adapter, read session, physical mapping, normalization, calculation, canonical JSON, limits, version descriptor, and E08 digest domain.
+
+The read-session preflight-only entry point reuses the existing identity, `CURRENT_USER()`, exact-grant, table, column, and index validation; starts no evidence transaction; executes no B05 data query or mutation; always closes; preserves checkpoint throwables after cleanup; retains cleanup-failure priority; and rejects closed-session reuse.
+
+All earlier deferrals and activation boundaries remain unchanged. Implementation status: complete within the amended constructed-dark A18 allowlist and ready for formal re-review; not self-accepted, formally accepted, or activated.
+
+## 13. Formal-review remediation record (2026-08-03)
+
+The constructed-dark implementation now enforces the frozen, non-configurable calculation policy directly from the production LearnDash evidence-source code: key `time-independent`, version integer `1`. Both preflight and admission reject any missing or different production policy as `blocked / archive_runtime_calculation_policy_unapproved / calculation` before source construction, evidence reads, or task claiming.
+
+The 122 approved A01-A20 names are evidence requirements, not 122 executable assertions. The test-owned closed manifest now classifies each unique name exactly once as `EXECUTED_PASS` (53), `RETAINED_PASS` (22), or `DEFERRED_OPERATOR_EVIDENCE` (47). Deferred operator evidence is not emitted or counted as a passing assertion. The activation-contract suite contains 26 executable checks, including the manifest-integrity check.
+
+Disposable-database coverage now exercises the public `read_consistent_review_evidence()` path on the real LearnDash adapter and a separately composed capture path. It proves byte-identical E07 documents and E08 digests without mutation, the accepted fenced source-drift decision after a controlled second-connection mutation, and exact checkpoint cancellation with source-session cleanup and no lifecycle residue.
+
+These remediations do not authorize current-site access, controlled testing, feature activation, deployment, or production operation. Status remains ready for formal re-review, not self-accepted.

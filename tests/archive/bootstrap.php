@@ -48,6 +48,7 @@ $archive_files = array(
 	'/application/class-archive-evidence-snapshot-preparer.php',
 	'/application/class-archive-ledger-materializer.php',
 	'/application/class-archive-unit-of-work.php',
+	'/application/class-archive-review-intake.php',
 	'/application/class-archive-build-coordinator.php',
 	'/application/class-archive-evidence-task-handler.php',
 	'/application/class-archive-ledger-task-handler.php',

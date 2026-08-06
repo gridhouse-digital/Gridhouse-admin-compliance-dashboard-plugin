@@ -9,4 +9,20 @@ interface GHCA_ACD_Archive_Evidence_Source {
 	 * @return array<string,mixed>
 	 */
 	public function read_consistent_evidence( array $capture_identity, array $limits, callable $checkpoint ): array;
+
+	/**
+	 * @param array<string,mixed> $review_identity
+	 * @param array<string,int> $limits
+	 * @param callable $checkpoint Fenced heartbeat/cancellation checkpoint.
+	 * @return array<string,mixed>
+	 */
+	public function read_consistent_review_evidence( array $review_identity, array $limits, callable $checkpoint ): array;
+
+	/**
+	 * Validate the isolated source connection without reading evidence data.
+	 *
+	 * @param array<string,int> $limits
+	 * @param callable $checkpoint Fenced heartbeat/cancellation checkpoint.
+	 */
+	public function preflight( array $limits, callable $checkpoint ): void;
 }

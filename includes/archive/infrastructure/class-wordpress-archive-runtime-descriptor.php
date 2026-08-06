@@ -27,17 +27,33 @@ final class GHCA_ACD_WordPress_Archive_Runtime_Descriptor {
 
 	/** @var object */
 	private $db;
+	/** @var GHCA_ACD_Archive_Clock */
+	private $clock;
+	/** @var callable */
+	private $free_space;
 
 	/** @param object $db */
-	public function __construct( $db ) {
+	public function __construct( $db, ?GHCA_ACD_Archive_Clock $clock = null, ?callable $free_space = null ) {
 		if ( ! is_object( $db ) ) {
 			$this->fail( 'archive_runtime_tenant_invalid' );
 		}
 		$this->db = $db;
+		$this->clock = $clock ?: new GHCA_ACD_System_Archive_Clock();
+		$this->free_space = $free_space ?: 'disk_free_space';
 	}
 
 	/** @return array<string,mixed> */
 	public function resolve(): array {
+		return $this->resolve_for_flags( '1' );
+	}
+
+	/** Resolve the code-enforceable activation gates while both flags remain off. */
+	public function preflight(): array {
+		return $this->resolve_for_flags( '0' );
+	}
+
+	/** @return array<string,mixed> */
+	private function resolve_for_flags( string $expected_flag ): array {
 		$mode = defined( 'GHCA_ACD_ARCHIVE_RUNTIME_MODE' ) ? GHCA_ACD_ARCHIVE_RUNTIME_MODE : null;
 		if ( ! in_array( $mode, array( 'controlled_testing', 'production' ), true ) ) {
 			$this->fail( 'archive_runtime_disabled' );
@@ -45,8 +61,8 @@ final class GHCA_ACD_WordPress_Archive_Runtime_Descriptor {
 		$site = $this->site_binding();
 		$options = $this->option_rows( $site['options_table'] );
 		$this->assert_flag( $options, 'ghca_acd_archive_schema_version', GHCA_ACD_Archive_Schema::CURRENT_VERSION );
-		$this->assert_flag( $options, 'ghca_acd_archive_enabled', '1' );
-		$this->assert_flag( $options, 'ghca_acd_archive_dual_layer', '1' );
+		$this->assert_flag( $options, 'ghca_acd_archive_enabled', $expected_flag );
+		$this->assert_flag( $options, 'ghca_acd_archive_dual_layer', $expected_flag );
 		if ( isset( $options['ghca_acd_archive_reset_enabled'] ) ) {
 			$this->assert_flag( $options, 'ghca_acd_archive_reset_enabled', '0' );
 		}
@@ -61,7 +77,8 @@ final class GHCA_ACD_WordPress_Archive_Runtime_Descriptor {
 
 		$archive_identity = $this->archive_identity();
 		$source = $this->source_configuration( $archive_identity );
-		$storage = $this->storage_configuration();
+		$storage = $this->storage_configuration( $mode );
+		$this->assert_authorization( $site, $mode, $storage );
 		$descriptor = array(
 			'base_prefix' => $site['base_prefix'],
 			'blog_id' => $site['blog_id'],
@@ -314,7 +331,7 @@ final class GHCA_ACD_WordPress_Archive_Runtime_Descriptor {
 	}
 
 	/** @return array<string,mixed> */
-	private function storage_configuration(): array {
+	private function storage_configuration( string $mode ): array {
 		foreach ( array(
 			'private_root' => 'GHCA_ACD_ARCHIVE_PRIVATE_DIR',
 			'public_root' => 'GHCA_ACD_ARCHIVE_PUBLIC_DOCUMENT_ROOT',
@@ -335,6 +352,7 @@ final class GHCA_ACD_WordPress_Archive_Runtime_Descriptor {
 		$wordpress_root = false === $content_root ? false : realpath( dirname( $content_root ) );
 		if ( false === $private || false === $public || false === $wordpress_root
 			|| is_link( $values['private_root'] ) || is_link( $values['public_root'] )
+			|| ! is_dir( $private ) || ! is_readable( $private ) || ! is_writable( $private )
 			|| ! $this->contained( $wordpress_root, $public )
 			|| $this->overlaps( $private, $public ) ) {
 			$this->fail( 'archive_runtime_storage_invalid' );
@@ -346,11 +364,129 @@ final class GHCA_ACD_WordPress_Archive_Runtime_Descriptor {
 			}
 			$public_roots[] = $content_root;
 		}
+		if ( '\\' !== DIRECTORY_SEPARATOR ) {
+			$permissions = fileperms( $private );
+			if ( false === $permissions || 0 !== ( $permissions & 0077 ) ) {
+				$this->fail( 'archive_runtime_storage_invalid' );
+			}
+		}
+		$this->assert_storage_capacity( $mode, $private );
 		return array(
 			'cursor_key' => $values['cursor_key'],
 			'private_root' => $private,
 			'public_roots' => $public_roots,
 		);
+	}
+
+	private function assert_storage_capacity( string $mode, string $private ): void {
+		if ( 'controlled_testing' !== $mode ) {
+			return;
+		}
+		$free = call_user_func( $this->free_space, $private );
+		if ( ( ! is_int( $free ) && ! is_float( $free ) ) || $free < 1090519040 ) {
+			$this->fail( 'archive_runtime_storage_invalid' );
+		}
+	}
+
+	/** @param array<string,mixed> $site @param array<string,mixed> $storage */
+	private function assert_authorization( array $site, string $mode, array $storage ): void {
+		if ( ! defined( 'GHCA_ACD_ARCHIVE_ACTIVATION_AUTHORIZATION_FILE' )
+			|| ! is_string( GHCA_ACD_ARCHIVE_ACTIVATION_AUTHORIZATION_FILE )
+			|| '' === GHCA_ACD_ARCHIVE_ACTIVATION_AUTHORIZATION_FILE ) {
+			$this->fail( 'archive_runtime_activation_blocked' );
+		}
+		$declared = GHCA_ACD_ARCHIVE_ACTIVATION_AUTHORIZATION_FILE;
+		$resolved = realpath( $declared );
+		$plugin = realpath( dirname( __DIR__, 3 ) );
+		$temp = realpath( sys_get_temp_dir() );
+		if ( false === $resolved || false === $plugin || ! $this->absolute_path( $declared )
+			|| $this->normalized_path( $resolved ) !== $this->normalized_path( $declared )
+			|| ! is_file( $resolved ) || is_link( $declared ) || $this->has_symlink_parent( $declared )
+			|| $this->overlaps( $resolved, $plugin ) || $this->overlaps( $resolved, $storage['private_root'] )
+			|| ( false !== $temp && $this->contained( $resolved, $temp ) ) ) {
+			$this->fail( 'archive_runtime_activation_blocked' );
+		}
+		foreach ( $storage['public_roots'] as $public_root ) {
+			if ( $this->contained( $resolved, $public_root ) ) {
+				$this->fail( 'archive_runtime_activation_blocked' );
+			}
+		}
+		if ( '\\' !== DIRECTORY_SEPARATOR ) {
+			$permissions = fileperms( $resolved );
+			if ( false === $permissions || 0 !== ( $permissions & 0137 ) ) {
+				$this->fail( 'archive_runtime_activation_blocked' );
+			}
+		}
+
+		$path_stat = @lstat( $resolved );
+		$handle = @fopen( $resolved, 'rb' );
+		if ( false === $handle ) {
+			$this->fail( 'archive_runtime_activation_blocked' );
+		}
+		$bytes = '';
+		try {
+			$opened_stat = fstat( $handle );
+			if ( ! $this->same_file_stat( $path_stat, $opened_stat ) ) {
+				$this->fail( 'archive_runtime_activation_blocked' );
+			}
+			while ( ! feof( $handle ) && strlen( $bytes ) <= 2048 ) {
+				$chunk = fread( $handle, 2049 - strlen( $bytes ) );
+				if ( false === $chunk ) {
+					$this->fail( 'archive_runtime_activation_blocked' );
+				}
+				$bytes .= $chunk;
+			}
+			if ( ! $this->same_file_stat( $opened_stat, @lstat( $resolved ) )
+				|| is_link( $declared ) || realpath( $declared ) !== $resolved ) {
+				$this->fail( 'archive_runtime_activation_blocked' );
+			}
+		} finally {
+			fclose( $handle );
+		}
+		if ( '' === $bytes || strlen( $bytes ) > 2048 || 0 === strncmp( $bytes, "\xEF\xBB\xBF", 3 )
+			|| 1 !== preg_match( '//u', $bytes ) ) {
+			$this->fail( 'archive_runtime_activation_blocked' );
+		}
+		try {
+			$document = GHCA_ACD_Archive_Canonical_JSON::decode_canonical_bounded( $bytes, 2048 );
+		} catch ( Throwable $error ) {
+			$this->fail( 'archive_runtime_activation_blocked' );
+		}
+		$keys = array(
+			'authorization_schema_version', 'blog_id', 'change_role_id', 'end_at_gmt', 'evidence_sha256',
+			'mode', 'operator_role_id', 'rollback_role_id', 'site_id', 'start_at_gmt',
+		);
+		if ( ! is_array( $document ) || array_keys( $document ) !== $keys
+			|| 1 !== $document['authorization_schema_version']
+			|| ! $this->positive_decimal( $document['blog_id'] ) || ! $this->positive_decimal( $document['site_id'] )
+			|| (string) $site['blog_id'] !== $document['blog_id'] || $site['site_id'] !== $document['site_id']
+			|| $mode !== $document['mode'] ) {
+			$this->fail( 'archive_runtime_activation_blocked' );
+		}
+		$roles = array( $document['change_role_id'], $document['operator_role_id'], $document['rollback_role_id'] );
+		foreach ( $roles as $role ) {
+			if ( ! is_string( $role ) || 1 !== preg_match( '/^[A-Z0-9][A-Z0-9._:-]{0,63}$/D', $role ) ) {
+				$this->fail( 'archive_runtime_activation_blocked' );
+			}
+		}
+		if ( 3 !== count( array_unique( $roles ) ) || ! $this->authorization_time( $document['start_at_gmt'] )
+			|| ! $this->authorization_time( $document['end_at_gmt'] ) ) {
+			$this->fail( 'archive_runtime_activation_blocked' );
+		}
+		$start = DateTimeImmutable::createFromFormat( '!Y-m-d\\TH:i:s.u\\Z', $document['start_at_gmt'], new DateTimeZone( 'UTC' ) );
+		$end = DateTimeImmutable::createFromFormat( '!Y-m-d\\TH:i:s.u\\Z', $document['end_at_gmt'], new DateTimeZone( 'UTC' ) );
+		$now = $this->clock->now_gmt();
+		if ( false === $start || false === $end || strcmp( $document['start_at_gmt'], $now ) > 0
+			|| strcmp( $now, $document['end_at_gmt'] ) >= 0 || $end->getTimestamp() <= $start->getTimestamp() ) {
+			$this->fail( 'archive_runtime_activation_blocked' );
+		}
+		$maximum = 'controlled_testing' === $mode ? 172800 : 86400;
+		if ( $end->getTimestamp() - $start->getTimestamp() > $maximum
+			|| ( 'controlled_testing' === $mode && null !== $document['evidence_sha256'] )
+			|| ( 'production' === $mode && ( ! is_string( $document['evidence_sha256'] )
+				|| 1 !== preg_match( '/^[a-f0-9]{64}$/D', $document['evidence_sha256'] ) ) ) ) {
+			$this->fail( 'archive_runtime_activation_blocked' );
+		}
 	}
 
 	/** @return array<int,string> */
@@ -413,6 +549,48 @@ final class GHCA_ACD_WordPress_Archive_Runtime_Descriptor {
 		}
 		list( $user, $host ) = explode( '@', $value, 2 );
 		return '' !== $user && '' !== $host;
+	}
+
+	/** @param mixed $value */
+	private function positive_decimal( $value ): bool {
+		return is_string( $value ) && 1 === preg_match( '/^[1-9][0-9]{0,19}$/D', $value );
+	}
+
+	/** @param mixed $value */
+	private function authorization_time( $value ): bool {
+		if ( ! is_string( $value ) || 1 !== preg_match( '/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.000000Z$/D', $value ) ) {
+			return false;
+		}
+		$time = DateTimeImmutable::createFromFormat( '!Y-m-d\\TH:i:s.u\\Z', $value, new DateTimeZone( 'UTC' ) );
+		return false !== $time && $time->format( 'Y-m-d\\TH:i:s.u\\Z' ) === $value;
+	}
+
+	private function absolute_path( string $path ): bool {
+		return 1 === preg_match( '/^[A-Za-z]:[\\\\\/]/D', $path ) || 0 === strpos( $path, '/' );
+	}
+
+	private function has_symlink_parent( string $path ): bool {
+		$parent = dirname( $path );
+		while ( $parent !== dirname( $parent ) ) {
+			if ( is_link( $parent ) ) {
+				return true;
+			}
+			$parent = dirname( $parent );
+		}
+		return is_link( $parent );
+	}
+
+	/** @param array<string,mixed>|false $left @param array<string,mixed>|false $right */
+	private function same_file_stat( $left, $right ): bool {
+		if ( ! is_array( $left ) || ! is_array( $right ) ) {
+			return false;
+		}
+		foreach ( array( 'dev', 'ino', 'mode', 'nlink', 'size', 'mtime', 'ctime' ) as $field ) {
+			if ( ! array_key_exists( $field, $left ) || ! array_key_exists( $field, $right ) || $left[ $field ] !== $right[ $field ] ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private function quote( string $identifier ): string {

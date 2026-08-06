@@ -20,9 +20,10 @@ $entrypoint_source = file_get_contents( $plugin_root . '/gridhouse-admin-complia
 preg_match_all( "/^\t'([^']+\\.php)',$/m", $bootstrap_source, $manifest_matches );
 $manifest = $manifest_matches[1] ?? array();
 archive_check(
-	55 === count( $manifest )
-		&& 55 === count( array_unique( $manifest ) )
-		&& 'd2b3b45a3e421f3565e651348acac496805a349e272eae2b64aa9bee4570b094' === hash( 'sha256', implode( "\n", $manifest ) ),
+	56 === count( $manifest )
+		&& 56 === count( array_unique( $manifest ) )
+		&& 'b39c21168cb7585c4a2a115ec4ad5359466ea2d63fdddeb86fdea9de81114a11' === hash( 'sha256', implode( "\n", $manifest ) )
+		&& in_array( 'application/class-archive-review-intake.php', $manifest, true ),
 	'P3B3-BOOTSTRAP-LITERAL-55-FILE-MANIFEST-AND-DIGEST freezes the exact validated loader'
 );
 archive_check(
@@ -36,7 +37,7 @@ archive_check(
 	false !== strpos( $bootstrap_source, 'array_unique' )
 		&& false !== strpos( $bootstrap_source, "strpos( \$ghca_archive_relative, '\\\\'" )
 		&& false !== strpos( $bootstrap_source, '\\.{1,2}' )
-		&& false !== strpos( $bootstrap_source, '55 !== count' ),
+		&& false !== strpos( $bootstrap_source, '56 !== count' ),
 	'P3B3-BOOTSTRAP-MISSING-EXTRA-DUPLICATE-ESCAPED-OR-REORDERED-REJECTED fails closed on manifest drift'
 );
 archive_check(

@@ -47,8 +47,8 @@ archive_check(
 );
 archive_check(
 	0 === preg_match( '/\b(?:wp_schedule_event|wp_schedule_single_event|wp_next_scheduled|wp_clear_scheduled_hook|as_enqueue_async_action|as_schedule_single_action)\s*\(/i', $archive_sources )
-		&& 1 === substr_count( $archive_sources, 'WP_CLI::add_command' ),
-	'P3B3-ONLY-APPROVED-WPCLI-COMMAND-REGISTERED permits one dormant worker command and no scheduler'
+		&& 0 === substr_count( $archive_sources, 'WP_CLI::add_command' ),
+	'P3B3-ONLY-APPROVED-WPCLI-COMMAND-REGISTERED keeps the approved command identifier dormant and unregistered'
 );
 archive_check(
 	0 === preg_match( '/\bregister_rest_route\s*\(|(?:^|\/)class-[^\/]*controller\.php$/im', $archive_sources . "\n" . implode( "\n", $archive_paths ) ),
@@ -111,7 +111,7 @@ archive_check(
 );
 archive_check(
 	0 === preg_match( '/\b(?:add_action|add_filter|register_activation_hook|register_deactivation_hook|wp_schedule_event|wp_schedule_single_event|register_rest_route)\s*\(/i', $archive_sources )
-		&& 1 === substr_count( $archive_sources, 'WP_CLI::add_command' )
+		&& 0 === substr_count( $archive_sources, 'WP_CLI::add_command' )
 		&& is_string( $entrypoint )
 		&& 1 === substr_count( $entrypoint, "require_once __DIR__ . '/includes/archive/bootstrap.php';" ),
 	'P3B3-LOAD-DARK-REGISTERS-NO-ACTIVE-SURFACE adds only the fail-closed bootstrap and no hook, scheduler, controller, CLI, or activation registration'
@@ -163,8 +163,15 @@ archive_check(
 );
 archive_check(
 	0 === preg_match( '/\b(?:register_rest_route|wp_schedule_event|wp_schedule_single_event|as_enqueue_async_action|as_schedule_single_action)\s*\(/i', $archive_sources )
-		&& 1 === substr_count( $archive_sources, "WP_CLI::add_command( self::WORKER_COMMAND, array( \$this, 'cli_run' ) );" ),
-	'P3B3-NO-REST-ADMIN-AJAX-WPCRON-ACTION-SCHEDULER-OR-CONTROLLER keeps only the dormant approved CLI callback'
+		&& 0 === substr_count( $archive_sources, 'WP_CLI::add_command' ),
+	'P3B3-NO-REST-ADMIN-AJAX-WPCRON-ACTION-SCHEDULER-OR-CONTROLLER keeps the worker callback unregistered'
+);
+archive_check(
+	class_exists( 'GHCA_ACD_Archive_Review_Intake' )
+		&& method_exists( 'GHCA_ACD_Archive_Evidence_Source', 'read_consistent_review_evidence' )
+		&& method_exists( 'GHCA_ACD_Archive_Evidence_Source', 'preflight' )
+		&& 0 === preg_match( '/\b(?:add_action|add_filter|register_rest_route|WP_CLI::add_command)\s*\(/i', file_get_contents( $archive_root . '/application/class-archive-review-intake.php' ) ),
+	'ACTIVATION-A18-REVIEW-AND-PREFLIGHT-CONSTRUCTED-DARK permits only the approved review and preflight contracts'
 );
 
 archive_finish();

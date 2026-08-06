@@ -2,6 +2,13 @@
 
 /** Single explicit composition root for the constructed-dark archive runtime. */
 final class GHCA_ACD_Archive_Module {
+	private const EVIDENCE_LIMITS = array(
+		'maximum_queries' => 32,
+		'maximum_rows' => 10000,
+		'maximum_transaction_milliseconds' => 2000,
+	);
+	private const CALCULATION_POLICY_KEY = 'time-independent';
+	private const CALCULATION_POLICY_VERSION = 1;
 	const WORKER_COMMAND = 'ghca-acd archive-worker run';
 	const RESULT_KEYS = array(
 		'code', 'claimed_count', 'completed_count', 'dead_count', 'duration_ms',
@@ -83,22 +90,73 @@ final class GHCA_ACD_Archive_Module {
 		return $admission['result'];
 	}
 
+	/** Run only code-enforceable gates while both feature flags remain off. */
+	public function preflight_status( callable $checkpoint ): array {
+		$started = hrtime( true );
+		try {
+			$versions = $this->attestor->attest();
+			$configuration = $this->runtime->preflight();
+			$this->assert_calculation_policy();
+			$this->assert_review_parity();
+			$this->assert_handler_registry();
+			$checkpoint();
+			$source = $this->compose_evidence_source( $configuration, $versions );
+			$source->preflight( self::EVIDENCE_LIMITS, $checkpoint );
+			return self::result( 'ready', 'archive_runtime_ready', 'activation', self::elapsed( $started ) );
+		} catch ( UnexpectedValueException $error ) {
+			return $this->gate_failure( $error->getMessage(), $started );
+		} catch ( GHCA_ACD_Archive_Evidence_Source_Exception $error ) {
+			return self::result( 'blocked', 'archive_runtime_source_credentials_invalid', 'credentials', self::elapsed( $started ) );
+		} catch ( Throwable $error ) {
+			return self::result( 'blocked', 'archive_runtime_load_failed', 'load', self::elapsed( $started ) );
+		}
+	}
+
+	/**
+	 * Direct review operation for a separately authorized caller. Bootstrap does
+	 * not call or register it.
+	 *
+	 * @param array<string,mixed> $request
+	 * @return array<string,mixed>
+	 */
+	public function review( array $request, callable $checkpoint ): array {
+		$admission = $this->admission();
+		if ( ! $this->ready_admission( $admission ) ) {
+			throw new UnexpectedValueException( $admission['result']['code'] ?? 'archive_runtime_load_failed' );
+		}
+		$checkpoint();
+		$source = $this->compose_evidence_source( $admission['configuration'], $admission['versions'] );
+		$persistence = $this->compose_persistence();
+		return ( new GHCA_ACD_Archive_Review_Intake( $source, $persistence['uow'], $this->ids ) )->execute( $request, $checkpoint );
+	}
+
 	/** @return array<string,mixed> */
 	private function admission(): array {
 		$started = hrtime( true );
 		try {
 			$versions = $this->attestor->attest();
 			$configuration = $this->runtime->resolve();
+			$this->assert_calculation_policy();
+			$this->assert_review_parity();
+			$this->assert_handler_registry();
+			$this->compose_evidence_source( $configuration, $versions )->preflight(
+				self::EVIDENCE_LIMITS,
+				static function (): void {}
+			);
 			if ( 'production' === $configuration['mode'] ) {
 				return array(
 					'result' => self::result( 'blocked', 'archive_runtime_partial_retry_unresolved', 'activation', self::elapsed( $started ) ),
 				);
 			}
 			return array(
-				'result' => self::result( 'blocked', 'archive_runtime_review_capture_parity_unavailable', 'parity', self::elapsed( $started ) ),
+				'result' => self::result( 'ready', 'archive_runtime_ready', 'activation', self::elapsed( $started ) ),
+				'configuration' => $configuration,
+				'versions' => $versions,
 			);
 		} catch ( UnexpectedValueException $error ) {
 			return array( 'result' => $this->gate_failure( $error->getMessage(), $started ) );
+		} catch ( GHCA_ACD_Archive_Evidence_Source_Exception $error ) {
+			return array( 'result' => self::result( 'blocked', 'archive_runtime_source_credentials_invalid', 'credentials', self::elapsed( $started ) ) );
 		} catch ( Throwable $error ) {
 			return array(
 				'result' => self::result( 'blocked', 'archive_runtime_load_failed', 'load', self::elapsed( $started ) ),
@@ -117,11 +175,7 @@ final class GHCA_ACD_Archive_Module {
 		if ( 'ready' !== $status['status'] ) {
 			return $status;
 		}
-		if ( ! defined( 'WP_CLI' ) || ! WP_CLI || ! class_exists( 'WP_CLI', false ) ) {
-			return self::result( 'blocked', 'archive_runtime_wakeup_unavailable', 'wakeup', $status['duration_ms'] );
-		}
-		WP_CLI::add_command( self::WORKER_COMMAND, array( $this, 'cli_run' ) );
-		return $status;
+		return self::result( 'blocked', 'archive_runtime_activation_blocked', 'activation', $status['duration_ms'] );
 	}
 
 	/**
@@ -229,16 +283,12 @@ final class GHCA_ACD_Archive_Module {
 	 * while the activation blockers above are unresolved.
 	 */
 	private function compose_worker( array $configuration, array $versions ): GHCA_ACD_Archive_Worker_Coordinator {
-		$events = new GHCA_ACD_WPDB_Archive_Event_Store( $this->db );
-		$commands = new GHCA_ACD_WPDB_Archive_Command_Store( $this->db );
-		$tasks = new GHCA_ACD_WPDB_Archive_Task_Store( $this->db );
-		$snapshots = new GHCA_ACD_WPDB_Archive_Snapshot_Store( $this->db );
-		$artifacts = new GHCA_ACD_WPDB_Archive_Artifact_Repository( $this->db );
-		$projections = new GHCA_ACD_WPDB_Archive_Projection_Repository( $this->db );
-		$projector = new GHCA_ACD_Archive_Projector( $projections );
-		$uow = new GHCA_ACD_Archive_Unit_Of_Work(
-			$this->db, $events, $commands, $tasks, $snapshots, $artifacts, $projector, $this->clock, $this->ids
-		);
+		$persistence = $this->compose_persistence();
+		$events = $persistence['events'];
+		$tasks = $persistence['tasks'];
+		$snapshots = $persistence['snapshots'];
+		$artifacts = $persistence['artifacts'];
+		$uow = $persistence['uow'];
 		$build = new GHCA_ACD_Archive_Build_Coordinator( $events, $snapshots, $artifacts, $uow );
 		$store = new GHCA_ACD_Private_Archive_Artifact_Store(
 			$configuration['storage']['private_root'],
@@ -264,16 +314,58 @@ final class GHCA_ACD_Archive_Module {
 			GHCA_ACD_Archive_Task_Catalog::CAPTURE_TASK_TYPE => $evidence,
 			GHCA_ACD_Archive_Task_Catalog::LEDGER_TASK_TYPE => $ledger,
 		);
-		$keys = array_keys( $handlers );
-		sort( $keys, SORT_STRING );
-		$installed = GHCA_ACD_Archive_Task_Catalog::installed_types();
-		sort( $installed, SORT_STRING );
-		if ( $keys !== $installed ) {
-			throw new UnexpectedValueException( 'archive_runtime_handler_registry_invalid' );
-		}
+		$this->assert_handler_registry( array_keys( $handlers ) );
 		return new GHCA_ACD_Archive_Worker_Coordinator(
 			$tasks, $this->clock, $this->ids, $this->ids->generate(), $handlers, null, $build, $ledger
 		);
+	}
+
+	/** @return array<string,object> */
+	private function compose_persistence(): array {
+		$events = new GHCA_ACD_WPDB_Archive_Event_Store( $this->db );
+		$commands = new GHCA_ACD_WPDB_Archive_Command_Store( $this->db );
+		$tasks = new GHCA_ACD_WPDB_Archive_Task_Store( $this->db );
+		$snapshots = new GHCA_ACD_WPDB_Archive_Snapshot_Store( $this->db );
+		$artifacts = new GHCA_ACD_WPDB_Archive_Artifact_Repository( $this->db );
+		$projections = new GHCA_ACD_WPDB_Archive_Projection_Repository( $this->db );
+		$projector = new GHCA_ACD_Archive_Projector( $projections );
+		$uow = new GHCA_ACD_Archive_Unit_Of_Work(
+			$this->db, $events, $commands, $tasks, $snapshots, $artifacts, $projector, $this->clock, $this->ids
+		);
+		return compact( 'events', 'commands', 'tasks', 'snapshots', 'artifacts', 'projections', 'projector', 'uow' );
+	}
+
+	/** @param array<int,string>|null $types */
+	private function assert_handler_registry( ?array $types = null ): void {
+		$types = $types ?: array(
+			GHCA_ACD_Archive_Task_Catalog::CAPTURE_TASK_TYPE,
+			GHCA_ACD_Archive_Task_Catalog::LEDGER_TASK_TYPE,
+		);
+		sort( $types, SORT_STRING );
+		$installed = GHCA_ACD_Archive_Task_Catalog::installed_types();
+		sort( $installed, SORT_STRING );
+		if ( $types !== $installed ) {
+			throw new UnexpectedValueException( 'archive_runtime_handler_registry_invalid' );
+		}
+	}
+
+	private function assert_review_parity(): void {
+		if ( ! interface_exists( 'GHCA_ACD_Archive_Evidence_Source', false )
+			|| ! method_exists( 'GHCA_ACD_Archive_Evidence_Source', 'read_consistent_review_evidence' )
+			|| ! method_exists( 'GHCA_ACD_Archive_Evidence_Source', 'preflight' )
+			|| ! class_exists( 'GHCA_ACD_Archive_Review_Intake', false ) ) {
+			throw new UnexpectedValueException( 'archive_runtime_review_capture_parity_unavailable' );
+		}
+	}
+
+	private function assert_calculation_policy(): void {
+		if ( ! class_exists( 'GHCA_ACD_LearnDash_Archive_Evidence_Source', false )
+			|| ! defined( 'GHCA_ACD_LearnDash_Archive_Evidence_Source::CALCULATION_POLICY_KEY' )
+			|| ! defined( 'GHCA_ACD_LearnDash_Archive_Evidence_Source::CALCULATION_POLICY_VERSION' )
+			|| self::CALCULATION_POLICY_KEY !== GHCA_ACD_LearnDash_Archive_Evidence_Source::CALCULATION_POLICY_KEY
+			|| self::CALCULATION_POLICY_VERSION !== GHCA_ACD_LearnDash_Archive_Evidence_Source::CALCULATION_POLICY_VERSION ) {
+			throw new UnexpectedValueException( 'archive_runtime_calculation_policy_unapproved' );
+		}
 	}
 
 	private function compose_evidence_source( array $configuration, array $versions ): GHCA_ACD_LearnDash_Archive_Evidence_Source {
@@ -317,7 +409,10 @@ final class GHCA_ACD_Archive_Module {
 			'archive_runtime_source_credentials_invalid' => 'credentials',
 			'archive_runtime_storage_invalid' => 'storage',
 			'archive_runtime_cursor_key_invalid' => 'storage',
+			'archive_runtime_review_capture_parity_unavailable' => 'parity',
+			'archive_runtime_calculation_policy_unapproved' => 'calculation',
 			'archive_runtime_handler_registry_invalid' => 'registry',
+			'archive_runtime_activation_blocked' => 'activation',
 		);
 		if ( ! isset( $stages[ $code ] ) ) {
 			return self::result( 'blocked', 'archive_runtime_load_failed', 'load', self::elapsed( $started ) );

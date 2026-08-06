@@ -20,9 +20,27 @@ if ( ! is_string( $restricted_user ) || 1 !== preg_match( '/^[A-Za-z][A-Za-z0-9_
 	throw new RuntimeException( 'Disposable restricted-source credentials are invalid.' );
 }
 
-$private_root = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'ghca-acd-p3b3-' . bin2hex( random_bytes( 8 ) );
-if ( ! mkdir( $private_root, 0700 ) ) {
+$test_root = dirname( rtrim( ABSPATH, '/\\' ) ) . DIRECTORY_SEPARATOR . 'ghca-acd-p3b3-' . bin2hex( random_bytes( 8 ) );
+$private_root = $test_root . DIRECTORY_SEPARATOR . 'private';
+if ( ! mkdir( $private_root, 0700, true ) ) {
 	throw new RuntimeException( 'Could not create isolated private test root.' );
+}
+$authorization_file = $test_root . DIRECTORY_SEPARATOR . 'authorization.json';
+$authorization_now = time();
+$authorization = array(
+	'authorization_schema_version' => 1,
+	'blog_id' => '1',
+	'change_role_id' => 'PRODUCT_OWNER',
+	'end_at_gmt' => gmdate( 'Y-m-d\\TH:i:s.000000\\Z', $authorization_now + 3600 ),
+	'evidence_sha256' => null,
+	'mode' => 'controlled_testing',
+	'operator_role_id' => 'WPCLI_OPERATOR',
+	'rollback_role_id' => 'ROLLBACK_OWNER',
+	'site_id' => '1',
+	'start_at_gmt' => gmdate( 'Y-m-d\\TH:i:s.000000\\Z', $authorization_now - 60 ),
+);
+if ( false === file_put_contents( $authorization_file, GHCA_ACD_Archive_Canonical_JSON::encode( $authorization ) ) ) {
+	throw new RuntimeException( 'Could not create isolated activation authorization.' );
 }
 
 define( 'GHCA_ACD_ARCHIVE_RUNTIME_MODE', 'controlled_testing' );
@@ -34,6 +52,7 @@ define( 'GHCA_ACD_ARCHIVE_SOURCE_DB_ACCOUNT', $restricted_user . '@%' );
 define( 'GHCA_ACD_ARCHIVE_PRIVATE_DIR', $private_root );
 define( 'GHCA_ACD_ARCHIVE_PUBLIC_DOCUMENT_ROOT', rtrim( ABSPATH, '/\\' ) );
 define( 'GHCA_ACD_ARCHIVE_CURSOR_HMAC_KEY', str_repeat( 'a', 64 ) );
+define( 'GHCA_ACD_ARCHIVE_ACTIVATION_AUTHORIZATION_FILE', $authorization_file );
 
 /** @param object $db */
 function p3b3m_options_clear( $db ): void {
@@ -418,6 +437,7 @@ try {
 	if ( $restricted instanceof wpdb ) {
 		$restricted->close();
 	}
+	p3b3m_options_clear( $wpdb );
 	ghca_persist_query( $wpdb, "DROP USER IF EXISTS {$source_user_host}", 'drop isolated P3B3 source user' );
 	foreach ( $source_tables as $table ) {
 		if ( $wpdb->prefix . 'options' === $table ) {
@@ -431,6 +451,12 @@ try {
 	}
 	if ( is_dir( $private_root ) ) {
 		rmdir( $private_root );
+	}
+	if ( is_file( $authorization_file ) ) {
+		unlink( $authorization_file );
+	}
+	if ( is_dir( $test_root ) ) {
+		rmdir( $test_root );
 	}
 }
 

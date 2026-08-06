@@ -21,6 +21,12 @@ final class GHCA_P3B2A_Fake_Evidence_Source implements GHCA_ACD_Archive_Evidence
 		if ( null !== $this->failure ) { throw $this->failure; }
 		return GHCA_ACD_Archive_Canonical_JSON::detach( $this->document );
 	}
+
+	public function read_consistent_review_evidence( array $review_identity, array $limits, callable $checkpoint ): array {
+		return $this->read_consistent_evidence( $review_identity, $limits, $checkpoint );
+	}
+
+	public function preflight( array $limits, callable $checkpoint ): void {}
 }
 
 final class GHCA_P3B2A_Sequence_Evidence_Source implements GHCA_ACD_Archive_Evidence_Source {
@@ -38,6 +44,12 @@ final class GHCA_P3B2A_Sequence_Evidence_Source implements GHCA_ACD_Archive_Evid
 		if ( $outcome instanceof Throwable ) { throw $outcome; }
 		return GHCA_ACD_Archive_Canonical_JSON::detach( $outcome );
 	}
+
+	public function read_consistent_review_evidence( array $review_identity, array $limits, callable $checkpoint ): array {
+		return $this->read_consistent_evidence( $review_identity, $limits, $checkpoint );
+	}
+
+	public function preflight( array $limits, callable $checkpoint ): void {}
 }
 
 /** @param mixed $value */

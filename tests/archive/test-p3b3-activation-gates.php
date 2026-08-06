@@ -254,7 +254,7 @@ archive_check(
 	'P3B3-NEGATIVE-ORACLE-DETECTS-UNEXPECTED-MUTATION proves the invariant check is non-vacuous'
 );
 archive_check(
-	4 === substr_count( $runner_source, 'test-p3b3-' ),
+	7 === substr_count( $runner_source, 'test-p3b3-' ),
 	'P3B3-RUNNER-SUITES-EXACTLY-ONCE reserves one permanent entry per P3B3 suite'
 );
 

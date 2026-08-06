@@ -163,7 +163,8 @@ archive_check(
 );
 archive_check(
 	1 === substr_count( $module_source, 'private function compose_evidence_source' )
-		&& 1 === substr_count( $module_source, '$this->compose_evidence_source(' ),
+		&& 4 === substr_count( $module_source, '$this->compose_evidence_source(' )
+		&& 0 === substr_count( $module_source, 'public function compose_evidence_source' ),
 	'P3B3-REVIEW-CAPTURE-ONE-PRIVATE-COMPOSITION-RECIPE has one construction authority'
 );
 archive_check(
@@ -182,10 +183,10 @@ archive_check(
 	'P3B3-REVIEW-CAPTURE-SEPARATE-INVOCATIONS-IDENTICAL-E08 retains one digest domain'
 );
 archive_check(
-	false !== strpos( $module_source, 'archive_runtime_review_capture_parity_unavailable' )
-		&& strpos( $module_source, 'archive_runtime_review_capture_parity_unavailable' )
-			< strpos( $module_source, 'compose_worker' ),
-	'P3B3-REVIEW-CAPTURE-PARITY-BLOCKS-PRODUCTION-INTAKE leaves the graph unreachable'
+	false !== strpos( $module_source, 'GHCA_ACD_Archive_Review_Intake' )
+		&& false !== strpos( $module_source, 'archive_runtime_partial_retry_unresolved' )
+		&& strpos( $module_source, 'archive_runtime_partial_retry_unresolved' ) < strpos( $module_source, 'compose_worker' ),
+	'P3B3-REVIEW-CAPTURE-PARITY-BLOCKS-PRODUCTION-INTAKE resolves parity while retaining the independent production blocker'
 );
 archive_check(
 	false !== strpos( $proposal_source, 'time-independent calculation' )
@@ -217,9 +218,9 @@ archive_check(
 );
 archive_check(
 	1 === substr_count( $module_source, "const WORKER_COMMAND = 'ghca-acd archive-worker run';" )
-		&& 1 === substr_count( $module_source, 'WP_CLI::add_command' )
+		&& 0 === substr_count( $module_source, 'WP_CLI::add_command' )
 		&& false !== strpos( $module_source, 'register_worker_command' ),
-	'P3B3-ONLY-APPROVED-WPCLI-COMMAND-REGISTERED exposes one dormant operator command'
+	'P3B3-ONLY-APPROVED-WPCLI-COMMAND-REGISTERED keeps the approved operator command dormant and unregistered'
 );
 archive_check(
 	0 === preg_match( '/register_rest_route|add_action|add_filter|wp_schedule|as_schedule|as_enqueue/i', $module_source ),
@@ -231,6 +232,9 @@ $suite_names = array(
 	'test-p3b3-activation-gates.php',
 	'test-p3b3-worker-runtime.php',
 	'test-p3b3-multisite.php',
+	'test-p3b3-activation-contracts.php',
+	'test-p3b3-activation-persistence.php',
+	'test-p3b3-activation-concurrency.php',
 );
 $runner_exact = true;
 foreach ( $suite_names as $suite_name ) {

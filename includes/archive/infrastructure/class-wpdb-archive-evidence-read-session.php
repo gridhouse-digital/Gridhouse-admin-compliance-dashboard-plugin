@@ -82,6 +82,8 @@ final class GHCA_ACD_WPDB_Archive_Evidence_Read_Session {
 	private $maximum_queries = 0;
 	/** @var float */
 	private $deadline = 0.0;
+	/** @var bool */
+	private $closed = false;
 
 	/**
 	 * @param object $db wpdb-compatible isolated source connection.
@@ -161,6 +163,7 @@ final class GHCA_ACD_WPDB_Archive_Evidence_Read_Session {
 	 * @return array<string,mixed>
 	 */
 	public function read( array $identity, array $limits, callable $checkpoint ): array {
+		$this->assert_open();
 		if ( ! isset( $identity['case_key'] ) || ! is_array( $identity['case_key'] )
 			|| ! isset( $identity['case_key']['tenant_id'], $identity['case_key']['site_id_decimal'], $identity['case_key']['employee_user_id_decimal'] )
 			|| $identity['case_key']['tenant_id'] !== $this->descriptor['tenant_id']
@@ -206,12 +209,7 @@ final class GHCA_ACD_WPDB_Archive_Evidence_Read_Session {
 				$rollback_failed = true;
 			}
 		}
-		$close_failed = false;
-		try {
-			$close_failed = ! method_exists( $this->db, 'close' ) || false === $this->db->close();
-		} catch ( Throwable $error ) {
-			$close_failed = true;
-		}
+		$close_failed = $this->close_connection();
 		if ( $rollback_failed ) {
 			throw new GHCA_ACD_Archive_Evidence_Source_Exception(
 				GHCA_ACD_Archive_Evidence_Source_Exception::CATEGORY_OPERATIONAL_BLOCKED,
@@ -234,6 +232,52 @@ final class GHCA_ACD_WPDB_Archive_Evidence_Read_Session {
 			$this->query_failure();
 		}
 		return $raw;
+	}
+
+	/**
+	 * Run the accepted identity, grant, table, column, and index checks without
+	 * beginning a transaction or reading B05 evidence rows.
+	 *
+	 * @param array<string,int> $limits
+	 */
+	public function preflight_only( array $limits, callable $checkpoint ): void {
+		$this->assert_open();
+		$actual = array_keys( $limits );
+		$expected = array( 'maximum_queries', 'maximum_rows', 'maximum_transaction_milliseconds' );
+		sort( $actual, SORT_STRING );
+		sort( $expected, SORT_STRING );
+		if ( $actual !== $expected
+			|| ! is_int( $limits['maximum_queries'] ) || $limits['maximum_queries'] < 1 || $limits['maximum_queries'] > 32
+			|| ! is_int( $limits['maximum_rows'] ) || $limits['maximum_rows'] < 1 || $limits['maximum_rows'] > 10000
+			|| ! is_int( $limits['maximum_transaction_milliseconds'] ) || $limits['maximum_transaction_milliseconds'] < 1
+			|| $limits['maximum_transaction_milliseconds'] > 2000 ) {
+			$this->binding_invalid();
+		}
+
+		$this->query_count = 0;
+		$this->maximum_queries = $limits['maximum_queries'];
+		$this->deadline = $this->now() + $limits['maximum_transaction_milliseconds'];
+		$pending = null;
+		try {
+			$checkpoint();
+			$this->preflight( $checkpoint );
+			$checkpoint();
+			$this->elapsed();
+		} catch ( Throwable $error ) {
+			$pending = $error;
+		}
+
+		if ( $this->close_connection() ) {
+			throw new GHCA_ACD_Archive_Evidence_Source_Exception(
+				GHCA_ACD_Archive_Evidence_Source_Exception::CATEGORY_OPERATIONAL_BLOCKED,
+				'archive_source_transaction_failed',
+				'connection_close'
+			);
+		}
+		if ( null !== $pending ) {
+			throw $pending;
+		}
+		$this->elapsed();
 	}
 
 	private function preflight( callable $checkpoint ): void {
@@ -684,6 +728,25 @@ final class GHCA_ACD_WPDB_Archive_Evidence_Read_Session {
 	private function elapsed(): void {
 		if ( $this->now() > $this->deadline ) {
 			$this->query_failure();
+		}
+	}
+
+	private function assert_open(): void {
+		if ( $this->closed ) {
+			throw new GHCA_ACD_Archive_Evidence_Source_Exception(
+				GHCA_ACD_Archive_Evidence_Source_Exception::CATEGORY_OPERATIONAL_BLOCKED,
+				'archive_source_transaction_failed',
+				'connection_close'
+			);
+		}
+	}
+
+	private function close_connection(): bool {
+		$this->closed = true;
+		try {
+			return ! method_exists( $this->db, 'close' ) || false === $this->db->close();
+		} catch ( Throwable $error ) {
+			return true;
 		}
 	}
 

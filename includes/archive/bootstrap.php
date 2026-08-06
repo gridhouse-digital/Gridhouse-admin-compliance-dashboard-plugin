@@ -59,6 +59,7 @@ $ghca_archive_manifest = array(
 	'application/class-archive-evidence-snapshot-preparer.php',
 	'application/class-archive-ledger-materializer.php',
 	'application/class-archive-unit-of-work.php',
+	'application/class-archive-review-intake.php',
 	'application/class-archive-build-coordinator.php',
 	'application/class-archive-evidence-task-handler.php',
 	'application/class-archive-ledger-task-handler.php',
@@ -73,11 +74,11 @@ $ghca_archive_manifest = array(
 	'infrastructure/class-wordpress-archive-runtime-descriptor.php',
 	'class-archive-module.php',
 );
-$ghca_archive_digest = 'd2b3b45a3e421f3565e651348acac496805a349e272eae2b64aa9bee4570b094';
+$ghca_archive_digest = 'b39c21168cb7585c4a2a115ec4ad5359466ea2d63fdddeb86fdea9de81114a11';
 $ghca_archive_root = realpath( __DIR__ );
 $ghca_archive_paths = array();
-if ( 55 !== count( $ghca_archive_manifest )
-	|| 55 !== count( array_unique( $ghca_archive_manifest ) )
+if ( 56 !== count( $ghca_archive_manifest )
+	|| 56 !== count( array_unique( $ghca_archive_manifest ) )
 	|| ! hash_equals( $ghca_archive_digest, hash( 'sha256', implode( "\n", $ghca_archive_manifest ) ) )
 	|| false === $ghca_archive_root || is_link( __DIR__ ) ) {
 	return $ghca_archive_failure();
