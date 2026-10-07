@@ -97,6 +97,6 @@ class Ascii85 implements FilterInterface
             $out .= \chr($r >> 8);
         }
 
-        return $out;
+        return DecodedStreamBudget::consume($out);
     }
 }

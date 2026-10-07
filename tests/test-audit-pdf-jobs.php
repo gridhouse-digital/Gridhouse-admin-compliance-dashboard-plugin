@@ -1,5 +1,14 @@
 <?php
 require __DIR__ . '/bootstrap.php';
+if ( '\\' === DIRECTORY_SEPARATOR && ! defined( 'GHCA_ACD_PRIVATE_DIR' ) ) {
+	$test_private_dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'ghca-private-test-' . getmypid();
+	if ( ! is_dir( $test_private_dir ) ) { mkdir( $test_private_dir, 0777, true ); }
+	define( 'GHCA_ACD_PRIVATE_DIR', $test_private_dir );
+	define( 'GHCA_ACD_PRIVATE_DIR_ACL_VERIFIED', true );
+}
+function wp_normalize_path( $value ) { return str_replace( '\\', '/', $value ); }
+function wp_mkdir_p( $dir ) { return is_dir( $dir ) || mkdir( $dir, 0777, true ); }
+function wp_upload_dir() { return array( 'basedir' => ABSPATH . 'uploads' ); }
 require_once __DIR__ . '/../includes/class-audit-pdf-jobs.php';
 
 $fails = 0;
@@ -33,6 +42,42 @@ check( GHCA_Audit_PDF_Jobs::validate_manifest( $stale, 5, $now ) === 'expired', 
 // Zero-certificate jobs are legitimate (cover sheet only) — must validate.
 $empty_urls = array_merge( $good, array( 'urls' => array() ) );
 check( GHCA_Audit_PDF_Jobs::validate_manifest( $empty_urls, 5, $now ) === true, 'zero certs => still valid job' );
+
+// The internal certificate broker is one-time and bound to a brokerable course.
+$token  = str_repeat( 'ab', 32 );
+$broker = array_merge( $good, array(
+	'course_ids'   => array( 44 ),
+	'brokerable'   => array( true ),
+	'broker_tokens' => array( $token ),
+	'broker_used'  => array(),
+) );
+check( GHCA_Audit_PDF_Jobs::validate_broker_request( $broker, 0, $token, $now ) === true, 'valid certificate broker request is accepted' );
+check( GHCA_Audit_PDF_Jobs::validate_broker_request( $broker, 0, str_repeat( 'cd', 32 ), $now ) === 'token_mismatch', 'wrong certificate broker token is rejected' );
+$broker['broker_used'][0] = true;
+check( GHCA_Audit_PDF_Jobs::validate_broker_request( $broker, 0, $token, $now ) === 'replayed', 'certificate broker token cannot be replayed' );
+$broker['broker_used'][0] = false;
+$broker['brokerable'][0]  = false;
+check( GHCA_Audit_PDF_Jobs::validate_broker_request( $broker, 0, $token, $now ) === 'invalid_index', 'non-LearnDash certificate source cannot use the broker' );
+
+// Packet PII stays outside the WordPress document root.
+$private_base = wp_normalize_path( dirname( GHCA_Audit_PDF_Jobs::temp_base() ) );
+check( 0 !== strpos( $private_base . '/', rtrim( wp_normalize_path( ABSPATH ), '/' ) . '/' ), 'packet storage is outside the WordPress document root' );
+
+// Only one request can own a job phase lock at a time.
+$lock_job_id = str_repeat( 'ab', 16 );
+$first_lock  = GHCA_Audit_PDF_Jobs::acquire_job_lock( $lock_job_id );
+$second_lock = GHCA_Audit_PDF_Jobs::acquire_job_lock( $lock_job_id );
+check( is_resource( $first_lock ), 'first packet phase acquires its lock' );
+check( false === $second_lock, 'concurrent packet phase is rejected' );
+GHCA_Audit_PDF_Jobs::release_lock( $first_lock );
+$third_lock = GHCA_Audit_PDF_Jobs::acquire_job_lock( $lock_job_id );
+check( is_resource( $third_lock ), 'packet phase lock is reusable after release' );
+GHCA_Audit_PDF_Jobs::release_lock( $third_lock );
+
+$private_file = GHCA_Audit_PDF_Jobs::packets_base() . '/permissions-test.pdf';
+file_put_contents( $private_file, 'test' );
+check( GHCA_Audit_PDF_Jobs::secure_file( $private_file ), 'packet file permissions are restricted' );
+unlink( $private_file );
 
 echo $fails === 0 ? "\nALL PASS\n" : "\n$fails FAILED\n";
 exit( $fails === 0 ? 0 : 1 );

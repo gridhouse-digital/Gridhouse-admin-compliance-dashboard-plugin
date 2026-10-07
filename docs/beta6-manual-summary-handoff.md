@@ -1,0 +1,11 @@
+# Beta 6 manual-delivery revision 2 — annual PDF summary
+
+2026-09-18. Corrects the generic annual review banner for the agency-managed ISP-only case. Previous revision changed the row but deliberately retained internal calculation status; the cover still rendered that status without explaining scope.
+
+`includes/class-audit-pdf.php` now renders Annual Training Summary: Recorded hours and other required topics met — ISP handled manually / in person only when annual_status is needs_review, manual-delivery is enabled, at least the existing 24-hour target is recorded, all five other topic statuses are present and resolved, and evidence_issues is empty. Other cases retain the original banner. Retains amber styling and the non-verification/agency-records note; does not manufacture ISP completion or a Compliant result. No calculator, CSV, hours, storage, date policy, authentication, retrieval or merging changes. Existing 24-hour rule is preserved, not expanded into a new universal rule.
+
+17 targeted scripts passed; 148 development PHP files passed lint on PHP 8.3.30. New `tests/test-manual-isp-summary.php` has 175 cumulative checks (23 new), including ISP-only case, five other topic gaps, other annual states, missing topic data, insufficient hours, invalid evidence, opt-out, orientation and existing conditional N/A. Actual cover HTML inspected in synthetic browser; readable banner, no overlap. Not a TCPDF rendering/pagination or live WordPress test. Temporary browser/server closed.
+
+Package: `../packages/Gridhouse-admin-compliance-dashboard-1.7.3-beta.6-manual-delivery-2-test-only.zip` relative to plugin root; same beta version, separate immutable filename and manifest. Prior ZIPs retained. README/TESTING and strategy/control records updated. No live deployment or real-record mutation; supplied PDF reviewed, not altered.
+
+Staging acceptance: replace existing plugin with revised ZIP, leave manual-delivery setting enabled, regenerate a NEW packet and inspect actual PDF wrapping and certificates. Internal compliance state can remain needs_review; this is an honest split-scope PDF summary, not audit certification. The earlier certificate retrieval failure was not reproduced or fixed by this report-only change.

@@ -27,7 +27,11 @@ final class GHCA_ACD_Scoping {
       return array_map( 'intval', (array) $all );
     }
 
-    if ( in_array( 'group_leader', (array) wp_get_current_user()->roles, true ) && function_exists( 'learndash_get_administrators_group_ids' ) ) {
+    if ( in_array( 'group_leader', (array) wp_get_current_user()->roles, true ) ) {
+      if ( ! function_exists( 'learndash_get_administrators_group_ids' ) ) {
+        return array();
+      }
+
       $leader_groups = array_map( 'intval', (array) learndash_get_administrators_group_ids( get_current_user_id() ) );
       $visible       = array_values( array_intersect( array_map( 'intval', $all ), $leader_groups ) );
       return ! empty( $visible ) ? $visible : array();

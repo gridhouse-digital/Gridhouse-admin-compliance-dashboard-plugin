@@ -13,15 +13,55 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class GHCA_ACD_Data_Provider {
 
+  const OPTION_ACCOUNT_STATE_VERSION = 'ghca_acd_account_state_version';
+
+  public static function employment_types(): array {
+    return array(
+      'full_time' => __( 'Full-Time', 'ghca-acd' ),
+      'part_time' => __( 'Part-Time', 'ghca-acd' ),
+      'contractor' => __( 'Contractor', 'ghca-acd' ),
+    );
+  }
+
+  public static function employment_type( int $user_id ): string {
+    $record = get_user_meta( $user_id, 'ghca_acd_employment_type', true );
+    $type = is_array( $record ) ? ( $record['type'] ?? '' ) : '';
+    return is_string( $type ) && isset( self::employment_types()[ $type ] ) ? $type : '';
+  }
+
+  public static function employment_type_label( int $user_id ): string {
+    return self::employment_types()[ self::employment_type( $user_id ) ] ?? __( 'Not set', 'ghca-acd' );
+  }
+
   /** @var array<string,mixed>|null */
   private static $aggregate = null;
 
   /** @var array<string,string> */
   private static $page_url_cache = array();
 
+  public static function init(): void {
+    add_action( 'bp_suspend_hide_user', array( __CLASS__, 'handle_account_state_change' ) );
+    add_action( 'bp_suspend_unhide_user', array( __CLASS__, 'handle_account_state_change' ) );
+  }
+
+  public static function handle_account_state_change( $user_id = 0 ): void {
+    $version = (int) get_option( self::OPTION_ACCOUNT_STATE_VERSION, 0 );
+    update_option( self::OPTION_ACCOUNT_STATE_VERSION, $version + 1, false );
+    self::$aggregate = null;
+
+    if ( function_exists( 'bb_moderation_get_suspended_user_ids' ) ) {
+      bb_moderation_get_suspended_user_ids( true );
+    }
+  }
+
   /** @return array<int,array<string,mixed>> */
   public static function get_employees_for_current_view(): array {
     return self::get_aggregate()['employees'];
+  }
+
+  /** @return array<int,array<string,mixed>> */
+  public static function get_inactive_employees_for_current_view(): array {
+    return self::get_aggregate()['inactive_employees'];
   }
 
   /** @return array<int> */
@@ -31,14 +71,25 @@ final class GHCA_ACD_Data_Provider {
 
   /** @return array<int> */
   private static function get_tracked_group_ids(): array {
-    return array_values(
-      array_unique(
-        array_merge(
-          self::get_compliance_group_ids(),
-          GHCA_Compliance_Program::get_new_hire_group_ids()
-        )
-      )
+    return self::merge_tracked_group_ids(
+      self::get_compliance_group_ids(),
+      GHCA_Compliance_Program::get_new_hire_group_ids(),
+      current_user_can( 'manage_options' ) || current_user_can( 'edit_users' ) || GHCA_ACD_Roles::user_has_unrestricted_view()
     );
+  }
+
+  /**
+   * @param array<int> $visible_group_ids
+   * @param array<int> $new_hire_group_ids
+   * @return array<int>
+   */
+  public static function merge_tracked_group_ids( array $visible_group_ids, array $new_hire_group_ids, bool $unrestricted ): array {
+    $visible = array_values( array_unique( array_map( 'intval', $visible_group_ids ) ) );
+    if ( ! $unrestricted ) {
+      return $visible;
+    }
+
+    return array_values( array_unique( array_merge( $visible, array_map( 'intval', $new_hire_group_ids ) ) ) );
   }
 
   private static function get_at_risk_days(): int {
@@ -48,7 +99,7 @@ final class GHCA_ACD_Data_Provider {
   private static function get_cache_key(): string {
     // Date stamp (site timezone) makes the aggregate self-invalidate at local
     // midnight, so a course flipping 🟡→🔴 overnight recomputes with no DB write.
-    return 'ghca_acd_agg_' . GHCA_Admin_Compliance_Dashboard::VERSION . '_' . get_current_user_id() . '_' . wp_date( 'Ymd' );
+    return 'ghca_acd_agg_' . GHCA_Admin_Compliance_Dashboard::VERSION . '_' . get_current_user_id() . '_' . wp_date( 'Ymd' ) . '_' . (int) get_option( self::OPTION_ACCOUNT_STATE_VERSION, 0 );
   }
 
   public static function bust_cache(): void {
@@ -110,6 +161,43 @@ final class GHCA_ACD_Data_Provider {
     return array_values( array_unique( $ids ) );
   }
 
+  /** @return array<int> */
+  private static function get_suspended_user_ids(): array {
+    if ( ! function_exists( 'bb_moderation_get_suspended_user_ids' ) ) {
+      return array();
+    }
+
+    return array_values( array_unique( array_filter( array_map( 'intval', (array) bb_moderation_get_suspended_user_ids() ) ) ) );
+  }
+
+  public static function is_user_suspended( int $user_id ): bool {
+    return in_array( $user_id, self::get_suspended_user_ids(), true );
+  }
+
+  /** @return array<int> */
+  public static function get_active_employee_user_ids(): array {
+    return array_values( array_diff( self::get_employee_user_ids(), self::get_suspended_user_ids() ) );
+  }
+
+  /**
+   * @param array<int,array<string,mixed>> $employees
+   * @param array<int>                     $suspended_ids
+   * @return array{active:array<int,array<string,mixed>>,inactive:array<int,array<string,mixed>>}
+   */
+  private static function partition_employee_records( array $employees, array $suspended_ids ): array {
+    $suspended = array_fill_keys( array_map( 'intval', $suspended_ids ), true );
+    $sets      = array( 'active' => array(), 'inactive' => array() );
+
+    foreach ( $employees as $employee ) {
+      $inactive                   = isset( $suspended[ (int) $employee['user_id'] ] );
+      $employee['is_suspended']   = $inactive;
+      $employee['account_status'] = $inactive ? 'inactive' : 'active';
+      $sets[ $inactive ? 'inactive' : 'active' ][] = $employee;
+    }
+
+    return $sets;
+  }
+
   /** @return array<string,mixed> */
   public static function get_aggregate(): array {
     if ( null !== self::$aggregate ) {
@@ -125,7 +213,9 @@ final class GHCA_ACD_Data_Provider {
       }
     }
 
-    $employees         = self::build_employee_records();
+    $employee_sets      = self::partition_employee_records( self::build_employee_records(), self::get_suspended_user_ids() );
+    $employees          = $employee_sets['active'];
+    $inactive_employees = $employee_sets['inactive'];
     $total             = count( $employees );
     $completed         = 0;
     $in_progress       = 0;
@@ -189,7 +279,9 @@ final class GHCA_ACD_Data_Provider {
 
     self::$aggregate = array(
       'employees'                  => $employees,
+      'inactive_employees'         => $inactive_employees,
       'total_employees'            => $total,
+      'total_inactive_employees'   => count( $inactive_employees ),
       'compliance_rate'            => $rate,
       'compliance_rate_label'        => $total ? $rate . '% compliant' : __( 'No employees assigned', 'ghca-acd' ),
       'completed_employees'          => $completed,
@@ -737,17 +829,18 @@ final class GHCA_ACD_Data_Provider {
   }
 
   /** @return array<string,mixed> */
-  public static function get_employee_filters(): array {
+  public static function get_employee_filters( string $account_status = 'active' ): array {
+    $inactive = 'inactive' === $account_status;
     return array(
-      'group'        => self::get_request_value( 'ghca_group' ),
-      'course'       => self::get_request_value( 'ghca_course' ),
-      'status'       => self::get_request_value( 'ghca_status' ),
-      'overdue_only' => self::get_request_flag( 'ghca_overdue' ),
-      'search'       => self::get_request_value( 'ghca_emp_search' ),
-      'page'         => GHCA_ACD_Table_UI::normalize_page( (int) self::get_request_value( 'ghca_emp_page', '1' ) ),
-      'per_page'     => GHCA_ACD_Table_UI::normalize_per_page( (int) self::get_request_value( 'ghca_emp_per', '15' ) ),
-      'orderby'      => self::sanitize_orderby( self::get_request_value( 'ghca_orderby' ) ),
-      'order'        => in_array( self::get_request_value( 'ghca_order', 'asc' ), array( 'asc', 'desc' ), true ) ? self::get_request_value( 'ghca_order', 'asc' ) : 'asc',
+      'group'        => self::get_request_value( $inactive ? 'ghca_inactive_group' : 'ghca_group' ),
+      'course'       => self::get_request_value( $inactive ? 'ghca_inactive_course' : 'ghca_course' ),
+      'status'       => self::get_request_value( $inactive ? 'ghca_inactive_status' : 'ghca_status' ),
+      'overdue_only' => self::get_request_flag( $inactive ? 'ghca_inactive_overdue' : 'ghca_overdue' ),
+      'search'       => self::get_request_value( $inactive ? 'ghca_inactive_search' : 'ghca_emp_search' ),
+      'page'         => GHCA_ACD_Table_UI::normalize_page( (int) self::get_request_value( $inactive ? 'ghca_inactive_page' : 'ghca_emp_page', '1' ) ),
+      'per_page'     => GHCA_ACD_Table_UI::normalize_per_page( (int) self::get_request_value( $inactive ? 'ghca_inactive_per' : 'ghca_emp_per', '15' ) ),
+      'orderby'      => self::sanitize_orderby( self::get_request_value( $inactive ? 'ghca_inactive_orderby' : 'ghca_orderby' ) ),
+      'order'        => in_array( self::get_request_value( $inactive ? 'ghca_inactive_order' : 'ghca_order', 'asc' ), array( 'asc', 'desc' ), true ) ? self::get_request_value( $inactive ? 'ghca_inactive_order' : 'ghca_order', 'asc' ) : 'asc',
     );
   }
 
@@ -786,8 +879,8 @@ final class GHCA_ACD_Data_Provider {
   }
 
   /** @param array<string,mixed> $filters @return array<int,array<string,mixed>> */
-  public static function get_employee_table_rows( array $filters ): array {
-    $rows = self::get_aggregate()['employees'];
+  public static function get_employee_table_rows( array $filters, string $account_status = 'active' ): array {
+    $rows = 'inactive' === $account_status ? self::get_inactive_employees_for_current_view() : self::get_employees_for_current_view();
 
     if ( $filters['group'] !== '' ) {
       $group_id = (int) $filters['group'];
@@ -911,9 +1004,10 @@ final class GHCA_ACD_Data_Provider {
   }
 
   /** @return array<int,string> */
-  public static function get_course_options(): array {
+  public static function get_course_options( string $account_status = 'active' ): array {
     $options = array();
-    foreach ( self::get_aggregate()['employees'] as $employee ) {
+    $employees = 'inactive' === $account_status ? self::get_inactive_employees_for_current_view() : self::get_employees_for_current_view();
+    foreach ( $employees as $employee ) {
       foreach ( $employee['courses'] as $course ) {
         $options[ (int) $course['id'] ] = $course['title'];
       }
@@ -974,7 +1068,7 @@ final class GHCA_ACD_Data_Provider {
     return $group_id ? (string) get_the_title( $group_id ) : __( 'Unassigned', 'ghca-acd' );
   }
 
-  private static function get_user_primary_group_id( int $user_id ): int {
+  public static function get_user_primary_group_id( int $user_id ): int {
     if ( GHCA_Compliance_Program::user_requires_new_hire_tracking( $user_id ) ) {
       $status = GHCA_Compliance_Program::get_user_status( $user_id );
       if ( ! empty( $status['group_id'] ) ) {
@@ -994,11 +1088,46 @@ final class GHCA_ACD_Data_Provider {
     return ! empty( get_post_meta( $course_id, '_ld_certificate', true ) );
   }
 
+  public static function sanitize_certificate_url( string $url, string $site_url = '' ): string {
+    $url      = trim( $url );
+    $site_url = '' !== $site_url ? $site_url : home_url( '/' );
+    $target   = parse_url( $url );
+    $site     = parse_url( $site_url );
+
+    if ( false === $target || false === $site || empty( $target['scheme'] ) || empty( $target['host'] ) || empty( $site['scheme'] ) || empty( $site['host'] ) ) {
+      return '';
+    }
+    if ( isset( $target['user'] ) || isset( $target['pass'] ) ) {
+      return '';
+    }
+
+    $scheme = strtolower( (string) $target['scheme'] );
+    if ( ! in_array( $scheme, array( 'http', 'https' ), true ) || $scheme !== strtolower( (string) $site['scheme'] ) ) {
+      return '';
+    }
+
+    $default_port = static function ( string $url_scheme ): int {
+      return 'https' === $url_scheme ? 443 : 80;
+    };
+    $target_port = isset( $target['port'] ) ? (int) $target['port'] : $default_port( $scheme );
+    $site_scheme = strtolower( (string) $site['scheme'] );
+    $site_port   = isset( $site['port'] ) ? (int) $site['port'] : $default_port( $site_scheme );
+
+    if ( strtolower( (string) $target['host'] ) !== strtolower( (string) $site['host'] ) || $target_port !== $site_port ) {
+      return '';
+    }
+
+    return filter_var( $url, FILTER_VALIDATE_URL ) ? $url : '';
+  }
+
   private static function get_certificate_url( int $user_id, int $course_id ): string {
     if ( function_exists( 'learndash_get_course_certificate_link' ) ) {
       $link = learndash_get_course_certificate_link( $course_id, $user_id );
       if ( is_string( $link ) && $link !== '' ) {
-        return $link;
+        $safe_link = self::sanitize_certificate_url( $link );
+        if ( '' !== $safe_link ) {
+          return $safe_link;
+        }
       }
     }
 
@@ -1006,7 +1135,7 @@ final class GHCA_ACD_Data_Provider {
     if ( is_array( $uo ) && ! empty( $uo ) ) {
       $first = reset( $uo );
       if ( is_string( $first ) && $first !== '' ) {
-        return $first;
+        return self::sanitize_certificate_url( $first );
       }
     }
 

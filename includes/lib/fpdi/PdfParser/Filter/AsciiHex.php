@@ -28,7 +28,7 @@ class AsciiHex implements FilterInterface
             $data .= '0';
         }
 
-        return \pack('H*', $data);
+        return DecodedStreamBudget::consume(\pack('H*', $data));
     }
 
     /**
