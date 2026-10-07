@@ -188,8 +188,18 @@ final class GHCA_ACD_Table_UI {
 
     ob_start();
     ?>
-    <th class="<?php echo esc_attr( $class ); ?>" data-ghca-sort="<?php echo esc_attr( $column_key ); ?>" data-ghca-sort-order="<?php echo esc_attr( $next_order ); ?>" role="button" tabindex="0">
-      <div class="ghca-acd__sort-inner">
+    <?php
+    /*
+     * The header keeps its native `columnheader` role -- `role="button"` on a
+     * <th> destroys it -- and exposes sort state via aria-sort. The control is
+     * a real <button>, so Enter and Space come from the platform rather than a
+     * bespoke keydown handler. The existing click delegation still resolves
+     * because it matches closest('[data-ghca-sort]') on the <th>.
+     */
+    $aria_sort = $is_active ? ( 'asc' === $current_order ? 'ascending' : 'descending' ) : 'none';
+    ?>
+    <th class="<?php echo esc_attr( $class ); ?>" data-ghca-sort="<?php echo esc_attr( $column_key ); ?>" data-ghca-sort-order="<?php echo esc_attr( $next_order ); ?>" scope="col" aria-sort="<?php echo esc_attr( $aria_sort ); ?>">
+      <button type="button" class="ghca-acd__sort-inner">
         <span><?php echo esc_html( $label ); ?></span>
         <span class="ghca-acd__sort-icon" aria-hidden="true">
           <?php if ( $is_active && $current_order === 'asc' ) : ?>
@@ -200,7 +210,7 @@ final class GHCA_ACD_Table_UI {
             <svg width="12" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"/></svg>
           <?php endif; ?>
         </span>
-      </div>
+      </button>
     </th>
     <?php
     return (string) ob_get_clean();

@@ -115,7 +115,7 @@ final class GHCA_ACD_User_Report {
 
       <div class="ghca-acd__panel">
         <h2 class="ghca-acd__panel-title"><?php esc_html_e( 'Required Courses', 'ghca-acd' ); ?></h2>
-        <div class="ghca-acd__table-wrap">
+        <div class="ghca-acd__table-wrap" tabindex="0" role="group" aria-label="Employee course table">
           <table class="ghca-acd__table ghca-acd__table--user-courses">
             <thead>
               <tr>
@@ -168,12 +168,17 @@ final class GHCA_ACD_User_Report {
       return false;
     }
 
+    if ( GHCA_ACD_Data_Provider::is_user_suspended( $user_id ) && ! GHCA_ACD_Roles::user_can_manage_users() ) {
+      return false;
+    }
+
     if ( current_user_can( 'manage_options' ) || current_user_can( 'edit_users' ) ) {
       return true;
     }
 
-    $employee = GHCA_ACD_Data_Provider::get_employee_record( $user_id );
-    $group_id = (int) ( $employee['group_id'] ?? 0 );
+    // Scope checks must not build the full employee record: that record renders
+    // action links which call this method again for delegated dashboard roles.
+    $group_id = GHCA_ACD_Data_Provider::get_user_primary_group_id( $user_id );
     if ( $group_id <= 0 ) {
       return false;
     }
