@@ -73,6 +73,14 @@ final class GHCA_ACD_Messaging_Secret_Store {
 		if ( '' === $value ) {
 			return $current;
 		}
+		if ( 0 === strpos( $value, 'v1:' ) ) {
+			$decrypted = self::decrypt( $value );
+			if ( ! is_wp_error( $decrypted ) ) {
+				return $value;
+			}
+			add_settings_error( 'ghca_acd_messaging', $decrypted->get_error_code(), $decrypted->get_error_message(), 'error' );
+			return $current;
+		}
 		$encrypted = self::encrypt( $value );
 		if ( is_wp_error( $encrypted ) ) {
 			add_settings_error( 'ghca_acd_messaging', $encrypted->get_error_code(), $encrypted->get_error_message(), 'error' );

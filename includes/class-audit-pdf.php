@@ -29,10 +29,10 @@ final class GHCA_Audit_PDF {
 	 * job id is supplied) manifest ownership. Sends a JSON error and exits
 	 * on failure; returns the manifest (or null when no job id expected).
 	 */
-	private static function guard_ajax( bool $expects_job ): ?array {
+	private static function guard_ajax( bool $expects_job, bool $cleanup_only = false ): ?array {
 		check_ajax_referer( 'ghca_acd_table', 'nonce' );
 
-		if ( ! is_user_logged_in() || ! GHCA_ACD_Roles::user_can_view() ) {
+		if ( ! is_user_logged_in() || ! GHCA_ACD_Roles::user_can_view() || ( ! $cleanup_only && ! GHCA_ACD_Roles::user_can_view_employee_documents() ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ghca-acd' ) ), 403 );
 		}
 
@@ -113,8 +113,10 @@ final class GHCA_Audit_PDF {
 				$evidence_refs,
 				$audit_period ? $context['audit_data'] : array()
 			);
-		} catch ( RuntimeException $exception ) {
+		} catch ( LogicException $exception ) {
 			wp_send_json_error( array( 'message' => __( 'A packet job is already starting. Please try again.', 'ghca-acd' ) ), 409 );
+		} catch ( RuntimeException $exception ) {
+			wp_send_json_error( array( 'message' => __( 'Private packet storage is unavailable. Contact an administrator.', 'ghca-acd' ) ), 500 );
 		}
 		if ( 'oltl_training' === $tracker && ! GHCA_ACD_OLTL_Readiness::event( 'packet_started', get_current_user_id(), $user_id ) ) {
 			GHCA_Audit_PDF_Jobs::delete_job( $job_id );
@@ -415,12 +417,16 @@ final class GHCA_Audit_PDF {
 
 	/** Cancels an owned job and promptly removes its temporary PII files. */
 	public static function ajax_cancel(): void {
-		$job  = self::guard_ajax( true );
+		$job  = self::guard_ajax( true, true );
 		$lock = GHCA_Audit_PDF_Jobs::acquire_job_lock( $job['job_id'], true );
-		if ( false !== $lock ) {
+		if ( false === $lock ) {
+			wp_send_json_error( array( 'message' => __( 'This packet job could not be cancelled. Please try again.', 'ghca-acd' ) ), 409 );
+		}
+		try {
+			GHCA_Audit_PDF_Jobs::delete_job( $job['job_id'] );
+		} finally {
 			GHCA_Audit_PDF_Jobs::release_lock( $lock );
 		}
-		GHCA_Audit_PDF_Jobs::delete_job( $job['job_id'] );
 		wp_send_json_success();
 	}
 

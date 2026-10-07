@@ -74,6 +74,15 @@ $third_lock = GHCA_Audit_PDF_Jobs::acquire_job_lock( $lock_job_id );
 check( is_resource( $third_lock ), 'packet phase lock is reusable after release' );
 GHCA_Audit_PDF_Jobs::release_lock( $third_lock );
 
+// Age-based cleanup must not unlink an owner lock while a packet starts.
+$owner_lock_path = GHCA_Audit_PDF_Jobs::packets_base() . '/owner_987654.lock';
+$owner_lock = fopen( $owner_lock_path, 'c+b' );
+check( is_resource( $owner_lock ) && flock( $owner_lock, LOCK_EX | LOCK_NB ), 'owner lock is held for cleanup test' );
+touch( $owner_lock_path, time() - GHCA_Audit_PDF_Jobs::TTL - 60 );
+GHCA_Audit_PDF_Jobs::gc();
+check( is_file( $owner_lock_path ), 'cleanup preserves aged owner lock file' );
+GHCA_Audit_PDF_Jobs::release_lock( $owner_lock );
+
 $private_file = GHCA_Audit_PDF_Jobs::packets_base() . '/permissions-test.pdf';
 file_put_contents( $private_file, 'test' );
 check( GHCA_Audit_PDF_Jobs::secure_file( $private_file ), 'packet file permissions are restricted' );

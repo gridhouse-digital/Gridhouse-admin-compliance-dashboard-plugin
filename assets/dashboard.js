@@ -657,7 +657,10 @@
       drawer.hidden = false;
       drawer.setAttribute('aria-hidden', 'false');
       document.documentElement.classList.add('ghca-acd--drawer-open');
-      ghcaAcdOverlay.open(drawer, launcher || null, closeDrawer);
+      ghcaAcdOverlay.open(drawer, launcher || null, function () {
+        if (typeof window.ghcaAcdEditSubpageBack === 'function' && window.ghcaAcdEditSubpageBack()) return;
+        closeDrawer();
+      });
       bodyContainer.innerHTML = loadingHtml;
       bodyContainer.setAttribute('aria-busy', 'true');
 
@@ -928,14 +931,13 @@
       submitForm(form);
     });
 
-    // Escape backs out of the sub-page, but only when no overlay is above it.
-    document.addEventListener('keydown', function (e) {
-      if (e.key !== 'Escape') return;
+    // The drawer's overlay close handler invokes this when Escape reaches it.
+    window.ghcaAcdEditSubpageBack = function () {
       var v = views();
-      if (!v || v.subpage.hidden) return;
-      if (ghcaAcdOverlay.top()) return; // an overlay is above the sub-page; let it handle Escape
+      if (!v || v.subpage.hidden) return false;
       showOverview(true);
-    });
+      return true;
+    };
   }
 
   function ghcaToast(message, isError) {

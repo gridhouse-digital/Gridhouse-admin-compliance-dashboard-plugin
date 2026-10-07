@@ -122,7 +122,7 @@ Access to the dashboard is tightly controlled via a custom capability: `view_com
 
 ## Granular User Permissions
 
-Managed from **Settings → Compliance Permissions** in wp-admin. Each field accepts a comma-separated list of WordPress User IDs.
+Managed from **Gridhouse Compliance → Permissions** in wp-admin. Each field accepts a comma-separated list of WordPress User IDs.
 
 | Permission | What it controls |
 |---|---|
@@ -139,23 +139,23 @@ Managed from **Settings → Compliance Permissions** in wp-admin. Each field acc
 
 ## Settings Pages
 
-The plugin registers three separate pages under **Settings** in wp-admin:
+The plugin registers these pages under **Gridhouse Compliance** in wp-admin:
 
-### Settings → Compliance Admin
+### Gridhouse Compliance → Settings
 General dashboard configuration:
 - **New Hire Compliance** — Select which LearnDash groups are new hire groups and set the completion window (days).
 - **Dashboard Branding** — Customize primary/secondary/accent colors, organization name, logo URL, and support email.
 - **Dashboard Performance** — Configure the at-risk window (days) and aggregate cache TTL (seconds).
 - **Rolling Expirations & Traffic Light** — Set per-course lifespans (e.g., CPR = 730 days) and the warning window before expiry.
 
-### Settings → Compliance Permissions
+### Gridhouse Compliance → Permissions
 Per-user permission overrides (see [Granular User Permissions](#granular-user-permissions) above).
 
-### Settings → Compliance Messaging
+### Gridhouse Compliance → Messaging
 Email and optional Twilio SMS configuration:
 - Email sending is disabled by default after upgrade and must be enabled by an administrator.
 - Configure the sender display name, optional reply-to address, branded-HTML toggle, portal button label, and footer text, then send the real branded template as a transport test to the current administrator.
-- Branded email reuses the agency name, public HTTPS logo, colors, and support email from **Settings → Compliance Admin → Dashboard Branding**. Images are optional and the email remains readable when an email client blocks them.
+- Branded email reuses the agency name, public HTTPS logo, colors, and support email from **Gridhouse Compliance → Settings → Dashboard Branding**. Images are optional and the email remains readable when an email client blocks them.
 - Optionally permit reminders to inactive employees; this is disabled by default.
 - Template placeholders are allowlisted and rendered as plain text. Templates explicitly declare their allowed delivery methods.
 - SMS remains unavailable until all provider, campaign, Advanced Opt-Out, connection-test, E.164 phone, and phone-specific consent gates pass.
@@ -203,7 +203,7 @@ The dashboard is built entirely on shortcodes, allowing you to design the layout
 
 ### Signed Jotform employee ownership
 
-Each allowed external-training form needs a second hidden field for the ownership claim. Map that question ID as **Ownership claim QID** in **Settings → Jotform Documents**. In 1.6.1, configured Jotform HTTPS course iframes automatically receive both mapped hidden values once; no duplicate site-specific embed code is needed. The logged-in course page also exposes an authenticated browser helper for optional legacy integration:
+Each allowed external-training form needs a second hidden field for the ownership claim. Map that question ID as **Ownership claim QID** in **Gridhouse Compliance → Jotform Documents**. In 1.6.1, configured Jotform HTTPS course iframes automatically receive both mapped hidden values once; no duplicate site-specific embed code is needed. The logged-in course page also exposes an authenticated browser helper for optional legacy integration:
 
 ```javascript
 const identity = await window.ghcaAcdJotformOwnership.getClaim('123456');

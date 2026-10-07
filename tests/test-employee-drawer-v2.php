@@ -16,7 +16,9 @@ function employee_drawer_v3_check( bool $condition, string $message ): void {
 	$fails += $condition ? 0 : 1;
 }
 
-employee_drawer_v3_check( false !== strpos( $plugin, 'Version: 1.7.1' ) && false !== strpos( $plugin, "'1.7.1'" ), 'the live source remains version 1.7.1' );
+preg_match( '/\* Version: ([^\r\n]+)/', $plugin, $header_version );
+preg_match( "/const VERSION\s*=\s*'([^']+)'/", $plugin, $const_version );
+employee_drawer_v3_check( ! empty( $header_version[1] ) && $header_version[1] === ( $const_version[1] ?? '' ), 'plugin header and runtime version match' );
 employee_drawer_v3_check( false !== strpos( $ajax, 'ghca-acd__drawer-compliance-ring' ) && false !== strpos( $ajax, 'ghca-acd__drawer-attention-actions' ) && false !== strpos( $ajax, 'ghca-acd__drawer-course-progress-inline' ), 'Training uses the Clinical Precision summary, attention card, and compact records' );
 employee_drawer_v3_check( false !== strpos( $ajax, 'ghca-acd__drawer-admin-hero' ) && false !== strpos( $ajax, 'ghca-acd__drawer-employment-card' ) && false !== strpos( $ajax, 'Employee is currently in good standing and authorized for active service.' ) && false !== strpos( $ajax, 'ghca-acd__drawer-system-meta' ), 'Administration uses the approved overview, standing statement, employment card, and real System Meta' );
 employee_drawer_v3_check( false !== strpos( $jotform, 'ghca-acd__jotform-drawer-head' ) && false !== strpos( $jotform, 'ghca-acd__jotform-file-copy' ) && false !== strpos( $jotform, 'data-ghca-documents-all' ), 'Documents uses the indexed-record list while preserving the existing all-documents action' );

@@ -117,7 +117,7 @@ final class GHCA_Audit_PDF_Jobs {
 	public static function create_job( int $owner_id, int $user_id, string $tracker, array $urls, string $filename, array $course_ids = array(), array $brokerable = array(), array $course_keys = array(), array $evidence_refs = array(), array $report_snapshot = array() ): string {
 		$lock = self::acquire_owner_lock( $owner_id );
 		if ( false === $lock ) {
-			throw new RuntimeException( 'A packet job is already starting. Please try again.' );
+			throw new LogicException( 'A packet job is already starting. Please try again.' );
 		}
 
 		try {
@@ -125,7 +125,7 @@ final class GHCA_Audit_PDF_Jobs {
 			if ( is_string( $previous_job_id ) && self::is_valid_job_id( $previous_job_id ) ) {
 				$previous_lock = self::acquire_job_lock( $previous_job_id );
 				if ( false === $previous_lock ) {
-					throw new RuntimeException( 'The active packet job is still processing.' );
+					throw new LogicException( 'The active packet job is still processing.' );
 				}
 				self::delete_job( $previous_job_id );
 				self::release_lock( $previous_lock );
@@ -258,20 +258,29 @@ final class GHCA_Audit_PDF_Jobs {
 	/** Deletes temp folders and finished packets older than TTL. Cheap; runs on every init. */
 	public static function gc(): void {
 		$now = time();
+		try {
+			$temp_base = self::temp_base();
+			$packets_base = self::packets_base();
+		} catch ( RuntimeException $exception ) {
+			return;
+		}
 
-		foreach ( (array) glob( self::temp_base() . '/*', GLOB_ONLYDIR ) as $dir ) {
+		foreach ( (array) glob( $temp_base . '/*', GLOB_ONLYDIR ) as $dir ) {
 			if ( self::is_expired( (int) @filemtime( $dir ), $now ) ) {
 				self::rmdir_recursive( $dir );
 			}
 		}
 
-		foreach ( (array) glob( self::packets_base() . '/*.pdf' ) as $file ) {
+		foreach ( (array) glob( $packets_base . '/*.pdf' ) as $file ) {
 			if ( self::is_expired( (int) @filemtime( $file ), $now ) ) {
 				@unlink( $file );
 			}
 		}
 
-		foreach ( (array) glob( self::packets_base() . '/*.lock' ) as $file ) {
+		foreach ( (array) glob( $packets_base . '/*.lock' ) as $file ) {
+			if ( 0 === strpos( basename( $file ), 'owner_' ) ) {
+				continue;
+			}
 			if ( self::is_expired( (int) @filemtime( $file ), $now ) ) {
 				@unlink( $file );
 			}

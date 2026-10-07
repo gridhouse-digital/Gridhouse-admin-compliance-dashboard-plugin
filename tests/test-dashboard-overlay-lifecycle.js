@@ -183,7 +183,8 @@ context.fetch = (url, options) => {
 window.__ghcaTest.initPdfPacket();
 
 const trigger = {
-  getAttribute(name) { return name === 'data-ghca-pdf-packet' ? '47' : (name === 'data-tracker' ? 'annual' : ''); }
+  getAttribute(name) { return name === 'data-ghca-pdf-packet' ? '47' : (name === 'data-tracker' ? 'annual' : ''); },
+  closest() { return null; }
 };
 const click = {
   target: { closest(selector) { return selector === '[data-ghca-pdf-packet]' ? trigger : null; } },

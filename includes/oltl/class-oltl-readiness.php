@@ -88,9 +88,9 @@ final class GHCA_ACD_OLTL_Readiness {
 		}
 
 		$now_ts = (int) current_time( 'timestamp', true );
-		$hire_ts = GHCA_Audit_Calculator::registration_timestamp( $user );
-		$cycle = GHCA_ACD_Settings::get_annual_cycle();
-		$window = $hire_ts > 0 ? GHCA_Audit_Calculator::resolve_annual_window( $hire_ts, $cycle, $now_ts, wp_timezone() ) : array(
+		$hire_ts = GHCA_ACD_Employment_Record::timestamp( $user_id );
+		$cycle = GHCA_ACD_Settings::get_configured_annual_cycle();
+		$window = $hire_ts > 0 && '' !== $cycle ? GHCA_Audit_Calculator::resolve_annual_window( $hire_ts, $cycle, $now_ts, wp_timezone() ) : array(
 			'start_ts' => 0,
 			'end_ts' => 0,
 			'start_date' => '',
@@ -102,20 +102,20 @@ final class GHCA_ACD_OLTL_Readiness {
 			$requirements[ $code ] = self::requirement_row( $code, $label );
 		}
 		$courses = array();
-		if ( $hire_ts > 0 ) {
+		if ( $hire_ts > 0 && '' !== $cycle && (int) $window['end_ts'] > (int) $window['start_ts'] ) {
 			self::apply_internal_evidence( $user_id, $window, $requirements, $courses );
 			self::apply_external_evidence( $user_id, $window, $requirements, $courses );
 		} else {
 			foreach ( $requirements as &$requirement ) {
 				$requirement['status'] = 'manual_review';
-				$requirement['note'] = __( 'Employee start date is unavailable; the reporting window cannot be determined.', 'ghca-acd' );
+				$requirement['note'] = __( 'A verified employment date and configured annual cycle are required to determine the reporting window.', 'ghca-acd' );
 			}
 			unset( $requirement );
 		}
 
 		$manual = self::latest_manual_review( $user_id );
 		$manual_manifest_valid = self::manual_manifest_is_valid( $manual );
-		$manual_status = self::manual_review_status( $manual, $window, $manual_manifest_valid );
+		$manual_status = (int) $window['end_ts'] > (int) $window['start_ts'] ? self::manual_review_status( $manual, $window, $manual_manifest_valid ) : 'manual_review';
 		$requirements['service_plan_training'] = array(
 			'code' => 'service_plan_training',
 			'label' => self::all_requirements()['service_plan_training'],
@@ -172,7 +172,7 @@ final class GHCA_ACD_OLTL_Readiness {
 			if ( $completed && empty( $raw_date ) && function_exists( 'learndash_user_get_course_completed_date' ) ) {
 				$raw_date = learndash_user_get_course_completed_date( $user_id, $course_id );
 			}
-			$timestamp = is_numeric( $raw_date ) ? (int) $raw_date : ( $raw_date ? (int) strtotime( (string) $raw_date ) : 0 );
+			$timestamp = GHCA_Audit_Calculator::completion_timestamp( $raw_date );
 			$claimed = $completed || $timestamp > 0;
 			if ( ! $claimed ) {
 				continue;
@@ -217,7 +217,7 @@ final class GHCA_ACD_OLTL_Readiness {
 				continue;
 			}
 			$date = (string) ( $snapshot['completion_date'] ?? $external['proposed_completion_date'] ?? '' );
-			$timestamp = $date ? (int) strtotime( $date . ' 12:00:00 UTC' ) : 0;
+			$timestamp = self::valid_date( $date ) ? (int) strtotime( $date . ' 12:00:00 UTC' ) : 0;
 			$description = trim( wp_strip_all_tags( (string) ( $snapshot['description'] ?? '' ) ) );
 			$has_manifest = ! empty( $external['manifest'] ) && is_array( $external['manifest'] );
 			$status = self::evidence_status( $timestamp, $description, $has_manifest, $window );
@@ -396,6 +396,9 @@ final class GHCA_ACD_OLTL_Readiness {
 	}
 
 	private static function valid_date( string $date ): bool {
+		if ( ! preg_match( '/^[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}$/D', $date ) ) {
+			return false;
+		}
 		$parsed = DateTimeImmutable::createFromFormat( '!Y-m-d', $date );
 		return $parsed && $parsed->format( 'Y-m-d' ) === $date;
 	}

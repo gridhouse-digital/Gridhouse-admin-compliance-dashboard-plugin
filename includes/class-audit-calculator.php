@@ -186,7 +186,7 @@ final class GHCA_Audit_Calculator {
 	}
 
 	/** Accept recorded absolute dates only; relative strings must never become evidence. */
-	private static function completion_timestamp( $value ): int {
+	public static function completion_timestamp( $value ): int {
 		if ( ! is_int( $value ) && ! is_string( $value ) ) {
 			return 0;
 		}

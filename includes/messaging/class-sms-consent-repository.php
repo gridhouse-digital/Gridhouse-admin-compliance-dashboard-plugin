@@ -78,17 +78,26 @@ final class GHCA_ACD_SMS_Consent_Repository {
 		return $existing > 0 ? $existing : new WP_Error( 'ghca_sms_consent_store_failed', __( 'The SMS consent event could not be stored.', 'ghca-acd' ) );
 	}
 
-	/** @return int|WP_Error */
-	public static function employee_for_phone( string $phone ) {
+	/** @return array<int,int>|WP_Error */
+	public static function employees_for_phone( string $phone ) {
 		global $wpdb;
 		$hash = GHCA_ACD_SMS_Phone::hash( $phone );
 		if ( '' === $hash ) {
 			return new WP_Error( 'ghca_sms_phone_invalid', __( 'The inbound SMS phone number is invalid.', 'ghca-acd' ) );
 		}
-		$ids = array_values( array_unique( array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT employee_user_id FROM ' . GHCA_ACD_Messaging_Schema::consent_events_table() . ' WHERE phone_hash = %s', $hash ) ) ) ) );
-		if ( 1 !== count( $ids ) ) {
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT employee_user_id FROM ' . GHCA_ACD_Messaging_Schema::consent_events_table() . ' WHERE phone_hash = %s', $hash ) ) ), static function ( int $id ): bool { return $id > 0; } ) ) );
+		if ( ! $ids ) {
 			return new WP_Error( 'ghca_sms_phone_ambiguous', __( 'The inbound phone number does not identify exactly one employee.', 'ghca-acd' ) );
 		}
-		return $ids[0];
+		return $ids;
+	}
+
+	/** @return int|WP_Error */
+	public static function employee_for_phone( string $phone ) {
+		$ids = self::employees_for_phone( $phone );
+		if ( is_wp_error( $ids ) ) {
+			return $ids;
+		}
+		return 1 === count( $ids ) ? $ids[0] : new WP_Error( 'ghca_sms_phone_ambiguous', __( 'The inbound phone number does not identify exactly one employee.', 'ghca-acd' ) );
 	}
 }

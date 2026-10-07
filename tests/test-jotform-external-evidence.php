@@ -40,7 +40,9 @@ $ui = file_get_contents( $root . '/includes/jotform/class-jotform-ui.php' );
 $calculator = file_get_contents( $root . '/includes/class-audit-calculator.php' );
 $pdf = file_get_contents( $root . '/includes/class-audit-pdf.php' );
 
-jotform_check( false !== strpos( $main, 'Version: 1.7.1' ), 'release is versioned as 1.7.1' );
+preg_match( '/\* Version: ([^\r\n]+)/', $main, $header_version );
+preg_match( "/const VERSION\s*=\s*'([^']+)'/", $main, $const_version );
+jotform_check( ! empty( $header_version[1] ) && $header_version[1] === ( $const_version[1] ?? '' ), 'plugin header and runtime version match' );
 jotform_check( false === strpos( $main . $provider . $ui, 'get_user_jotform_submission' ), 'existing custom snippet AJAX action is not registered or modified' );
 jotform_check( false !== strpos( $provider, "'APIKEY' => \$key" ) && false === strpos( $provider, 'apiKey=' ), 'Jotform credential is sent in a server-side header, not a query string' );
 jotform_check( false === strpos( $ui, 'JOTFORM_API_KEY' ) || false !== strpos( $ui, 'wp-config.php' ), 'plugin UI does not persist a second Jotform credential' );

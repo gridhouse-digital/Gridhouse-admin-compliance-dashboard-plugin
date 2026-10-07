@@ -718,7 +718,7 @@ final class GHCA_ACD_Shortcodes {
                 <td><?php echo esc_html( (string) $row['not_started'] ); ?></td>
                 <td>
                   <div class="ghca-acd__progress">
-                    <span class="ghca-acd__progress-track" role="progressbar" aria-valuenow="<?php echo esc_attr( (string) (int) $row['progress_pct'] ); ?>" aria-valuemin="0" aria-valuemax="100" aria-label="<?php esc_attr_e( 'Compliance progress', 'ghca-acd' ); ?>">
+                    <span class="ghca-acd__progress-track" role="progressbar" aria-valuenow="<?php echo esc_attr( (string) (int) $row['rate'] ); ?>" aria-valuemin="0" aria-valuemax="100" aria-label="<?php esc_attr_e( 'Course completion rate', 'ghca-acd' ); ?>">
                       <span class="ghca-acd__progress-bar <?php echo esc_attr( GHCA_ACD_Data_Provider::get_progress_class( (int) $row['rate'] ) ); ?>" style="width: <?php echo esc_attr( (string) $row['rate'] ); ?>%"></span>
                     </span>
                     <span><?php echo esc_html( $row['rate_label'] ); ?></span>

@@ -226,8 +226,16 @@ final class GHCA_ACD_Jotform_Repository {
 	 * @return array<int,array<string,mixed>>
 	 */
 	public static function all_documents_for_employee( int $user_id, string $search = '', int $cap = 200 ): array {
-		$page = self::search_documents_for_employee( $user_id, $search, max( 1, min( 200, $cap ) ), 0 );
-		return $page['items'];
+		$cap = max( 1, min( 200, $cap ) );
+		$items = array();
+		while ( count( $items ) < $cap ) {
+			$page = self::search_documents_for_employee( $user_id, $search, min( 50, $cap - count( $items ) ), count( $items ) );
+			$items = array_merge( $items, $page['items'] );
+			if ( count( $page['items'] ) === 0 || count( $items ) >= $page['total'] ) {
+				break;
+			}
+		}
+		return $items;
 	}
 
 	/** @return array{approved:int,pending:int,rejected:int,other:int} External-training counts for one employee. */

@@ -55,8 +55,7 @@ $js     = (string) file_get_contents( dirname( __DIR__ ) . '/assets/dashboard.js
  * Template picker: nothing is hidden without a stated reason
  * ---------------------------------------------------------------------- */
 /* A template that fails to render must be reported, not silently dropped. */
-messaging_renderer_check( false === strpos( $svc, "if ( is_wp_error( $subject ) || is_wp_error( $message ) ) {
-				continue;" ) && false !== strpos( $svc, "'reason'   => $unavailable" ), 'templates that fail to render are reported with a reason instead of dropped' );
+messaging_renderer_check( ! preg_match( '/if \( is_wp_error\( \$subject \) \|\| is_wp_error\( \$message \) \) \{\s*continue;/', $svc ) && false !== strpos( $svc, '\'reason\'   => $unavailable' ), 'templates that fail to render are reported with a reason instead of dropped' );
 /* The shipped defaults must cover Email and Email + SMS, or they vanish from
  * the picker the moment either of those methods is selected. */
 messaging_renderer_check( false !== strpos( $schema, "'allowed_channels'   => 'email,email_sms'" ) && false === strpos( $schema, "'allowed_channels'   => 'email'," ), 'seeded default templates are allowed for Email and Email + SMS' );

@@ -472,11 +472,15 @@ final class GHCA_ACD_AJAX {
                   </div>
                 </fieldset>
                 <div class="ghca-acd__packet-triggers">
+                <?php if ( $can_documents ) : ?>
                   <button type="button" class="ghca-acd__packet-run" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="orientation"><?php esc_html_e( 'Orientation', 'ghca-acd' ); ?></button>
                   <button type="button" class="ghca-acd__packet-run ghca-acd__packet-run--primary" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="annual"><?php esc_html_e( 'Annual', 'ghca-acd' ); ?></button>
                   <?php if ( '' !== $oltl_html ) : ?>
                     <button type="button" class="ghca-acd__packet-run" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="oltl_training"><?php esc_html_e( 'OLTL Training', 'ghca-acd' ); ?></button>
                   <?php endif; ?>
+                <?php else : ?>
+                  <p><?php esc_html_e( 'Packet access requires View Employee Documents permission.', 'ghca-acd' ); ?></p>
+                <?php endif; ?>
                 </div>
 
                 <?php /* Mirrors the live job. Idle until a packet run starts. */ ?>
@@ -531,9 +535,11 @@ final class GHCA_ACD_AJAX {
           <summary class="ghca-acd__drawer-action ghca-acd__drawer-action--neutral"><?php echo self::drawer_icon( 'more_horiz' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php esc_html_e( 'More', 'ghca-acd' ); ?></summary>
           <div class="ghca-acd__drawer-more-menu">
             <a href="<?php echo esc_url( $report_url ); ?>"><?php esc_html_e( 'Compliance Report', 'ghca-acd' ); ?></a>
+            <?php if ( $can_documents ) : ?>
             <button type="button" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="orientation"><?php esc_html_e( 'Orientation Packet', 'ghca-acd' ); ?></button>
             <button type="button" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="annual"><?php esc_html_e( 'Annual Packet', 'ghca-acd' ); ?></button>
             <?php if ( '' !== $oltl_html ) : ?><button type="button" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="oltl_training"><?php esc_html_e( 'OLTL Training Packet', 'ghca-acd' ); ?></button><?php endif; ?>
+            <?php endif; ?>
           </div>
         </details>
         <?php if ( GHCA_ACD_Roles::user_can_send_reminders() ) : ?><button type="button" class="ghca-acd__drawer-action ghca-acd__drawer-action--primary" data-ghca-reminder="<?php echo esc_attr( (string) $user_id ); ?>" data-ghca-reminder-name="<?php echo esc_attr( $employee_name ); ?>"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 8-16 8 3-8-3-8Zm3 8h13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg><?php esc_html_e( 'Send Reminder', 'ghca-acd' ); ?></button><?php endif; ?>

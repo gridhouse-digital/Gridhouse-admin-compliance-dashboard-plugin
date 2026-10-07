@@ -5,6 +5,7 @@ function add_shortcode(): void {}
 function get_posts(): array { return array( 10, 20 ); }
 function apply_filters( $tag, $value ) { return $value; }
 function current_user_can(): bool { return false; }
+function get_current_user_id(): int { return 7; }
 function wp_get_current_user(): object { return (object) array( 'roles' => array( 'group_leader' ) ); }
 
 final class GHCA_ACD_Roles {

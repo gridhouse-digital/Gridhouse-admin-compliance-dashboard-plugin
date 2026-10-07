@@ -70,12 +70,15 @@ final class GHCA_ACD_Twilio_Webhooks {
 			return new WP_REST_Response( null, 200 );
 		}
 		if ( 'HELP' !== $opt_type ) {
-			$employee_id = GHCA_ACD_SMS_Consent_Repository::employee_for_phone( $phone );
-			if ( is_wp_error( $employee_id ) ) {
+			$employee_ids = 'STOP' === $opt_type
+				? GHCA_ACD_SMS_Consent_Repository::employees_for_phone( $phone )
+				: GHCA_ACD_SMS_Consent_Repository::employee_for_phone( $phone );
+			if ( is_wp_error( $employee_ids ) ) {
 				GHCA_ACD_Messaging_Repository::release_webhook_event( $key );
-				return new WP_Error( $employee_id->get_error_code(), $employee_id->get_error_message(), array( 'status' => 400 ) );
+				return new WP_Error( $employee_ids->get_error_code(), $employee_ids->get_error_message(), array( 'status' => 400 ) );
 			}
-			$result = GHCA_ACD_SMS_Consent_Repository::record(
+			foreach ( (array) $employee_ids as $employee_id ) {
+				$result = GHCA_ACD_SMS_Consent_Repository::record(
 				array(
 					'employee_user_id' => $employee_id,
 					'phone'            => $phone,
@@ -84,12 +87,13 @@ final class GHCA_ACD_Twilio_Webhooks {
 					'disclosure_version'=> (string) get_option( GHCA_ACD_Settings::OPTION_SMS_DISCLOSURE_VERSION, '1' ),
 					'actor_user_id'    => 0,
 					'provider_ref'     => $sid,
-					'event_key'        => self::event_key( 'consent', $sid, $opt_type ),
+					'event_key'        => self::event_key( 'consent', $sid, $opt_type . '|' . $employee_id ),
 				)
 			);
-			if ( is_wp_error( $result ) ) {
-				GHCA_ACD_Messaging_Repository::release_webhook_event( $key );
-				return new WP_Error( $result->get_error_code(), $result->get_error_message(), array( 'status' => 500 ) );
+				if ( is_wp_error( $result ) ) {
+					GHCA_ACD_Messaging_Repository::release_webhook_event( $key );
+					return new WP_Error( $result->get_error_code(), $result->get_error_message(), array( 'status' => 500 ) );
+				}
 			}
 		}
 		return new WP_REST_Response( null, 200 );

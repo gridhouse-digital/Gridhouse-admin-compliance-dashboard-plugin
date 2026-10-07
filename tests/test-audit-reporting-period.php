@@ -78,6 +78,7 @@ function wp_mkdir_p( $dir ) { return is_dir( $dir ) || mkdir( $dir, 0700, true )
 function learndash_get_course_certificate_link( $course, $user ) { return 'https://synthetic.invalid/certificate/' . $course; }
 class GHCA_ACD_Roles {
     public static function user_can_view() { return $GLOBALS['report_role']; }
+    public static function user_can_view_employee_documents() { return $GLOBALS['report_documents']; }
     public static function user_can_edit_records() { return $GLOBALS['report_edit'] ?? false; }
 }
 class GHCA_ACD_User_Report { public static function can_view_user( $id ) { return $GLOBALS['report_scope'] && 900001 === $id; } }
@@ -98,9 +99,9 @@ function report_request( $post, $method = 'ajax_init_job' ) {
     catch ( ReportingResponse $response ) { return $response; }
     throw new RuntimeException( 'Expected AJAX response' );
 }
-$report_nonce = $report_role = $report_scope = true;
+$report_nonce = $report_role = $report_scope = $report_documents = true;
 $post = array( 'user_id' => 900001, 'tracker' => 'annual', 'audit_start' => $period['start'], 'audit_end' => $period['end'] );
-foreach ( array( 'report_nonce', 'report_role', 'report_scope' ) as $guard ) {
+foreach ( array( 'report_nonce', 'report_role', 'report_documents', 'report_scope' ) as $guard ) {
     $GLOBALS[$guard] = false;
     check( 403 === report_request( $post )->status, 'Existing guard preserved: ' . $guard );
     $GLOBALS[$guard] = true;

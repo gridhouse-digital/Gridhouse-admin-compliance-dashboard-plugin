@@ -56,7 +56,7 @@ try {
 	$first = GHCA_ACD_Messaging_Schema::install();
 	schema_integration_check( $first, 'messaging schema installs through WordPress dbDelta' );
 	schema_integration_check( GHCA_ACD_Messaging_Schema::tables_exist(), 'all five messaging and consent tables are verified' );
-	schema_integration_check( 2 === (int) get_option( GHCA_ACD_Messaging_Schema::OPTION_VERSION, 0 ), 'schema version advances only after verification' );
+	schema_integration_check( GHCA_ACD_Messaging_Schema::VERSION === (int) get_option( GHCA_ACD_Messaging_Schema::OPTION_VERSION, 0 ), 'schema version advances only after verification' );
 
 	$template_count = (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . GHCA_ACD_Messaging_Schema::templates_table() );
 	schema_integration_check( 4 === $template_count, 'three email templates and one minimum-necessary SMS template are seeded' );

@@ -134,7 +134,7 @@ final class GHCA_ACD_Jotform_UI {
 			<?php if ( is_wp_error( $ready ) ) : ?>
 				<p class="ghca-acd__manual-entry-status"><?php echo esc_html( $ready->get_error_message() ); ?></p>
 			<?php elseif ( empty( $catalog ) ) : ?>
-				<p class="ghca-acd__manual-entry-status"><?php esc_html_e( 'No active catalog lessons exist. Add lessons under Tools → External Training Catalog first.', 'ghca-acd' ); ?></p>
+				<p class="ghca-acd__manual-entry-status"><?php esc_html_e( 'No active catalog lessons exist. Add lessons under Gridhouse Compliance → Training Catalog first.', 'ghca-acd' ); ?></p>
 			<?php else : ?>
 			<form class="ghca-acd__manual-entry-form" enctype="multipart/form-data">
 				<input type="hidden" name="action" value="ghca_acd_jotform_manual_upload" /><input type="hidden" name="nonce" value="<?php echo esc_attr( wp_create_nonce( 'ghca_acd_table' ) ); ?>" /><input type="hidden" name="employee_id" value="<?php echo (int) $employee_id; ?>" />

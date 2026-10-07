@@ -24,7 +24,9 @@ $webhooks   = file_get_contents( $root . '/includes/messaging/class-twilio-webho
 $secrets    = file_get_contents( $root . '/includes/messaging/class-messaging-secret-store.php' );
 $consent    = file_get_contents( $root . '/includes/messaging/class-sms-consent-repository.php' );
 
-messaging_security_check( false !== strpos( $main, 'Version: 1.7.1' ) && false !== strpos( $main, "const VERSION         = '1.7.1'" ), 'branded email, scalable history and Jotform evidence use the current release version' );
+preg_match( '/\* Version: ([^\r\n]+)/', $main, $header_version );
+preg_match( "/const VERSION\s*=\s*'([^']+)'/", $main, $const_version );
+messaging_security_check( ! empty( $header_version[1] ) && $header_version[1] === ( $const_version[1] ?? '' ), 'branded email, scalable history and Jotform evidence use the current release version' );
 messaging_security_check( false === strpos( $drawer, "'mailto:'" ) && false !== strpos( $drawer, 'data-ghca-reminder=' ), 'drawer uses the controlled reminder workflow instead of mailto' );
 messaging_security_check( false !== strpos( $roles, 'user_can_send_reminders' ) && false !== strpos( $roles, 'user_can_view_communication_history' ), 'reminder sending and history use separate granular permissions' );
 messaging_security_check( false !== strpos( $roles, 'user_can_manage_messaging_settings' ) && false !== strpos( $roles, "return current_user_can( 'manage_options' )" ), 'provider settings remain restricted to WordPress administrators' );

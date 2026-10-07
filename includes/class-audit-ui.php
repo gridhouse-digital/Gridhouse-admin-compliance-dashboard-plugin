@@ -94,8 +94,10 @@ final class GHCA_ACD_Audit_UI {
 										</label>
 									</td>
 									<td style="white-space: nowrap;">
+										<?php if ( GHCA_ACD_Roles::user_can_view_employee_documents() ) : ?>
 										<button type="button" class="ghca-acd__btn ghca-acd__btn--sm" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="orientation" title="<?php esc_attr_e( 'Download Orientation Packet', 'ghca-acd' ); ?>" style="padding: 4px 8px; margin-right: 4px;">Ori.</button>
 										<button type="button" class="ghca-acd__btn ghca-acd__btn--sm" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="annual" title="<?php esc_attr_e( 'Download Annual Packet', 'ghca-acd' ); ?>" style="padding: 4px 8px;">Ann.</button>
+										<?php endif; ?>
 									</td>
 									<td>
 										<button type="button" class="ghca-acd__btn ghca-acd__btn--sm ghca-audit-save-btn">

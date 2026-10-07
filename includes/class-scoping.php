@@ -4,6 +4,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class GHCA_ACD_Scoping {
+  /** @var array<int,array<int>> */
+  private static $visible_cache = array();
+
   public static function init(): void {
     add_shortcode( 'admin_compliance_scope_banner', array( __CLASS__, 'render_scope_banner' ) );
     add_shortcode( 'admin_compliance_group_summary', array( __CLASS__, 'render_group_summary' ) );
@@ -11,6 +14,10 @@ final class GHCA_ACD_Scoping {
 
   /** @return array<int> */
   public static function get_visible_group_ids(): array {
+    $user_id = get_current_user_id();
+    if ( isset( self::$visible_cache[ $user_id ] ) ) {
+      return self::$visible_cache[ $user_id ];
+    }
     // Dynamically fetch all published LearnDash groups
     $all_groups = get_posts( array(
       'post_type'              => 'groups',
@@ -24,20 +31,20 @@ final class GHCA_ACD_Scoping {
     $all = apply_filters( 'ghca_compliance_group_ids', empty( $all_groups ) ? array() : $all_groups );
 
     if ( current_user_can( 'manage_options' ) || current_user_can( 'edit_users' ) || GHCA_ACD_Roles::user_has_unrestricted_view() ) {
-      return array_map( 'intval', (array) $all );
+      return self::$visible_cache[ $user_id ] = array_map( 'intval', (array) $all );
     }
 
     if ( in_array( 'group_leader', (array) wp_get_current_user()->roles, true ) ) {
       if ( ! function_exists( 'learndash_get_administrators_group_ids' ) ) {
-        return array();
+        return self::$visible_cache[ $user_id ] = array();
       }
 
       $leader_groups = array_map( 'intval', (array) learndash_get_administrators_group_ids( get_current_user_id() ) );
       $visible       = array_values( array_intersect( array_map( 'intval', $all ), $leader_groups ) );
-      return ! empty( $visible ) ? $visible : array();
+      return self::$visible_cache[ $user_id ] = $visible;
     }
 
-    return array_map( 'intval', (array) $all );
+    return self::$visible_cache[ $user_id ] = array_map( 'intval', (array) $all );
   }
 
   public static function is_scoped_user(): bool {

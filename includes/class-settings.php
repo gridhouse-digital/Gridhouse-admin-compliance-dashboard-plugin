@@ -817,7 +817,7 @@ final class GHCA_ACD_Settings {
               <?php if ( $brand['logo_url'] ) : ?>
                 <p><img src="<?php echo esc_url( $brand['logo_url'] ); ?>" alt="" style="max-height:48px;width:auto;margin-top:8px;" /></p>
               <?php endif; ?>
-              <p class="description"><?php esc_html_e( 'Used in generated compliance PDF packets only. It is not displayed in the dashboard header.', 'ghca-acd' ); ?></p>
+              <p class="description"><?php esc_html_e( 'It is not displayed in the dashboard header.', 'ghca-acd' ); ?></p>
             </td>
           </tr>
           <tr>
