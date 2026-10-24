@@ -10,12 +10,12 @@ require_once __DIR__ . '/../includes/class-compliance-program.php';
 $T = array(
 	'options' => array( 'ghca_new_hire_group_ids' => array( 9 ) ),
 	'group_courses' => array( 9 => array( 135, 2180, 2905 ) ), // 2905 = "Fatal Five", deliberately NOT mapped.
+	'tz' => 'America/Toronto', 'hire' => array(), 'worked_alone' => array(), 'registered' => '2026-06-02 09:00:00',
 	'members' => array( 73 => array( 9 ) ),
 	'done' => array(), // [user][course] => raw completion meta
 	'flags' => array(), // [user][course] => bool completed per LearnDash
 );
-$tz = new DateTimeZone( 'America/Toronto' );
-function ts( string $d ): int { global $tz; return ( new DateTimeImmutable( $d, $tz ) )->getTimestamp(); }
+function ts( string $d ): int { return ( new DateTimeImmutable( $d, wp_timezone() ) )->getTimestamp(); }
 function get_option( $k, $d = false ) { return $GLOBALS['T']['options'][ $k ] ?? $d; }
 function apply_filters( $hook, $v ) {
 	if ( 'ghca_new_hire_group_ids' === $hook ) { return GHCA_Compliance_Program::filter_new_hire_group_ids( $v ); }
@@ -32,15 +32,16 @@ function get_permalink( $id ) { return 'https://example.test/c/' . $id; }
 function home_url( $p = '' ) { return 'https://example.test' . $p; }
 function get_post_meta( $id, $k, $s ) { return ''; }
 function get_post_field( $f, $id ) { return ''; }
-function get_userdata( $u ) { return (object) array( 'user_registered' => '2026-06-02 09:00:00', 'roles' => array( 'subscriber' ) ); }
+function get_userdata( $u ) { return (object) array( 'user_registered' => $GLOBALS['T']['registered'], 'roles' => array( 'subscriber' ) ); }
 function get_user_meta( $u, $k, $s ) {
 	if ( GHCA_ACD_Employment_Record::META_KEY === $k ) {
-		return array( 'date' => '2026-06-02', 'source' => 'Synthetic HR record', 'verified_by' => 90, 'verified_at' => time() );
+		return array( 'date' => $GLOBALS['T']['hire'][ $u ] ?? '2026-06-02', 'source' => 'Synthetic HR record', 'verified_by' => 90, 'verified_at' => time() );
 	}
+	if ( 'ghca_worked_alone_date' === $k ) { return $GLOBALS['T']['worked_alone'][ $u ] ?? ''; }
 	if ( 0 === strpos( $k, 'course_completed_' ) ) { return $GLOBALS['T']['done'][ $u ][ (int) substr( $k, 17 ) ] ?? ''; }
 	return '';
 }
-function wp_timezone() { return new DateTimeZone( 'America/Toronto' ); }
+function wp_timezone() { return new DateTimeZone( $GLOBALS['T']['tz'] ); }
 function wp_date( $f, $t ) { return ( new DateTimeImmutable( '@' . $t ) )->setTimezone( wp_timezone() )->format( $f ); }
 function __( $t, $d = '' ) { return $t; }
 $GLOBALS['wp_roles'] = (object) array( 'roles' => array( 'subscriber' => array( 'name' => 'Employee' ) ) );
@@ -133,6 +134,47 @@ $d = packet( 74 );
 check( '06/12/2026' === $d['completion_date'] && 'Yes' === $d['completed_within_30'], 'no group: legacy mapped-course behaviour is unchanged' );
 $GLOBALS['T']['options']['ghca_new_hire_group_ids'] = array();
 check( false === packet()['new_hire_program']['active'], 'unconfigured program is not active' );
+
+// --- 7. Site time zone, not UTC, decides calendar dates and day counts ----------------------
+$GLOBALS['T']['options']['ghca_new_hire_group_ids'] = array( 9 );
+$GLOBALS['T']['group_courses'][9] = array( 135, 2180, 2905 );
+function tz_case( string $zone, string $hire, string $last_done ): array {
+	$GLOBALS['T']['tz'] = $zone;
+	$GLOBALS['T']['hire'][69] = $hire;
+	complete( 135, $hire . ' 10:00:00', 69 );
+	complete( 2180, $hire . ' 11:00:00', 69 );
+	complete( 2905, $last_done, 69 );
+	$GLOBALS['T']['members'][69] = array( 9 );
+	return packet( 69 );
+}
+// Toronto (behind UTC): 23:30 local on day 30 is already the next day in UTC.
+$last = '2025-11-16 23:30:00';
+check( gmdate( 'm/d/Y', ts( $last ) ) === '11/17/2025', 'fixture: 23:30 Toronto on 11/16 is 11/17 in UTC' );
+$d = tz_case( 'America/Toronto', '2025-10-17', $last );
+check( '11/16/2025' === $d['completion_date'], 'completion at 23:30 local keeps the local date (11/16), not the UTC date' );
+check( 'Yes' === $d['completed_within_30'], 'day 30 (hire 10/17, completed 11/16 23:30 local) is Yes' );
+$d = tz_case( 'America/Toronto', '2025-10-17', '2025-11-17 00:10:00' );
+check( '11/17/2025' === $d['completion_date'] && 'No' === $d['completed_within_30'], 'day 31 is No' );
+// Auckland (ahead of UTC): 00:30 local on day 30 is still the previous day in UTC.
+$d = tz_case( 'Pacific/Auckland', '2025-10-17', '2025-11-16 00:30:00' );
+check( gmdate( 'm/d/Y', ts( '2025-11-16 00:30:00' ) ) === '11/15/2025', 'fixture: 00:30 Auckland on 11/16 is 11/15 in UTC' );
+check( '11/16/2025' === $d['completion_date'] && 'Yes' === $d['completed_within_30'], 'ahead-of-UTC zone: local date and day-30 Yes' );
+$d = tz_case( 'Pacific/Auckland', '2025-10-17', '2025-11-17 00:30:00' );
+check( '11/17/2025' === $d['completion_date'] && 'No' === $d['completed_within_30'], 'ahead-of-UTC zone: day 31 is No' );
+// Before working alone compares local dates.
+$GLOBALS['T']['worked_alone'][69] = '2025-11-16';
+$d = tz_case( 'America/Toronto', '2025-10-17', $last );
+check( 'Yes' === $d['worked_alone_compliant'], 'working alone on the local completion date is not before completion' );
+$GLOBALS['T']['worked_alone'][69] = '2025-11-15';
+check( 'No (Violation)' === tz_case( 'America/Toronto', '2025-10-17', $last )['worked_alone_compliant'], 'working alone the local day before completion is a violation' );
+$GLOBALS['T']['worked_alone'][69] = '';
+// Dashboard deadline: calendar days in site zone across the DST end (2025-11-02, Toronto).
+$GLOBALS['T']['tz'] = 'America/Toronto';
+$GLOBALS['T']['registered'] = '2025-10-30 12:00:00';
+GHCA_Compliance_Program::reset_runtime_cache();
+$st = GHCA_Compliance_Program::get_user_status( 73 );
+check( $st['deadline_ts'] === ts( '2025-11-29 08:00:00' ), 'program deadline keeps local time-of-day across DST (30 calendar days)' );
+check( '2025-11-16' === GHCA_Audit_Calculator::local_date( ts( '2025-11-16 23:30:00' ) ), 'local_date helper returns the site-zone date' );
 
 echo $fails ? "\n$fails FAILED\n" : "\nALL PASS\n";
 exit( $fails ? 1 : 0 );

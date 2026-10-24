@@ -185,6 +185,18 @@ final class GHCA_Audit_Calculator {
 		return ( new DateTimeImmutable( 'now', $timezone ) )->setDate( $year, $month, $day )->setTime( 0, 0 );
 	}
 
+	/** Local (site time zone) calendar date of a timestamp, as Y-m-d. */
+	public static function local_date( int $ts ): string {
+		return ( new DateTimeImmutable( '@' . $ts ) )->setTimezone( wp_timezone() )->format( 'Y-m-d' );
+	}
+
+	/** Whole calendar days from one timestamp's local date to another's (DST-safe, zone-independent). */
+	public static function local_day_diff( int $from_ts, int $to_ts ): int {
+		$from = new DateTimeImmutable( self::local_date( $from_ts ) . ' 00:00:00', new DateTimeZone( 'UTC' ) );
+		$to   = new DateTimeImmutable( self::local_date( $to_ts ) . ' 00:00:00', new DateTimeZone( 'UTC' ) );
+		return (int) $from->diff( $to )->format( '%r%a' );
+	}
+
 	/** Accept recorded absolute dates only; relative strings must never become evidence. */
 	public static function completion_timestamp( $value ): int {
 		if ( ! is_int( $value ) && ! is_string( $value ) ) {
@@ -527,8 +539,8 @@ final class GHCA_Audit_Calculator {
 		// Orientation within 30 days?
 		$completed_within_30 = 'No';
 		if ( $all_orientation_met && $orientation_completed_date > 0 && $doh_ts > 0 ) {
-			$diff = ( $orientation_completed_date - $doh_ts ) / DAY_IN_SECONDS;
-			if ( $diff <= 30 ) {
+			// Calendar days in the site time zone: hire day is day 0, so 30 days after hire is still on time.
+			if ( self::local_day_diff( $doh_ts, $orientation_completed_date ) <= 30 ) {
 				$completed_within_30 = 'Yes';
 			}
 		}
@@ -539,8 +551,13 @@ final class GHCA_Audit_Calculator {
 		if ( $program_incomplete ) {
 			$worked_alone_compliant = 'Not complete';
 		} elseif ( ! empty( $worked_alone_date_raw ) && $orientation_completed_date > 0 ) {
-			$worked_alone_ts = strtotime( $worked_alone_date_raw );
-			if ( $worked_alone_ts >= $orientation_completed_date ) {
+			// Compare local calendar dates: a date-only entry must not precede a same-day completion.
+			try {
+				$worked_alone_day = ( new DateTimeImmutable( (string) $worked_alone_date_raw, wp_timezone() ) )->setTimezone( wp_timezone() )->format( 'Y-m-d' );
+			} catch ( Exception $e ) {
+				$worked_alone_day = '';
+			}
+			if ( '' !== $worked_alone_day && $worked_alone_day >= self::local_date( $orientation_completed_date ) ) {
 				$worked_alone_compliant = 'Yes';
 			} else {
 				$worked_alone_compliant = 'No (Violation)';
@@ -651,7 +668,7 @@ final class GHCA_Audit_Calculator {
 			'additional_hrs'      => $additional_hrs,
 			'total_hrs'           => $total_annual_hrs + $additional_hrs,
 			
-			'completion_date'     => $orientation_completed_date ? gmdate( 'm/d/Y', $orientation_completed_date ) : '',
+			'completion_date'     => $orientation_completed_date ? wp_date( 'm/d/Y', $orientation_completed_date ) : '',
 			'completed_within_30' => $completed_within_30,
 			'new_hire_program'    => $new_hire_program,
 			

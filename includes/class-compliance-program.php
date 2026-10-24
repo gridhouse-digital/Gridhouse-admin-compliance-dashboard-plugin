@@ -249,7 +249,8 @@ final class GHCA_Compliance_Program {
     }
 
     $deadline_days  = self::get_deadline_days();
-    $deadline_ts    = $enrollment_ts + ( $deadline_days * DAY_IN_SECONDS );
+    // Calendar-day arithmetic in the site time zone, so DST shifts do not move the deadline.
+    $deadline_ts    = ( new DateTimeImmutable( '@' . $enrollment_ts ) )->setTimezone( wp_timezone() )->modify( '+' . $deadline_days . ' days' )->getTimestamp();
     $courses        = self::get_user_courses( $user_id, $group_ids );
     $completed      = 0;
     $started        = 0;
