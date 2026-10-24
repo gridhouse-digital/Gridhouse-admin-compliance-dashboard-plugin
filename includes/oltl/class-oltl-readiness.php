@@ -217,7 +217,7 @@ final class GHCA_ACD_OLTL_Readiness {
 				continue;
 			}
 			$date = (string) ( $snapshot['completion_date'] ?? $external['proposed_completion_date'] ?? '' );
-			$timestamp = self::valid_date( $date ) ? (int) strtotime( $date . ' 12:00:00 UTC' ) : 0;
+			$timestamp = self::site_noon( $date );
 			$description = trim( wp_strip_all_tags( (string) ( $snapshot['description'] ?? '' ) ) );
 			$has_manifest = ! empty( $external['manifest'] ) && is_array( $external['manifest'] );
 			$status = self::evidence_status( $timestamp, $description, $has_manifest, $window );
@@ -263,7 +263,7 @@ final class GHCA_ACD_OLTL_Readiness {
 			}
 		}
 		$date = (string) $manual['training_date'];
-		$timestamp = self::valid_date( $date ) ? (int) strtotime( $date . ' 12:00:00 UTC' ) : 0;
+		$timestamp = self::site_noon( $date );
 		if ( ! $manifest_valid || $timestamp <= 0 || $timestamp >= (int) $window['end_ts'] ) {
 			return 'missing_evidence';
 		}
@@ -393,6 +393,15 @@ final class GHCA_ACD_OLTL_Readiness {
 	public static function redact_reference( string $reference ): string {
 		$reference = trim( $reference );
 		return '' === $reference ? '' : __( 'Reference ending ', 'ghca-acd' ) . '•••' . substr( hash( 'sha256', $reference ), -6 );
+	}
+
+	/** Noon on a calendar date in the site time zone (never UTC), or 0 when invalid. */
+	private static function site_noon( string $date ): int {
+		if ( ! self::valid_date( $date ) ) {
+			return 0;
+		}
+		$parsed = DateTimeImmutable::createFromFormat( '!Y-m-d', $date, wp_timezone() );
+		return $parsed ? $parsed->setTime( 12, 0 )->getTimestamp() : 0;
 	}
 
 	private static function valid_date( string $date ): bool {

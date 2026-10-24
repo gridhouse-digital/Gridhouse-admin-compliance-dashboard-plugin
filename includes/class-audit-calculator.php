@@ -197,7 +197,23 @@ final class GHCA_Audit_Calculator {
 		return (int) $from->diff( $to )->format( '%r%a' );
 	}
 
-	/** Accept recorded absolute dates only; relative strings must never become evidence. */
+	/**
+	 * Timestamp for a Y-m-d calendar date at the given local hour in the site time
+	 * zone, or 0 when the string is not a real date. Never UTC.
+	 */
+	public static function site_date_timestamp( string $ymd, int $hour = 0 ): int {
+		if ( ! preg_match( '/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/D', $ymd ) ) {
+			return 0;
+		}
+		$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $ymd, wp_timezone() );
+		return $date && $date->format( 'Y-m-d' ) === $ymd ? max( 0, $date->setTime( $hour, 0 )->getTimestamp() ) : 0;
+	}
+
+	/**
+	 * Accept recorded absolute dates only; relative strings must never become evidence.
+	 * Unix timestamps and values with an explicit UTC offset are taken as recorded;
+	 * date-only and offset-free datetime strings are read in the site time zone.
+	 */
 	public static function completion_timestamp( $value ): int {
 		if ( ! is_int( $value ) && ! is_string( $value ) ) {
 			return 0;
@@ -210,7 +226,7 @@ final class GHCA_Audit_Calculator {
 			return (int) filter_var( $value, FILTER_VALIDATE_INT, array( 'options' => array( 'min_range' => 1 ) ) );
 		}
 		foreach ( array( 'Y-m-d H:i:s', 'Y-m-d\TH:i:sP', 'Y-m-d\TH:i:s', 'Y-m-d\TH:i', 'Y-m-d', 'm/d/Y' ) as $format ) {
-			$date = DateTimeImmutable::createFromFormat( '!' . $format, $value );
+			$date = DateTimeImmutable::createFromFormat( '!' . $format, $value, wp_timezone() );
 			if ( $date && $date->format( $format ) === $value ) {
 				return max( 0, $date->getTimestamp() );
 			}
@@ -455,8 +471,8 @@ final class GHCA_Audit_Calculator {
 				$category = sanitize_key( (string) ( $snapshot['category'] ?? '' ) );
 				$hours = (float) ( $snapshot['credit_hours'] ?? 0 );
 				$raw_date = (string) ( $snapshot['completion_date'] ?? $external['proposed_completion_date'] ?? '' );
-				$date = preg_match( '/^\d{4}-\d{2}-\d{2}$/D', $raw_date ) ? DateTimeImmutable::createFromFormat( '!Y-m-d', $raw_date, $audit_period ? wp_timezone() : new DateTimeZone( 'UTC' ) ) : false;
-				$completed_ts = $date && $date->format( 'Y-m-d' ) === $raw_date ? $date->setTime( 12, 0 )->getTimestamp() : 0;
+				// Calendar-date evidence is read in the site time zone for every packet type.
+				$completed_ts = self::site_date_timestamp( $raw_date, 12 );
 				if ( ! $completed_ts && array_key_exists( $category, $metrics ) && ( $hours > 0 || 'orientation' === $tracker_type ) ) {
 					$evidence_issues[] = 'External revision #' . (int) $external['revision_id'] . ': missing or invalid completion date; credit excluded.';
 					$invalid_categories[ $category ] = true;

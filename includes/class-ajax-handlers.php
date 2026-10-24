@@ -284,7 +284,8 @@ final class GHCA_ACD_AJAX {
     }
 
     $format_record_date = static function ( string $value ): string {
-      $timestamp = '' !== trim( $value ) ? strtotime( $value ) : 0;
+      // Date-only values (first service date) are site-zone calendar dates; datetimes (user_registered) are GMT.
+      $timestamp = '' !== trim( $value ) ? ( preg_match( '#^(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})$#D', trim( $value ) ) ? GHCA_Audit_Calculator::completion_timestamp( trim( $value ) ) : strtotime( $value ) ) : 0;
       return $timestamp ? wp_date( get_option( 'date_format', 'M j, Y' ), $timestamp ) : __( 'Not recorded', 'ghca-acd' );
     };
     $registration_label = $user && ! empty( $user->user_registered ) ? $format_record_date( (string) $user->user_registered ) : __( 'Not recorded', 'ghca-acd' );

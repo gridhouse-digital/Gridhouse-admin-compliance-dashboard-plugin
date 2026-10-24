@@ -24,8 +24,9 @@ namespace {
 	function learndash_user_get_enrolled_courses( $id ) { return array( 900001, 900002 ); }
 	function apply_filters( $name, $value ) { return $value; }
 	function get_option( $name, $default = false ) { global $fixture; return $fixture['options'][ $name ] ?? $default; }
-	function wp_timezone() { return new \DateTimeZone( 'UTC' ); }
-	function wp_date( $format, $timestamp ) { return gmdate( $format, $timestamp ); }
+	// Site time zone is switchable per test via $GLOBALS['site_tz']; defaults to UTC.
+	function wp_timezone() { return new \DateTimeZone( $GLOBALS['site_tz'] ?? 'UTC' ); }
+	function wp_date( $format, $timestamp ) { return ( new \DateTimeImmutable( '@' . $timestamp ) )->setTimezone( wp_timezone() )->format( $format ); }
 	function get_post_meta( $id, $key, $single ) { return ''; }
 	function get_post_field( $field, $id ) { return ''; }
 	function get_the_title( $id ) { return 'Synthetic Course ' . $id; }

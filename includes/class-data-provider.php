@@ -1195,8 +1195,14 @@ final class GHCA_ACD_Data_Provider {
     return $map[ $status ] ?? __( 'Unknown', 'ghca-acd' );
   }
 
+  /** Date-only settings are calendar dates in the site time zone, not UTC midnight. */
+  private static function parse_site_date( string $raw ): int {
+    $timestamp = GHCA_Audit_Calculator::site_date_timestamp( trim( $raw ) );
+    return $timestamp > 0 ? $timestamp : (int) strtotime( $raw );
+  }
+
   private static function format_due_date( string $raw ): string {
-    $timestamp = strtotime( $raw );
+    $timestamp = self::parse_site_date( $raw );
     if ( ! $timestamp ) {
       return $raw;
     }
@@ -1208,7 +1214,7 @@ final class GHCA_ACD_Data_Provider {
     $start = self::get_platform_start_timestamp( $user_id );
     if ( ! $start ) {
       return array(
-        'due_timestamp'  => strtotime( get_option( GHCA_Admin_Compliance_Dashboard::OPTION_DUE_DATE, '2026-07-31' ) ) ?: 0,
+        'due_timestamp'  => self::parse_site_date( (string) get_option( GHCA_Admin_Compliance_Dashboard::OPTION_DUE_DATE, '2026-07-31' ) ) ?: 0,
         'due_date_label' => self::format_due_date( get_option( GHCA_Admin_Compliance_Dashboard::OPTION_DUE_DATE, '2026-07-31' ) ),
       );
     }
