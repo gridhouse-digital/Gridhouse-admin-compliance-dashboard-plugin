@@ -207,6 +207,59 @@ final class GHCA_Audit_Calculator {
 	}
 
 	/**
+	 * Report the full new-hire program for the orientation cover, independent of
+	 * the ODP category mapping. The program (every required course in the
+	 * new-hire group, less agency exclusions) is shared with the dashboard; the
+	 * ODP rows only ever reflect mapped evidence.
+	 *
+	 * Inspects get_user_status() rather than user_requires_new_hire_tracking(),
+	 * which returns false once the employee is complete.
+	 *
+	 * @param array<int|string,array> $mappings
+	 * @return array<string,mixed>
+	 */
+	public static function new_hire_program_report( int $user_id, array $mappings ): array {
+		$report = array(
+			'active' => false, 'complete' => false, 'outstanding' => array(), 'missing_dates' => array(),
+			'unmapped_required' => array(), 'last_completion_ts' => 0,
+			'enrollment_date' => '', 'deadline_date' => '', 'deadline_days' => 0,
+		);
+		if ( ! class_exists( 'GHCA_Compliance_Program', false ) ) {
+			return $report;
+		}
+		$status = GHCA_Compliance_Program::get_user_status( $user_id );
+		if ( empty( $status['active'] ) ) {
+			return $report;
+		}
+		$report['active']              = true;
+		$report['complete']            = ! empty( $status['complete'] );
+		$report['enrollment_date']     = ! empty( $status['enrollment_ts'] ) ? wp_date( 'm/d/Y', (int) $status['enrollment_ts'] ) : '';
+		$report['deadline_date']       = ! empty( $status['deadline_ts'] ) ? wp_date( 'm/d/Y', (int) $status['deadline_ts'] ) : '';
+		$report['deadline_days']       = (int) ( $status['deadline_days'] ?? 0 );
+
+		$dated = 0;
+		foreach ( (array) ( $status['courses'] ?? array() ) as $course ) {
+			$id   = (int) $course['id'];
+			$item = array( 'course_id' => $id, 'title' => (string) $course['title'] );
+			if ( empty( $mappings[ $id ]['is_orientation'] ) ) {
+				$report['unmapped_required'][] = $item;
+			}
+			if ( empty( $course['completed'] ) ) {
+				$report['outstanding'][] = $item;
+			} elseif ( (int) $course['completed_ts'] <= 0 ) {
+				$report['missing_dates'][] = $item;
+			} else {
+				$dated = max( $dated, (int) $course['completed_ts'] );
+			}
+		}
+		if ( $report['complete'] && ! $report['missing_dates'] ) {
+			$report['last_completion_ts'] = $dated;
+		}
+
+		return $report;
+	}
+
+	/**
 	 * Calculate audit data for a single employee.
 	 *
 	 * @param array  $employee     The basic employee data array.
@@ -452,6 +505,25 @@ final class GHCA_Audit_Calculator {
 		// Broad annual training contributes hours, not evidence of a specific required topic.
 		$additional_hrs = $metrics['general']['hours'] + $metrics['job_related']['hours'] + $metrics['odp_annual_training']['hours'];
 
+		// The overall orientation result covers every required new-hire course, not
+		// only the courses mapped to ODP categories. The ODP rows are unaffected.
+		$new_hire_program = 'orientation' === $tracker_type ? self::new_hire_program_report( (int) $user_id, $mappings ) : array();
+		$program_incomplete = ! empty( $new_hire_program['active'] ) && ! $new_hire_program['complete'];
+		if ( ! empty( $new_hire_program['active'] ) ) {
+			if ( $new_hire_program['missing_dates'] && ! $program_incomplete ) {
+				foreach ( $new_hire_program['missing_dates'] as $item ) {
+					$evidence_issues[] = 'New-hire course #' . $item['course_id'] . ': completed without a recorded completion date; overall orientation timing cannot be assessed.';
+				}
+				$orientation_date_missing = true;
+			}
+			if ( $program_incomplete ) {
+				$orientation_completed_date = 0;
+			} elseif ( $new_hire_program['last_completion_ts'] > 0 ) {
+				// Timing runs from the LAST required completion, mapped or not.
+				$orientation_completed_date = max( $orientation_completed_date, $new_hire_program['last_completion_ts'] );
+			}
+		}
+
 		// Orientation within 30 days?
 		$completed_within_30 = 'No';
 		if ( $all_orientation_met && $orientation_completed_date > 0 && $doh_ts > 0 ) {
@@ -464,7 +536,9 @@ final class GHCA_Audit_Calculator {
 		// Worked Alone Verification
 		$worked_alone_date_raw = get_user_meta( $user_id, 'ghca_worked_alone_date', true );
 		$worked_alone_compliant = 'N/A';
-		if ( ! empty( $worked_alone_date_raw ) && $orientation_completed_date > 0 ) {
+		if ( $program_incomplete ) {
+			$worked_alone_compliant = 'Not complete';
+		} elseif ( ! empty( $worked_alone_date_raw ) && $orientation_completed_date > 0 ) {
 			$worked_alone_ts = strtotime( $worked_alone_date_raw );
 			if ( $worked_alone_ts >= $orientation_completed_date ) {
 				$worked_alone_compliant = 'Yes';
@@ -478,13 +552,18 @@ final class GHCA_Audit_Calculator {
 		if ( $evidence_issues ) {
 			$annual_status = 'missing_evidence';
 		}
-		if ( $orientation_date_missing ) {
+		if ( $program_incomplete ) {
+			$completed_within_30 = 'No';
+		} elseif ( $orientation_date_missing ) {
 			$orientation_completed_date = 0;
 			$completed_within_30 = 'Missing evidence';
 			$worked_alone_compliant = 'Missing evidence';
 		}
-		if ( $doh_ts <= 0 ) {
+		if ( $doh_ts <= 0 && ! $program_incomplete ) {
 			$completed_within_30 = 'Missing evidence';
+		}
+		if ( $program_incomplete ) {
+			$orientation_completed_date = 0;
 		}
 
 		$period = $start_date && $end_date ? $start_date . ' to ' . $end_date : '';
@@ -574,6 +653,7 @@ final class GHCA_Audit_Calculator {
 			
 			'completion_date'     => $orientation_completed_date ? gmdate( 'm/d/Y', $orientation_completed_date ) : '',
 			'completed_within_30' => $completed_within_30,
+			'new_hire_program'    => $new_hire_program,
 			
 			// Raw data for PDF
 			'raw_completed_courses' => $raw_completed_courses,

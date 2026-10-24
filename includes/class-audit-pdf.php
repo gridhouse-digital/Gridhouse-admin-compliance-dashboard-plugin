@@ -730,7 +730,7 @@ final class GHCA_Audit_PDF {
 			</table>';
 		} else {
 			$worked_color = ( strpos( $audit_data['worked_alone_compliant'], 'Violation' ) !== false ) ? 'red' : 'green';
-			if ( 'Missing evidence' === $audit_data['worked_alone_compliant'] ) {
+			if ( in_array( $audit_data['worked_alone_compliant'], array( 'Missing evidence', 'Not complete' ), true ) ) {
 				$worked_color = '#8a6d3b';
 			}
 			$html .= '<table cellpadding="4" style="width: 100%; border: 1px solid #ddd;">
@@ -739,7 +739,7 @@ final class GHCA_Audit_PDF {
 					<td width="30%">' . esc_html( $audit_data['completion_date'] ) . '</td>
 				</tr>
 				<tr>
-					<td><strong>Completed within 30 days of hire?</strong></td>
+					<td><strong>Completed within 30 days of verified date of hire?</strong></td>
 					<td>' . esc_html( $audit_data['completed_within_30'] ) . '</td>
 				</tr>
 				<tr>
@@ -747,6 +747,27 @@ final class GHCA_Audit_PDF {
 					<td><strong style="color: ' . $worked_color . ';">' . esc_html( $audit_data['worked_alone_compliant'] ) . '</strong></td>
 				</tr>
 			</table>';
+			$program = (array) ( $audit_data['new_hire_program'] ?? array() );
+			if ( ! empty( $program['active'] ) ) {
+				$titles = static function ( array $items ): string {
+					return esc_html( implode( '; ', array_map( static function ( $item ) { return $item['title'] . ' (#' . (int) $item['course_id'] . ')'; }, $items ) ) );
+				};
+				$html .= '<p style="font-size: 9px;"><strong>New-hire program courses:</strong> '
+					. ( ! empty( $program['complete'] ) && empty( $program['missing_dates'] ) ? 'All required courses are complete.' : 'Not complete.' );
+				if ( ! empty( $program['outstanding'] ) ) {
+					$html .= '<br><strong>Outstanding:</strong> ' . $titles( $program['outstanding'] );
+				}
+				if ( ! empty( $program['missing_dates'] ) ) {
+					$html .= '<br><strong>Completed without a recorded date:</strong> ' . $titles( $program['missing_dates'] );
+				}
+				if ( ! empty( $program['unmapped_required'] ) ) {
+					$html .= '<br>Required by the new-hire program but not mapped to an ODP orientation topic (not shown in the topic table): ' . $titles( $program['unmapped_required'] );
+				}
+				$html .= '<br>The overall completion date is the last required new-hire course completion. The 30-day result runs from the verified date of hire (regulatory basis). The agency\'s new-hire program deadline'
+					. ( $program['deadline_date'] ? ' (' . esc_html( $program['deadline_date'] ) . ')' : '' )
+					. ' is an internal target of ' . (int) $program['deadline_days'] . ' days from program enrollment'
+					. ( $program['enrollment_date'] ? ' (' . esc_html( $program['enrollment_date'] ) . ')' : '' ) . ' and may differ.</p>';
+			}
 		}
 
 		if ( GHCA_ACD_Settings::include_packet_course_details() && ! empty( $audit_data['raw_completed_courses'] ) ) {

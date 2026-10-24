@@ -63,6 +63,19 @@ final class GHCA_Compliance_Program {
     );
   }
 
+  /**
+   * The single new-hire course set shared by the dashboard and the audit
+   * packet: the courses in the employee's active new-hire LearnDash group(s).
+   * Agencies add or remove requirements by editing that group in LearnDash.
+   * This is NOT the ODP orientation category mapping.
+   *
+   * @param array<int> $group_ids
+   * @return array<int>
+   */
+  public static function get_required_course_ids( array $group_ids ): array {
+    return self::get_group_course_ids( $group_ids );
+  }
+
   public static function get_deadline_days(): int {
     return (int) apply_filters( 'ghca_new_hire_deadline_days', self::DEFAULT_DEADLINE_DAYS );
   }
@@ -147,7 +160,7 @@ final class GHCA_Compliance_Program {
   public static function get_user_courses( int $user_id, array $group_ids ): array {
     $items = array();
 
-    foreach ( self::get_group_course_ids( $group_ids ) as $course_id ) {
+    foreach ( self::get_required_course_ids( $group_ids ) as $course_id ) {
       $title     = self::normalize_course_title(
         html_entity_decode( (string) get_the_title( $course_id ), ENT_QUOTES, 'UTF-8' )
       );
@@ -215,6 +228,8 @@ final class GHCA_Compliance_Program {
       'courses'            => array(),
       'total_courses'      => 0,
       'completed_count'    => 0,
+      'last_completion_ts' => 0,
+      'deadline_basis'     => 'enrollment',
       'status_slug'        => '',
       'status_label'       => '',
     );
@@ -244,6 +259,13 @@ final class GHCA_Compliance_Program {
         ++$completed;
       } elseif ( 'in_progress' === $course['status'] ) {
         ++$started;
+      }
+    }
+
+    $last_completion_ts = 0;
+    foreach ( $courses as $course ) {
+      if ( ! empty( $course['completed'] ) ) {
+        $last_completion_ts = max( $last_completion_ts, (int) $course['completed_ts'] );
       }
     }
 
@@ -289,6 +311,11 @@ final class GHCA_Compliance_Program {
       'courses'            => $courses,
       'total_courses'      => $total,
       'completed_count'    => $completed,
+      // Latest dated completion among required courses; 0 until all are complete.
+      'last_completion_ts' => $all_complete ? $last_completion_ts : 0,
+      // The deadline runs from the earliest of account registration and group
+      // enrollment, not from the verified date of hire used by the audit packet.
+      'deadline_basis'     => 'enrollment',
       'status_slug'        => $status_slug,
       'status_label'       => $status_label,
     );
@@ -334,6 +361,10 @@ final class GHCA_Compliance_Program {
 
   private static function get_course_completed_timestamp( int $user_id, int $course_id ): int {
     $activity = get_user_meta( $user_id, 'course_completed_' . $course_id, true );
+    if ( class_exists( 'GHCA_Audit_Calculator', false ) ) {
+      // Same absolute-date rules as the audit packet, so both agree on "has a date".
+      return GHCA_Audit_Calculator::completion_timestamp( $activity );
+    }
     return is_numeric( $activity ) ? (int) $activity : 0;
   }
 
