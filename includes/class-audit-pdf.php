@@ -913,6 +913,12 @@ final class GHCA_Audit_PDF {
 		if ( ! is_readable( $path ) ) {
 			return false;
 		}
+		// Plugin-owned evidence integrity check. FPDI copies a single content stream without decoding it and turns
+		// any undecodable stream into a blank page (FpdiTrait::importPage), so corrupt or over-limit evidence would
+		// otherwise be merged silently. Verify every page's content streams here and refuse the certificate.
+		if ( ! self::certificate_content_is_decodable( $path ) ) {
+			return false;
+		}
 		try {
 			\setasign\Fpdi\PdfParser\Filter\Flate::resetDecodedBudget();
 			$page_count = $pdf->setSourceFile( $path );
@@ -930,6 +936,51 @@ final class GHCA_Audit_PDF {
 			$total_pages += (int) $page_count;
 		} catch ( \Exception $e ) {
 			// Malformed or encrypted certificate
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * True only when every page either has no /Contents at all (an intentionally blank page) or has /Contents made
+	 * exclusively of PDF streams (one, or an array of them) that decode within the F-006 decoded-byte limits.
+	 * A direct `/Contents null` is treated as absent (a blank page): per PDF 32000-1 7.3.7 a null-valued dictionary
+	 * entry is the same as no entry, and the parser drops it. Every other /Contents entry is rejected: a number,
+	 * dictionary or nested array; a null inside a /Contents array; a reference to a null object or a dangling
+	 * reference; and an empty array.
+	 * Scope: page content streams only - not XObjects, fonts or other components.
+	 * Uses FPDI's public reader API and calls getUnfilteredStream() directly, so decode and limit failures
+	 * propagate instead of being skipped. Any problem (corrupt stream, over-limit, malformed or recursive
+	 * structure, unreadable file) returns false; nothing about the file is reported to the caller.
+	 */
+	public static function certificate_content_is_decodable( string $path ): bool {
+		try {
+			\setasign\Fpdi\PdfParser\Filter\Flate::resetDecodedBudget();
+			$reader = new \setasign\Fpdi\PdfReader\PdfReader( new \setasign\Fpdi\PdfParser\PdfParser( \setasign\Fpdi\PdfParser\StreamReader::createByFile( $path ) ) );
+			$pages  = $reader->getPageCount();
+			if ( $pages < 1 || $pages > self::MAX_CERTIFICATE_PAGES ) {
+				return false;
+			}
+			$parser = $reader->getParser();
+			for ( $number = 1; $number <= $pages; $number++ ) {
+				$page_dictionary = $reader->getPage( $number )->getPageDictionary();
+				if ( ! isset( $page_dictionary->value['Contents'] ) ) {
+					continue; // /Contents genuinely absent: an intentionally blank page.
+				}
+				$contents = \setasign\Fpdi\PdfParser\Type\PdfType::resolve( $page_dictionary->value['Contents'], $parser );
+				$entries  = $contents instanceof \setasign\Fpdi\PdfParser\Type\PdfArray ? $contents->value : array( $contents );
+				if ( array() === $entries ) {
+					return false; // present but empty: not a content stream.
+				}
+				foreach ( $entries as $entry ) {
+					$stream = \setasign\Fpdi\PdfParser\Type\PdfType::resolve( $entry, $parser );
+					if ( ! $stream instanceof \setasign\Fpdi\PdfParser\Type\PdfStream ) {
+						return false; // null, number, dictionary, nested array, dangling reference ...
+					}
+					$stream->getUnfilteredStream(); // throws on a corrupt or over-limit stream
+				}
+			}
+		} catch ( \Throwable $e ) {
 			return false;
 		}
 		return true;
