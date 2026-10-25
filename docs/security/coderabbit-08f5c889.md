@@ -71,7 +71,7 @@
 ## F-004 — `fputcsv` default escape character breaks field boundaries
 
 - **Commit:** 8385131
-- **Code path:** `includes/class-export.php` : `handle_export` : 52 and 81; `includes/class-audit-export.php` : `generate_annual_csv` 100 and 125, `generate_orientation_csv` 146 and 169. `csv_safe` (class-export.php ~90, class-audit-export.php 73–79) only prefixes `' ` when the first character is one of `= + - @ \t \r`.
+- **Code path:** `includes/class-export.php` : `handle_export` : 52 and 81; `includes/class-audit-export.php` : `generate_annual_csv` 100 and 125, `generate_orientation_csv` 146 and 169. `csv_safe` (class-export.php ~90, class-audit-export.php 73–79) only prefixes `'` when the first character is one of `= + - @ \t \r`.
 - **Verdict:** Still present.
 - **Evidence:** all six calls use the default escape (`\`), e.g. `fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $row ) );`. Reproduced on PHP 8.3.6 with the synthetic row `['Doe\"', ',=1+1', 'tail']`:
   ```
