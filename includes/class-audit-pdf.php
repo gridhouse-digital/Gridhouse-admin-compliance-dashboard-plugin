@@ -944,7 +944,10 @@ final class GHCA_Audit_PDF {
 	/**
 	 * True only when every page either has no /Contents at all (an intentionally blank page) or has /Contents made
 	 * exclusively of PDF streams (one, or an array of them) that decode within the F-006 decoded-byte limits.
-	 * Any other /Contents entry (null, number, dictionary, nested array, dangling reference, empty array) is rejected.
+	 * A direct `/Contents null` is treated as absent (a blank page): per PDF 32000-1 7.3.7 a null-valued dictionary
+	 * entry is the same as no entry, and the parser drops it. Every other /Contents entry is rejected: a number,
+	 * dictionary or nested array; a null inside a /Contents array; a reference to a null object or a dangling
+	 * reference; and an empty array.
 	 * Scope: page content streams only - not XObjects, fonts or other components.
 	 * Uses FPDI's public reader API and calls getUnfilteredStream() directly, so decode and limit failures
 	 * propagate instead of being skipped. Any problem (corrupt stream, over-limit, malformed or recursive
