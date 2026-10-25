@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Gridhouse Admin Compliance Dashboard
  * Description: HR/compliance administrative dashboard shortcodes for LearnDash + Elementor.
- * Version: 1.2.0
+ * Version: 1.7.3-beta.14
  * Author: Gridhouse Digital
  * Author URI: https://gridhouse.digital
  * Text Domain: ghca-acd
@@ -16,6 +16,8 @@ require_once __DIR__ . '/includes/class-branding.php';
 require_once __DIR__ . '/includes/class-ui-icons.php';
 require_once __DIR__ . '/includes/class-compliance-program.php';
 require_once __DIR__ . '/includes/class-course-lifespans.php';
+require_once __DIR__ . '/includes/class-admin-menu.php';
+require_once __DIR__ . '/includes/class-settings-console.php';
 require_once __DIR__ . '/includes/class-roles.php';
 require_once __DIR__ . '/includes/class-scoping.php';
 require_once __DIR__ . '/includes/class-data-provider.php';
@@ -35,9 +37,32 @@ require_once __DIR__ . '/includes/class-audit-export.php';
 require_once __DIR__ . '/includes/class-audit-pdf.php';
 require_once __DIR__ . '/includes/class-audit-pdf-jobs.php';
 require_once __DIR__ . '/includes/class-audit-ui.php';
+require_once __DIR__ . '/includes/messaging/class-messaging-schema.php';
+require_once __DIR__ . '/includes/messaging/class-messaging-secret-store.php';
+require_once __DIR__ . '/includes/messaging/class-sms-phone.php';
+require_once __DIR__ . '/includes/messaging/class-sms-consent-repository.php';
+require_once __DIR__ . '/includes/messaging/class-message-template-renderer.php';
+require_once __DIR__ . '/includes/messaging/class-email-template-renderer.php';
+require_once __DIR__ . '/includes/messaging/class-messaging-repository.php';
+require_once __DIR__ . '/includes/messaging/class-email-provider.php';
+require_once __DIR__ . '/includes/messaging/class-twilio-provider.php';
+require_once __DIR__ . '/includes/messaging/class-twilio-webhooks.php';
+require_once __DIR__ . '/includes/messaging/class-messaging-worker.php';
+require_once __DIR__ . '/includes/messaging/class-messaging-service.php';
+require_once __DIR__ . '/includes/messaging/class-messaging-ui.php';
+require_once __DIR__ . '/includes/jotform/class-jotform-schema.php';
+require_once __DIR__ . '/includes/jotform/class-jotform-provider.php';
+require_once __DIR__ . '/includes/jotform/class-google-drive-provider.php';
+require_once __DIR__ . '/includes/jotform/class-jotform-repository.php';
+require_once __DIR__ . '/includes/jotform/class-jotform-sync.php';
+require_once __DIR__ . '/includes/jotform/class-external-evidence-store.php';
+require_once __DIR__ . '/includes/jotform/class-jotform-ui.php';
+require_once __DIR__ . '/includes/oltl/class-oltl-schema.php';
+require_once __DIR__ . '/includes/oltl/class-oltl-readiness.php';
+require_once __DIR__ . '/includes/oltl/class-oltl-ui.php';
 
 final class GHCA_Admin_Compliance_Dashboard {
-  const VERSION         = '1.2.0';
+  const VERSION         = '1.7.3-beta.14';
   const OPTION_DUE_DATE = 'ghca_compliance_due_date';
   const CYCLE_DAYS      = 365;
   const NOTICE_DAYS     = 90;
@@ -53,16 +78,28 @@ final class GHCA_Admin_Compliance_Dashboard {
   );
 
   public static function init(): void {
+    GHCA_ACD_Admin_Menu::init();
+    GHCA_Settings_Console::init();
     GHCA_ACD_Roles::init();
     GHCA_ACD_Scoping::init();
     GHCA_ACD_Export::init();
     GHCA_ACD_FluentCRM::init();
     GHCA_ACD_Nav::init();
     GHCA_ACD_Settings::init();
+    GHCA_ACD_Data_Provider::init();
     GHCA_Audit_Mapping::init();
     GHCA_Audit_Export::init();
     GHCA_Audit_PDF::init();
     GHCA_ACD_Audit_UI::init();
+    GHCA_ACD_Messaging_Schema::init();
+    GHCA_ACD_Messaging_Worker::init();
+    GHCA_ACD_Twilio_Webhooks::init();
+    GHCA_ACD_Messaging_UI::init();
+    GHCA_ACD_Jotform_Schema::init();
+    GHCA_ACD_Jotform_Sync::init();
+    GHCA_ACD_Jotform_UI::init();
+    GHCA_ACD_OLTL_Schema::init();
+    GHCA_ACD_OLTL_UI::init();
     GHCA_Compliance_Program::init();
     GHCA_ACD_User_Report::init();
     GHCA_ACD_Manage_Users_UI::init();
@@ -103,17 +140,10 @@ final class GHCA_Admin_Compliance_Dashboard {
     }
 
     wp_enqueue_style(
-      'ghca-acd-fonts',
-      'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap',
-      array(),
-      null
-    );
-
-    wp_enqueue_style(
       'ghca-admin-dashboard',
       plugin_dir_url( __FILE__ ) . 'assets/dashboard.css',
-      array( 'ghca-acd-fonts' ),
-      self::VERSION
+      array(),
+      self::VERSION . '-' . (string) filemtime( plugin_dir_path( __FILE__ ) . 'assets/dashboard.css' )
     );
     wp_add_inline_style( 'ghca-admin-dashboard', GHCA_Dashboard_Branding::get_inline_css() );
 
@@ -121,7 +151,7 @@ final class GHCA_Admin_Compliance_Dashboard {
       'ghca-admin-dashboard',
       plugin_dir_url( __FILE__ ) . 'assets/dashboard.js',
       array(),
-      self::VERSION,
+      self::VERSION . '-' . (string) filemtime( plugin_dir_path( __FILE__ ) . 'assets/dashboard.js' ),
       true
     );
 
@@ -142,8 +172,11 @@ final class GHCA_Admin_Compliance_Dashboard {
         'pdfMerging'       => __( 'Merging documents…', 'ghca-acd' ),
         'pdfDone'          => __( 'Done! Starting download…', 'ghca-acd' ),
         'pdfError'         => __( 'Packet generation failed. No packet was created. Please try again.', 'ghca-acd' ),
+        'tableError'       => __( 'Could not update the table. Your session may have expired — please reload the page.', 'ghca-acd' ),
+        'tableNetworkError' => __( 'Could not reach the server. The table below may be out of date.', 'ghca-acd' ),
       )
     );
+    wp_enqueue_script( 'ghca-agency-training', plugin_dir_url( __FILE__ ) . 'assets/agency-training.js', array( 'ghca-admin-dashboard' ), self::VERSION . '-' . (string) filemtime( plugin_dir_path( __FILE__ ) . 'assets/agency-training.js' ), true );
   }
 
   public static function page_uses_dashboard( WP_Post $post ): bool {
@@ -161,6 +194,7 @@ final class GHCA_Admin_Compliance_Dashboard {
       'admin_compliance_dashboard',
       'admin_compliance_user_report',
       'admin_compliance_manage_users',
+	  'ghca_sms_consent',
     );
 
     foreach ( $tags as $tag ) {
@@ -178,4 +212,12 @@ GHCA_Admin_Compliance_Dashboard::init();
 
 register_activation_hook( __FILE__, static function (): void {
   GHCA_ACD_Roles::register_roles();
+  GHCA_ACD_Messaging_Schema::install();
+  GHCA_ACD_Jotform_Schema::install();
+  GHCA_ACD_OLTL_Schema::install();
+} );
+
+register_deactivation_hook( __FILE__, static function (): void {
+  GHCA_ACD_Messaging_Worker::clear_schedules();
+  GHCA_ACD_Jotform_Sync::clear_schedule();
 } );

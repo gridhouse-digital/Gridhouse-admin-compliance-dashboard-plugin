@@ -53,27 +53,59 @@ final class GHCA_ACD_Shortcodes {
         return $html;
     }
 
-    $data          = GHCA_ACD_Data_Provider::get_aggregate();
-    $emp_count     = (int) ( $data['total_employees'] ?? 0 );
-    $overdue_count = (int) ( $data['overdue_employees'] ?? 0 );
-    $course_count  = GHCA_ACD_Data_Provider::count_unique_tracked_courses( $data['employees'] ?? array() );
+    $data                = GHCA_ACD_Data_Provider::get_aggregate();
+    $emp_count           = (int) ( $data['total_employees'] ?? 0 );
+    $inactive_count      = (int) ( $data['total_inactive_employees'] ?? 0 );
+    $overdue_count       = (int) ( $data['overdue_employees'] ?? 0 );
+    $course_count        = GHCA_ACD_Data_Provider::count_unique_tracked_courses( $data['employees'] ?? array() );
+    $can_manage_inactive = GHCA_ACD_Roles::user_can_manage_users();
+    $can_review_external = GHCA_ACD_Roles::user_can_review_external_training();
 
     $html .= '<div class="ghca-acd ghca-acd--tabs-shell">';
-    $html .= '<div class="ghca-acd__tabs" role="tablist" aria-label="' . esc_attr__( 'Compliance dashboard sections', 'ghca-acd' ) . '">
-      <button type="button" class="ghca-acd__tab-btn is-active" data-ghca-tab-target="ghca-tab-overview">' . esc_html__( 'Overview', 'ghca-acd' ) . '</button>
-      <button type="button" class="ghca-acd__tab-btn" data-ghca-tab-target="ghca-tab-employees">' . esc_html__( 'Employees', 'ghca-acd' ) . ' <span class="ghca-acd__tab-badge">' . esc_html($emp_count) . '</span></button>
-      <button type="button" class="ghca-acd__tab-btn" data-ghca-tab-target="ghca-tab-courses">' . esc_html__( 'Courses', 'ghca-acd' ) . ' <span class="ghca-acd__tab-badge">' . esc_html($course_count) . '</span></button>
-      <button type="button" class="ghca-acd__tab-btn" data-ghca-tab-target="ghca-tab-certificates">' . esc_html__( 'Certificates', 'ghca-acd' ) . '</button>
-      <button type="button" class="ghca-acd__tab-btn" data-ghca-tab-target="ghca-tab-overdue">' . esc_html__( 'Overdue', 'ghca-acd' ) . ' <span class="ghca-acd__tab-badge">' . esc_html($overdue_count) . '</span></button>
-      <button type="button" class="ghca-acd__tab-btn" data-ghca-tab-target="ghca-tab-reports">' . esc_html__( 'Reports', 'ghca-acd' ) . '</button>
-      <button type="button" class="ghca-acd__tab-btn" data-ghca-tab-target="ghca-tab-audit">' . esc_html__( 'Audit Data', 'ghca-acd' ) . '</button>
-    </div>';
+    /*
+     * One definition drives both the button and its ARIA wiring, so the two can
+     * never drift. Conditional tabs are filtered here rather than interleaved
+     * with the markup, which is what previously made the attribute set easy to
+     * get wrong. `show` absent means always render.
+     */
+    $tabs = array(
+      array( 'target' => 'ghca-tab-overview',            'label' => __( 'Overview', 'ghca-acd' ) ),
+      array( 'target' => 'ghca-tab-employees',           'label' => __( 'Employees', 'ghca-acd' ),               'badge' => $emp_count ),
+      array( 'target' => 'ghca-tab-inactive-employees',  'label' => __( 'Inactive Employees', 'ghca-acd' ),      'badge' => $inactive_count, 'show' => $can_manage_inactive ),
+      array( 'target' => 'ghca-tab-courses',             'label' => __( 'Courses', 'ghca-acd' ),                 'badge' => $course_count ),
+      array( 'target' => 'ghca-tab-certificates',        'label' => __( 'Certificates', 'ghca-acd' ) ),
+      array( 'target' => 'ghca-tab-overdue',             'label' => __( 'Overdue', 'ghca-acd' ),                 'badge' => $overdue_count ),
+      array( 'target' => 'ghca-tab-reports',             'label' => __( 'Reports', 'ghca-acd' ) ),
+      array( 'target' => 'ghca-tab-audit',               'label' => __( 'Audit Data', 'ghca-acd' ) ),
+      array( 'target' => 'ghca-tab-external-training',   'label' => __( 'External Training Review', 'ghca-acd' ), 'show' => $can_review_external ),
+    );
+
+    $html .= '<div class="ghca-acd__tabs" role="tablist" aria-label="' . esc_attr__( 'Compliance dashboard sections', 'ghca-acd' ) . '">';
+    $is_first_tab = true;
+    foreach ( $tabs as $tab ) {
+      if ( array_key_exists( 'show', $tab ) && ! $tab['show'] ) {
+        continue;
+      }
+      $target   = (string) $tab['target'];
+      $selected = $is_first_tab;
+      $badge    = isset( $tab['badge'] ) ? ' <span class="ghca-acd__tab-badge">' . esc_html( (string) $tab['badge'] ) . '</span>' : '';
+      $html    .= '<button type="button" role="tab"'
+        . ' id="' . esc_attr( $target ) . '-tab"'
+        . ' class="ghca-acd__tab-btn' . ( $selected ? ' is-active' : '' ) . '"'
+        . ' data-ghca-tab-target="' . esc_attr( $target ) . '"'
+        . ' aria-controls="' . esc_attr( $target ) . '"'
+        . ' aria-selected="' . ( $selected ? 'true' : 'false' ) . '"'
+        . ' tabindex="' . ( $selected ? '0' : '-1' ) . '">'
+        . esc_html( (string) $tab['label'] ) . $badge . '</button>';
+      $is_first_tab = false;
+    }
+    $html .= '</div>';
 
     // Overview Tab
-    $html .= '<div id="ghca-tab-overview" class="ghca-acd__tab-content is-active">';
+    $html .= '<div id="ghca-tab-overview" class="ghca-acd__tab-content is-active" role="tabpanel" aria-labelledby="ghca-tab-overview-tab" tabindex="0">';
     $html .= GHCA_ACD_Scoping::render_group_summary( $atts );
     $html .= '<div class="ghca-acd__split-grid">';
-    $html .= self::render_certificate_tracking( $atts );
+    $html .= self::render_certificate_tracking( array_merge( (array) $atts, array( 'variant' => 'compact' ) ) );
     $html .= GHCA_ACD_Announcements::render_announcements( $atts );
     $html .= '</div>';
     $html .= self::render_quick_links( $atts );
@@ -81,34 +113,45 @@ final class GHCA_ACD_Shortcodes {
     $html .= '</div>';
 
     // Employees Tab
-    $html .= '<div id="ghca-tab-employees" class="ghca-acd__tab-content">';
+    $html .= '<div id="ghca-tab-employees" class="ghca-acd__tab-content" role="tabpanel" aria-labelledby="ghca-tab-employees-tab" tabindex="0">';
     $html .= self::render_employee_table( $atts );
     $html .= '</div>';
 
+    if ( $can_manage_inactive ) {
+      $html .= '<div id="ghca-tab-inactive-employees" class="ghca-acd__tab-content" role="tabpanel" aria-labelledby="ghca-tab-inactive-employees-tab" tabindex="0">';
+      $html .= self::render_employee_table( $atts, 'inactive' );
+      $html .= '</div>';
+    }
+
     // Courses Tab
-    $html .= '<div id="ghca-tab-courses" class="ghca-acd__tab-content">';
+    $html .= '<div id="ghca-tab-courses" class="ghca-acd__tab-content" role="tabpanel" aria-labelledby="ghca-tab-courses-tab" tabindex="0">';
     $html .= self::render_course_overview( $atts );
     $html .= '</div>';
 
     // Certificates Tab
-    $html .= '<div id="ghca-tab-certificates" class="ghca-acd__tab-content">';
+    $html .= '<div id="ghca-tab-certificates" class="ghca-acd__tab-content" role="tabpanel" aria-labelledby="ghca-tab-certificates-tab" tabindex="0">';
     $html .= self::render_certificate_tracking( $atts );
     $html .= '</div>';
 
     // Overdue Tab
-    $html .= '<div id="ghca-tab-overdue" class="ghca-acd__tab-content">';
+    $html .= '<div id="ghca-tab-overdue" class="ghca-acd__tab-content" role="tabpanel" aria-labelledby="ghca-tab-overdue-tab" tabindex="0">';
     $html .= self::render_overdue_employees( $atts );
     $html .= '</div>';
 
     // Reports Tab
-    $html .= '<div id="ghca-tab-reports" class="ghca-acd__tab-content">';
+    $html .= '<div id="ghca-tab-reports" class="ghca-acd__tab-content" role="tabpanel" aria-labelledby="ghca-tab-reports-tab" tabindex="0">';
     $html .= self::render_reports( $atts );
     $html .= '</div>';
 
     // Audit Tab
-    $html .= '<div id="ghca-tab-audit" class="ghca-acd__tab-content">';
+    $html .= '<div id="ghca-tab-audit" class="ghca-acd__tab-content" role="tabpanel" aria-labelledby="ghca-tab-audit-tab" tabindex="0">';
     $html .= GHCA_ACD_Audit_UI::render();
     $html .= '</div>';
+    if ( $can_review_external && class_exists( 'GHCA_ACD_Jotform_UI' ) ) {
+      $html .= '<div id="ghca-tab-external-training" class="ghca-acd__tab-content" role="tabpanel" aria-labelledby="ghca-tab-external-training-tab" tabindex="0">';
+      $html .= GHCA_ACD_Jotform_UI::render_frontend_review();
+      $html .= '</div>';
+    }
     $html .= '</div>';
 
     return $html;
@@ -182,9 +225,7 @@ final class GHCA_ACD_Shortcodes {
       return '';
     }
 
-    $header = self::get_header_layout();
-    $logo   = GHCA_Dashboard_Branding::get_logo_url();
-    $org    = GHCA_Dashboard_Branding::has_header_brand() ? GHCA_Dashboard_Branding::get_header_org_name() : '';
+		$header = self::get_header_layout();
 
     $data          = GHCA_ACD_Data_Provider::get_aggregate();
     $total_users   = (int) ( $data['total_employees'] ?? 0 );
@@ -201,17 +242,7 @@ final class GHCA_ACD_Shortcodes {
     <div class="ghca-acd ghca-acd--header">
       <div class="ghca-acd__banner">
         <div class="ghca-acd__banner-copy">
-          <?php if ( $logo || $org ) : ?>
-            <div class="ghca-acd__brand">
-              <?php if ( $logo ) : ?>
-                <img class="ghca-acd__brand-logo" src="<?php echo esc_url( $logo ); ?>" alt="<?php echo esc_attr( $org ); ?>" />
-              <?php endif; ?>
-              <?php if ( $org ) : ?>
-                <span class="ghca-acd__brand-name"><?php echo esc_html( $org ); ?></span>
-              <?php endif; ?>
-            </div>
-          <?php endif; ?>
-          <p class="ghca-acd__eyebrow"><?php esc_html_e( 'Administrative Compliance Center', 'ghca-acd' ); ?></p>
+			<p class="ghca-acd__eyebrow"><?php esc_html_e( 'Administrative Compliance Center', 'ghca-acd' ); ?></p>
           <h1><?php esc_html_e( 'Compliance Dashboard', 'ghca-acd' ); ?></h1>
           <p class="ghca-acd__banner-lead"><?php esc_html_e( 'Monitor employee training, compliance records, certificates, and onboarding status across your organization.', 'ghca-acd' ); ?></p>
           <div class="ghca-acd__banner-meta">
@@ -404,36 +435,65 @@ final class GHCA_ACD_Shortcodes {
     return (string) ob_get_clean();
   }
 
-  public static function render_employee_table( $atts = array() ): string {
-    if ( ! self::can_view_dashboard() ) {
+  public static function render_employee_table( $atts = array(), $account_status = 'active' ): string {
+    $inactive = 'inactive' === $account_status;
+    if ( ! self::can_view_dashboard() || ( $inactive && ! GHCA_ACD_Roles::user_can_manage_users() ) ) {
       return '';
     }
 
-    $filters = GHCA_ACD_Data_Provider::get_employee_filters();
+    $filters = GHCA_ACD_Data_Provider::get_employee_filters( $account_status );
+    $fields  = $inactive
+      ? array(
+        'table'    => 'inactive_employees',
+        'page'     => 'ghca_inactive_page',
+        'orderby'  => 'ghca_inactive_orderby',
+        'order'    => 'ghca_inactive_order',
+        'group'    => 'ghca_inactive_group',
+        'course'   => 'ghca_inactive_course',
+        'status'   => 'ghca_inactive_status',
+        'overdue'  => 'ghca_inactive_overdue',
+        'search'   => 'ghca_inactive_search',
+        'per_page' => 'ghca_inactive_per',
+      )
+      : array(
+        'table'    => 'employees',
+        'page'     => 'ghca_emp_page',
+        'orderby'  => 'ghca_orderby',
+        'order'    => 'ghca_order',
+        'group'    => 'ghca_group',
+        'course'   => 'ghca_course',
+        'status'   => 'ghca_status',
+        'overdue'  => 'ghca_overdue',
+        'search'   => 'ghca_emp_search',
+        'per_page' => 'ghca_emp_per',
+      );
     ob_start();
     ?>
     <div class="ghca-acd ghca-acd--employees">
       <div class="ghca-acd__panel">
-        <h2><?php esc_html_e( 'Employee Compliance Table', 'ghca-acd' ); ?></h2>
-        <form class="ghca-acd__filters ghca-acd__filters--toolbar" method="get" data-ghca-filter-form data-ghca-table="employees">
-          <input type="hidden" name="ghca_emp_page" value="<?php echo esc_attr( (string) $filters['page'] ); ?>" data-ghca-page-input />
-          <input type="hidden" name="ghca_orderby" value="<?php echo esc_attr( (string) ( $filters['orderby'] ?? '' ) ); ?>" />
-          <input type="hidden" name="ghca_order" value="<?php echo esc_attr( (string) ( $filters['order'] ?? 'asc' ) ); ?>" />
+        <h2><?php echo esc_html( $inactive ? __( 'Inactive Employee Compliance Table', 'ghca-acd' ) : __( 'Employee Compliance Table', 'ghca-acd' ) ); ?></h2>
+        <?php if ( $inactive ) : ?>
+          <p><?php esc_html_e( 'Suspended employees are excluded from active dashboard totals but remain available here for authorized review and audit packets.', 'ghca-acd' ); ?></p>
+        <?php endif; ?>
+        <form class="ghca-acd__filters ghca-acd__filters--toolbar" method="get" data-ghca-filter-form data-ghca-table="<?php echo esc_attr( $fields['table'] ); ?>">
+          <input type="hidden" name="<?php echo esc_attr( $fields['page'] ); ?>" value="<?php echo esc_attr( (string) $filters['page'] ); ?>" data-ghca-page-input />
+          <input type="hidden" name="<?php echo esc_attr( $fields['orderby'] ); ?>" value="<?php echo esc_attr( (string) ( $filters['orderby'] ?? '' ) ); ?>" />
+          <input type="hidden" name="<?php echo esc_attr( $fields['order'] ); ?>" value="<?php echo esc_attr( (string) ( $filters['order'] ?? 'asc' ) ); ?>" />
           <?php
-          echo GHCA_ACD_Table_UI::render_group_select( 'ghca_group', $filters['group'], GHCA_ACD_Data_Provider::get_group_options(), __( 'Group', 'ghca-acd' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+          echo GHCA_ACD_Table_UI::render_group_select( $fields['group'], $filters['group'], GHCA_ACD_Data_Provider::get_group_options(), __( 'Group', 'ghca-acd' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
           ?>
           <label class="ghca-acd__filter-field">
             <span><?php esc_html_e( 'Course', 'ghca-acd' ); ?></span>
-            <select name="ghca_course">
+            <select name="<?php echo esc_attr( $fields['course'] ); ?>">
               <option value=""><?php esc_html_e( 'All courses', 'ghca-acd' ); ?></option>
-              <?php foreach ( GHCA_ACD_Data_Provider::get_course_options() as $cid => $label ) : ?>
+              <?php foreach ( GHCA_ACD_Data_Provider::get_course_options( $account_status ) as $cid => $label ) : ?>
                 <option value="<?php echo esc_attr( (string) $cid ); ?>" <?php selected( $filters['course'], (string) $cid ); ?>><?php echo esc_html( $label ); ?></option>
               <?php endforeach; ?>
             </select>
           </label>
           <label class="ghca-acd__filter-field">
             <span><?php esc_html_e( 'Status', 'ghca-acd' ); ?></span>
-            <select name="ghca_status">
+            <select name="<?php echo esc_attr( $fields['status'] ); ?>">
               <option value=""><?php esc_html_e( 'All statuses', 'ghca-acd' ); ?></option>
               <?php foreach ( GHCA_ACD_Data_Provider::get_status_options() as $slug => $label ) : ?>
                 <option value="<?php echo esc_attr( $slug ); ?>" <?php selected( $filters['status'], $slug ); ?>><?php echo esc_html( $label ); ?></option>
@@ -443,18 +503,18 @@ final class GHCA_ACD_Shortcodes {
           <label class="ghca-acd__filter-field ghca-acd__filter-check">
             <span><?php esc_html_e( 'Overdue', 'ghca-acd' ); ?></span>
             <span class="ghca-acd__filter-check-row">
-              <input type="checkbox" name="ghca_overdue" value="1" <?php checked( $filters['overdue_only'] ); ?> />
+              <input type="checkbox" name="<?php echo esc_attr( $fields['overdue'] ); ?>" value="1" <?php checked( $filters['overdue_only'] ); ?> />
               <span><?php esc_html_e( 'Overdue only', 'ghca-acd' ); ?></span>
             </span>
           </label>
           <?php
-          echo GHCA_ACD_Table_UI::render_search_field( 'ghca_emp_search', $filters['search'], __( 'Search', 'ghca-acd' ), __( 'Name, email, or group…', 'ghca-acd' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-          echo GHCA_ACD_Table_UI::render_per_page_select( 'ghca_emp_per', $filters['per_page'], __( 'Per page', 'ghca-acd' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+          echo GHCA_ACD_Table_UI::render_search_field( $fields['search'], $filters['search'], __( 'Search', 'ghca-acd' ), __( 'Name, email, or group…', 'ghca-acd' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+          echo GHCA_ACD_Table_UI::render_per_page_select( $fields['per_page'], $filters['per_page'], __( 'Per page', 'ghca-acd' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
           echo GHCA_ACD_Table_UI::render_filter_actions(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
           ?>
         </form>
-        <div class="ghca-acd__table-mount" data-ghca-table data-ghca-table-id="employees" aria-live="polite">
-          <?php echo self::get_employee_table_html( $filters ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+        <div class="ghca-acd__table-mount" data-ghca-table data-ghca-table-id="<?php echo esc_attr( $fields['table'] ); ?>" aria-live="polite">
+          <?php echo self::get_employee_table_html( $filters, $account_status ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
         </div>
       </div>
     </div>
@@ -463,13 +523,14 @@ final class GHCA_ACD_Shortcodes {
   }
 
   /** @param array<string,mixed> $filters */
-  public static function get_employee_table_html( array $filters ): string {
-    $all_rows = GHCA_ACD_Data_Provider::get_employee_table_rows( $filters );
+  public static function get_employee_table_html( array $filters, string $account_status = 'active' ): string {
+    $inactive = 'inactive' === $account_status;
+    $all_rows = GHCA_ACD_Data_Provider::get_employee_table_rows( $filters, $account_status );
     $paged    = GHCA_ACD_Table_UI::paginate( $all_rows, (int) $filters['page'], (int) $filters['per_page'] );
     $rows     = $paged['rows'];
     ob_start();
     ?>
-    <div class="ghca-acd__table-wrap">
+    <div class="ghca-acd__table-wrap" tabindex="0" role="group" aria-label="Employees table">
       <table class="ghca-acd__table ghca-acd__table--employees">
         <thead>
           <tr>
@@ -497,7 +558,7 @@ final class GHCA_ACD_Shortcodes {
             <tr><td colspan="9" class="ghca-acd__table-empty">
               <div class="ghca-acd__empty-state">
                 <span class="ghca-acd__empty-icon" aria-hidden="true"><?php echo GHCA_UI_Icons::render( 'search' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
-                <p><?php esc_html_e( 'No employees match the current filters.', 'ghca-acd' ); ?></p>
+                <p><?php echo esc_html( $inactive ? __( 'No inactive employees match the current filters.', 'ghca-acd' ) : __( 'No employees match the current filters.', 'ghca-acd' ) ); ?></p>
                 <button type="button" class="ghca-acd__btn ghca-acd__btn--ghost" data-ghca-filter-reset><?php esc_html_e( 'Clear filters', 'ghca-acd' ); ?></button>
               </div>
             </td></tr>
@@ -510,6 +571,9 @@ final class GHCA_ACD_Shortcodes {
                     <span class="ghca-acd__employee-id">
                       <span class="ghca-acd__employee-name"><?php echo esc_html( $row['name'] ); ?></span>
                       <a class="ghca-acd__employee-email" href="<?php echo esc_url( 'mailto:' . $row['email'] ); ?>"><?php echo esc_html( $row['email'] ); ?></a>
+                      <?php if ( $inactive ) : ?>
+                        <span class="ghca-acd__status ghca-acd__status--inactive"><?php esc_html_e( 'Suspended', 'ghca-acd' ); ?></span>
+                      <?php endif; ?>
                     </span>
                   </div>
                 </td>
@@ -517,7 +581,7 @@ final class GHCA_ACD_Shortcodes {
                 <td class="ghca-acd__text-center"><?php echo esc_html( $row['completed_label'] ); ?></td>
                 <td>
                   <div class="ghca-acd__progress">
-                    <span class="ghca-acd__progress-track">
+                    <span class="ghca-acd__progress-track" role="progressbar" aria-valuenow="<?php echo esc_attr( (string) (int) $row['progress_pct'] ); ?>" aria-valuemin="0" aria-valuemax="100" aria-label="<?php esc_attr_e( 'Compliance progress', 'ghca-acd' ); ?>">
                       <span class="ghca-acd__progress-bar <?php echo esc_attr( GHCA_ACD_Data_Provider::get_progress_class( (int) $row['progress_pct'] ) ); ?>" style="width: <?php echo esc_attr( (string) $row['progress_pct'] ); ?>%"></span>
                     </span>
                     <span><?php echo esc_html( $row['progress_label'] ); ?></span>
@@ -535,7 +599,7 @@ final class GHCA_ACD_Shortcodes {
       </table>
     </div>
     <?php
-    echo GHCA_ACD_Table_UI::render_pagination( $paged, 'ghca_emp_page' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+    echo GHCA_ACD_Table_UI::render_pagination( $paged, $inactive ? 'ghca_inactive_page' : 'ghca_emp_page' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     return (string) ob_get_clean();
   }
 
@@ -557,7 +621,7 @@ final class GHCA_ACD_Shortcodes {
       return (string) ob_get_clean();
     }
     ?>
-    <div class="ghca-acd__table-wrap">
+    <div class="ghca-acd__table-wrap" tabindex="0" role="group" aria-label="At-risk employees table">
       <table class="ghca-acd__table ghca-acd__table--priority">
         <thead>
           <tr>
@@ -592,7 +656,7 @@ final class GHCA_ACD_Shortcodes {
               <td><?php echo esc_html( $row['group'] ); ?></td>
               <td>
                 <div class="ghca-acd__progress">
-                  <span class="ghca-acd__progress-track">
+                  <span class="ghca-acd__progress-track" role="progressbar" aria-valuenow="<?php echo esc_attr( (string) (int) $row['progress_pct'] ); ?>" aria-valuemin="0" aria-valuemax="100" aria-label="<?php esc_attr_e( 'Compliance progress', 'ghca-acd' ); ?>">
                     <span class="ghca-acd__progress-bar <?php echo esc_attr( GHCA_ACD_Data_Provider::get_progress_class( (int) $row['progress_pct'] ) ); ?>" style="width: <?php echo esc_attr( (string) $row['progress_pct'] ); ?>%"></span>
                   </span>
                   <span><?php echo esc_html( $row['progress_label'] ); ?></span>
@@ -620,7 +684,7 @@ final class GHCA_ACD_Shortcodes {
     $rows     = $paged['rows'];
     ob_start();
     ?>
-    <div class="ghca-acd__table-wrap">
+    <div class="ghca-acd__table-wrap" tabindex="0" role="group" aria-label="Course completion table">
       <table class="ghca-acd__table ghca-acd__table--courses">
         <thead>
           <tr>
@@ -654,7 +718,7 @@ final class GHCA_ACD_Shortcodes {
                 <td><?php echo esc_html( (string) $row['not_started'] ); ?></td>
                 <td>
                   <div class="ghca-acd__progress">
-                    <span class="ghca-acd__progress-track">
+                    <span class="ghca-acd__progress-track" role="progressbar" aria-valuenow="<?php echo esc_attr( (string) (int) $row['rate'] ); ?>" aria-valuemin="0" aria-valuemax="100" aria-label="<?php esc_attr_e( 'Course completion rate', 'ghca-acd' ); ?>">
                       <span class="ghca-acd__progress-bar <?php echo esc_attr( GHCA_ACD_Data_Provider::get_progress_class( (int) $row['rate'] ) ); ?>" style="width: <?php echo esc_attr( (string) $row['rate'] ); ?>%"></span>
                     </span>
                     <span><?php echo esc_html( $row['rate_label'] ); ?></span>
@@ -676,6 +740,18 @@ final class GHCA_ACD_Shortcodes {
     if ( ! self::can_view_dashboard() ) {
       return '';
     }
+
+    /*
+     * This panel appears twice on the dashboard: once in the Overview split
+     * grid and once as its own tab, which previously produced two identical
+     * "Certificates & Records" headings on one page. The Overview instance now
+     * renders a compact summary that links through to the tab.
+     *
+     * The variant travels in $atts rather than as a second parameter because
+     * this is also a registered shortcode callback, where WordPress would pass
+     * $content into a second positional argument.
+     */
+    $variant = ( is_array( $atts ) && isset( $atts['variant'] ) && 'compact' === $atts['variant'] ) ? 'compact' : 'full';
 
     $data     = GHCA_ACD_Data_Provider::get_aggregate();
     $cert_url = GHCA_ACD_Data_Provider::get_page_url( 'cert-download', '/cert-download/' );
@@ -707,8 +783,13 @@ final class GHCA_ACD_Shortcodes {
     <div class="ghca-acd ghca-acd--certificates">
       <div class="ghca-acd__panel">
         <div class="ghca-acd__section-head">
-          <h2><?php esc_html_e( 'Certificates & Records', 'ghca-acd' ); ?></h2>
-          <a class="ghca-acd__link-btn" href="<?php echo esc_url( $cert_url ); ?>"><?php esc_html_e( 'View all', 'ghca-acd' ); ?> &rarr;</a>
+          <?php if ( 'compact' === $variant ) : ?>
+            <h3><?php esc_html_e( 'Certificates & Records', 'ghca-acd' ); ?></h3>
+            <a class="ghca-acd__link-btn" href="#ghca-tab-certificates" data-ghca-tab-jump="ghca-tab-certificates"><?php esc_html_e( 'View all', 'ghca-acd' ); ?> &rarr;</a>
+          <?php else : ?>
+            <h2><?php esc_html_e( 'Certificates & Records', 'ghca-acd' ); ?></h2>
+            <a class="ghca-acd__link-btn" href="<?php echo esc_url( $cert_url ); ?>"><?php esc_html_e( 'View all', 'ghca-acd' ); ?> &rarr;</a>
+          <?php endif; ?>
         </div>
         <div class="ghca-acd__cert-summary">
           <?php foreach ( $cert_stats as $stat ) : ?>
@@ -718,7 +799,7 @@ final class GHCA_ACD_Shortcodes {
             </div>
           <?php endforeach; ?>
         </div>
-        <?php if ( ! empty( $data['recent_completions'] ) ) : ?>
+        <?php if ( 'full' === $variant && ! empty( $data['recent_completions'] ) ) : ?>
           <div class="ghca-acd__recent-head"><?php esc_html_e( 'Recent completions', 'ghca-acd' ); ?></div>
           <div class="ghca-acd__recent-list">
             <?php
@@ -797,9 +878,6 @@ final class GHCA_ACD_Shortcodes {
         <div class="ghca-acd__support-actions">
           <a class="ghca-acd__btn ghca-acd__btn--secondary" href="<?php echo esc_url( 'mailto:' . $email ); ?>">
              <?php esc_html_e('Contact Support', 'ghca-acd'); ?>
-          </a>
-          <a class="ghca-acd__btn ghca-acd__btn--secondary" href="#">
-             <?php esc_html_e('View Admin Guide', 'ghca-acd'); ?>
           </a>
         </div>
       </div>
@@ -952,14 +1030,15 @@ final class GHCA_ACD_Shortcodes {
   }
 
   public static function build_certificate_link_html( string $url, string $course_title = '' ): string {
+    $url = GHCA_ACD_Data_Provider::sanitize_certificate_url( $url );
     if ( $url === '' ) {
       return '';
     }
 
     return sprintf(
       '<a href="%1$s" class="ghca-acd__cert-trigger" data-ghca-cert-url="%2$s" data-ghca-cert-title="%3$s">%4$s</a>',
-      esc_url( $url ),
-      esc_attr( $url ),
+      esc_url( $url, array( 'http', 'https' ) ),
+      esc_url( $url, array( 'http', 'https' ) ),
       esc_attr( $course_title ),
       esc_html__( 'Certificate', 'ghca-acd' )
     );

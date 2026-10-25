@@ -144,12 +144,15 @@ final class GHCA_ACD_FluentCRM {
       return;
     }
 
-    if ( ! is_user_logged_in() || ! GHCA_ACD_Roles::user_can_view() ) {
+    if ( ! is_user_logged_in() || ! GHCA_ACD_Roles::user_can_edit_records() ) {
       return;
     }
 
     $employee_id = (int) wp_unslash( $_GET['employee_id'] );
     check_admin_referer( 'ghca_acd_reminder_' . $employee_id, 'ghca_nonce' );
+    if ( ! GHCA_ACD_User_Report::can_view_user( $employee_id ) ) {
+      return;
+    }
 
     $course = isset( $_GET['course'] ) ? sanitize_text_field( wp_unslash( rawurldecode( (string) $_GET['course'] ) ) ) : '';
     self::log_reminder_note( $employee_id, $course );
@@ -161,10 +164,11 @@ final class GHCA_ACD_FluentCRM {
 
   /** @return array<int,string> */
   public static function build_action_links( int $employee_user_id, string $email, string $course_title = '' ): array {
-    $links = array(
-      '<a href="' . esc_url( self::build_reminder_url( $employee_user_id, $email, $course_title ) ) . '">' . esc_html__( 'Log Reminder', 'ghca-acd' ) . '</a>',
-      '<a href="' . esc_url( GHCA_ACD_Shortcodes::build_mailto_reminder( $email, $course_title ) ) . '">' . esc_html__( 'Email Reminder', 'ghca-acd' ) . '</a>',
-    );
+    $links = array();
+    if ( GHCA_ACD_Roles::user_can_edit_records() && GHCA_ACD_User_Report::can_view_user( $employee_user_id ) ) {
+      $links[] = '<a href="' . esc_url( self::build_reminder_url( $employee_user_id, $email, $course_title ) ) . '">' . esc_html__( 'Log Reminder', 'ghca-acd' ) . '</a>';
+    }
+    $links[] = '<a href="' . esc_url( GHCA_ACD_Shortcodes::build_mailto_reminder( $email, $course_title ) ) . '">' . esc_html__( 'Email Reminder', 'ghca-acd' ) . '</a>';
 
     $crm_url = self::get_contact_admin_url( $email );
     if ( $crm_url ) {

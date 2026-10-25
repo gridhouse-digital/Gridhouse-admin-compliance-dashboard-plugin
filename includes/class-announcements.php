@@ -47,8 +47,23 @@ final class GHCA_ACD_Announcements {
         'rewrite'         => false,
         'query_var'       => false,
         'supports'        => array( 'title', 'editor' ),
-        'capability_type' => 'post',
-        'map_meta_cap'    => true,
+        'capabilities'    => array(
+          'create_posts'           => 'do_not_allow',
+          'edit_post'              => 'do_not_allow',
+          'read_post'              => 'do_not_allow',
+          'delete_post'            => 'do_not_allow',
+          'edit_posts'             => 'do_not_allow',
+          'edit_others_posts'      => 'do_not_allow',
+          'publish_posts'          => 'do_not_allow',
+          'read_private_posts'     => 'do_not_allow',
+          'delete_posts'           => 'do_not_allow',
+          'delete_private_posts'   => 'do_not_allow',
+          'delete_published_posts' => 'do_not_allow',
+          'delete_others_posts'    => 'do_not_allow',
+          'edit_private_posts'     => 'do_not_allow',
+          'edit_published_posts'   => 'do_not_allow',
+        ),
+        'map_meta_cap'    => false,
       )
     );
 

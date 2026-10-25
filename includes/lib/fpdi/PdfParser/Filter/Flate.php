@@ -15,6 +15,18 @@ namespace setasign\Fpdi\PdfParser\Filter;
  */
 class Flate implements FilterInterface
 {
+    private const MAX_DECODED_BYTES = 33554432;
+
+    public static function resetDecodedBudget()
+    {
+        DecodedStreamBudget::reset();
+    }
+
+    private static function consumeDecodedBytes($data)
+    {
+        return DecodedStreamBudget::consume($data);
+    }
+
     /**
      * Checks whether the zlib extension is loaded.
      *
@@ -39,7 +51,7 @@ class Flate implements FilterInterface
     {
         if ($this->extensionLoaded()) {
             $oData = $data;
-            $data = (($data !== '') ? @\gzuncompress($data) : '');
+            $data = (($data !== '') ? @\gzuncompress($data, self::MAX_DECODED_BYTES + 1) : '');
             if ($data === false) {
                 // let's try if the checksum is CRC32
                 $fh = fopen('php://temp', 'w+b');
@@ -48,17 +60,17 @@ class Flate implements FilterInterface
                 //                   The input must include a gzip header and trailer (via 16).
                 stream_filter_append($fh, 'zlib.inflate', STREAM_FILTER_READ, ['window' => 31]);
                 fseek($fh, 0);
-                $data = @stream_get_contents($fh);
+                $data = @stream_get_contents($fh, self::MAX_DECODED_BYTES + 1);
                 fclose($fh);
 
-                if ($data) {
-                    return $data;
+                if ($data && \strlen($data) <= self::MAX_DECODED_BYTES) {
+                    return self::consumeDecodedBytes($data);
                 }
 
                 // Try this fallback (remove the zlib stream header)
-                $data = @(gzinflate(substr($oData, 2)));
+                $data = @(gzinflate(substr($oData, 2), self::MAX_DECODED_BYTES + 1));
 
-                if ($data === false) {
+                if ($data === false || \strlen($data) > self::MAX_DECODED_BYTES) {
                     throw new FlateException(
                         'Error while decompressing stream.',
                         FlateException::DECOMPRESS_ERROR
@@ -72,6 +84,13 @@ class Flate implements FilterInterface
             );
         }
 
-        return $data;
+        if (\strlen($data) > self::MAX_DECODED_BYTES) {
+            throw new FlateException(
+                'Decoded stream exceeds the configured safety limit.',
+                FlateException::DECOMPRESS_ERROR
+            );
+        }
+
+        return self::consumeDecodedBytes($data);
     }
 }

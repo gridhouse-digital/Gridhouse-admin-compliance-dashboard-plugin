@@ -22,12 +22,9 @@ final class GHCA_ACD_Manage_Users_UI {
       $group_options[ $gid ] = get_the_title( $gid );
     }
 
-    // Get editable roles
+    // Delegated managers may create and edit employee accounts only.
     $all_roles = wp_roles()->roles;
-    $editable_roles = apply_filters( 'editable_roles', $all_roles );
-    if ( ! current_user_can( 'manage_options' ) ) {
-      unset( $editable_roles['administrator'] );
-    }
+    $editable_roles = GHCA_ACD_Roles::get_manageable_employee_roles();
 
     ob_start();
     ?>
@@ -41,7 +38,7 @@ final class GHCA_ACD_Manage_Users_UI {
       </div>
 
       <div class="ghca-acd__panel">
-        <div class="ghca-acd__table-wrap">
+        <div class="ghca-acd__table-wrap" tabindex="0" role="group" aria-label="Manage users table">
           <table class="ghca-acd__table">
             <thead>
               <tr>
@@ -85,6 +82,13 @@ final class GHCA_ACD_Manage_Users_UI {
                   // Get user's primary role
                   $user_role_slug = ! empty( $user->roles ) ? $user->roles[0] : '';
                   $user_role_name = $user_role_slug && isset( $all_roles[ $user_role_slug ] ) ? $all_roles[ $user_role_slug ]['name'] : $user_role_slug;
+                  $can_edit_user = current_user_can( 'manage_options' ) || GHCA_ACD_Roles::delegated_target_is_allowed(
+                    get_current_user_id(),
+                    (int) $user_id,
+                    (array) $user->roles,
+                    GHCA_ACD_Roles::delegated_target_is_in_scope( (int) $user_id, $users ),
+                    (array) $user->allcaps
+                  );
                   ?>
                   <tr>
                     <td><?php echo esc_html( $user->first_name . ' ' . $user->last_name ); ?></td>
@@ -93,16 +97,19 @@ final class GHCA_ACD_Manage_Users_UI {
                     <td><?php echo esc_html( translate_user_role( $user_role_name ) ); ?></td>
                     <td><?php echo esc_html( implode( ', ', $user_group_names ) ); ?></td>
                     <td>
-                      <button type="button" class="ghca-acd__btn ghca-acd__btn--secondary ghca-acd-btn-edit-user"
+                      <?php if ( $can_edit_user ) : ?>
+                        <button type="button" class="ghca-acd__btn ghca-acd__btn--secondary ghca-acd-btn-edit-user"
                         data-user_id="<?php echo esc_attr( (string) $user_id ); ?>"
                         data-first_name="<?php echo esc_attr( $user->first_name ); ?>"
                         data-last_name="<?php echo esc_attr( $user->last_name ); ?>"
                         data-email="<?php echo esc_attr( $user->user_email ); ?>"
                         data-phone="<?php echo esc_attr( (string) $phone ); ?>"
+                        data-employment_type="<?php echo esc_attr( GHCA_ACD_Data_Provider::employment_type( (int) $user_id ) ); ?>"
                         data-role="<?php echo esc_attr( $user_role_slug ); ?>"
                         data-groups="<?php echo esc_attr( wp_json_encode( $user_groups ) ); ?>">
-                        <?php esc_html_e( 'Edit', 'ghca-acd' ); ?>
-                      </button>
+                          <?php esc_html_e( 'Edit', 'ghca-acd' ); ?>
+                        </button>
+                      <?php endif; ?>
                     </td>
                   </tr>
                 <?php endforeach; ?>
@@ -141,6 +148,16 @@ final class GHCA_ACD_Manage_Users_UI {
               <div class="ghca-acd-form-group">
                 <label for="ghca-acd-phone"><?php esc_html_e( 'Phone Number', 'ghca-acd' ); ?></label>
                 <input type="text" id="ghca-acd-phone" name="phone" />
+              </div>
+
+              <div class="ghca-acd-form-group">
+                <label for="ghca-acd-employment-type"><?php esc_html_e( 'Employment Type', 'ghca-acd' ); ?></label>
+                <select id="ghca-acd-employment-type" name="employment_type">
+                  <option value=""><?php esc_html_e( 'Not set', 'ghca-acd' ); ?></option>
+                  <?php foreach ( GHCA_ACD_Data_Provider::employment_types() as $value => $label ) : ?>
+                    <option value="<?php echo esc_attr( $value ); ?>"><?php echo esc_html( $label ); ?></option>
+                  <?php endforeach; ?>
+                </select>
               </div>
 
               <div class="ghca-acd-form-group">
@@ -214,6 +231,7 @@ final class GHCA_ACD_Manage_Users_UI {
       .ghca-acd-form-group { margin-bottom: 16px; }
       .ghca-acd-form-group label { display: block; margin-bottom: 8px; font-weight: 500; }
       .ghca-acd-form-group input[type="text"],
+      .ghca-acd-form-group select,
       .ghca-acd-form-group input[type="email"] {
         width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 4px;
       }

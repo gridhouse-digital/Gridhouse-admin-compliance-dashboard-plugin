@@ -7,13 +7,15 @@ final class GHCA_Audit_Mapping {
 	const OPTION_NAME = 'ghca_acd_audit_mapping';
 
 	public static function init(): void {
-		add_action( 'admin_menu', array( __CLASS__, 'register_page' ) );
+		GHCA_ODP_Applicability::init();
+		add_action( 'admin_menu', array( __CLASS__, 'register_page' ), 11 );
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_scripts' ) );
 	}
 
 	public static function register_page(): void {
-		add_options_page(
+		add_submenu_page(
+			GHCA_ACD_Admin_Menu::SLUG,
 			__( 'Audit Mapping', 'ghca-acd' ),
 			__( 'Audit Mapping', 'ghca-acd' ),
 			'manage_options',
@@ -58,26 +60,61 @@ final class GHCA_Audit_Mapping {
 	 * @return array
 	 */
 	public static function sanitize_mapping( $value ): array {
-		if ( ! is_array( $value ) ) {
-			return array();
+		$existing = get_option( self::OPTION_NAME, array() );
+		$existing = is_array( $existing ) ? $existing : array();
+		if ( ! current_user_can( 'manage_options' ) || ! is_array( $value ) ) {
+			return $existing;
+		}
+		if ( ( $_POST['option_page'] ?? '' ) === 'ghca_acd_audit_settings' && ( $_POST['ghca_mapping_complete'] ?? '' ) !== '1' ) {
+			add_settings_error( self::OPTION_NAME, 'incomplete_mapping', __( 'The mapping form was incomplete (possibly the server input limit). No mappings were changed.', 'ghca-acd' ) );
+			return $existing;
 		}
 
-		$sanitized = array();
+		// Unsubmitted courses retain their mappings; clearing uses an explicit empty selection.
+		$sanitized = $existing;
 		foreach ( $value as $course_id => $data ) {
+			$course_id = intval( $course_id );
+			if ( $course_id <= 0 || ! is_array( $data ) ) { continue; }
+			$primary = is_string( $data['odp_category'] ?? null ) ? $data['odp_category'] : '';
+			$primary = array_key_exists( $primary, self::get_odp_categories() ) ? $primary : '';
+			$coverage = self::coverage_categories( array( 'odp_category' => $primary, 'odp_categories' => $data['odp_categories'] ?? array() ) );
+			$reference = substr( sanitize_text_field( is_string( $data['odp_mapping_reference'] ?? null ) ? $data['odp_mapping_reference'] : '' ), 0, 500 );
+			if ( count( $coverage ) > 1 && '' === $reference ) {
+				add_settings_error( self::OPTION_NAME, 'coverage_reference', __( 'Additional ODP coverage requires a course-content reference. The previous mapping for this course was retained.', 'ghca-acd' ) );
+				if ( isset( $existing[ $course_id ] ) ) { $sanitized[ $course_id ] = $existing[ $course_id ]; }
+				continue;
+			}
 			$sanitized[ intval( $course_id ) ] = array(
-				'odp_category'   => sanitize_text_field( $data['odp_category'] ?? '' ),
-				'oltl_category'  => sanitize_text_field( $data['oltl_category'] ?? '' ),
-				'credit_hours'   => floatval( $data['credit_hours'] ?? 0 ),
+				'odp_category'   => $primary,
+				'odp_categories' => $coverage,
+				'odp_mapping_reference' => $reference,
+				'odp_reviewed_by' => get_current_user_id(),
+				'odp_reviewed_at' => time(),
+				'oltl_category'  => sanitize_text_field( $existing[ $course_id ]['oltl_category'] ?? '' ),
+				'oltl_requirements' => class_exists( 'GHCA_ACD_OLTL_Readiness' ) ? GHCA_ACD_OLTL_Readiness::sanitize_requirement_codes( $data['oltl_requirements'] ?? array() ) : array(),
+				'credit_hours'   => is_numeric( $data['credit_hours'] ?? null ) && is_finite( (float) $data['credit_hours'] ) ? max( 0, (float) $data['credit_hours'] ) : 0,
 				'sort_order'     => intval( $data['sort_order'] ?? 0 ),
-				'is_orientation' => isset( $data['is_orientation'] ) ? 1 : 0,
+				'is_orientation' => ! empty( $data['is_orientation'] ) ? 1 : 0,
 			);
 		}
 
 		uasort( $sanitized, function( $a, $b ) {
-			return $a['sort_order'] <=> $b['sort_order'];
+			return ( $a['sort_order'] ?? 0 ) <=> ( $b['sort_order'] ?? 0 );
 		} );
 
 		return $sanitized;
+	}
+
+	/** Primary category owns the hours; other supported categories receive coverage only. */
+	public static function coverage_categories( array $config ): array {
+		$primary = $config['odp_category'] ?? '';
+		$allowed = self::get_odp_categories();
+		if ( ! is_string( $primary ) || '' === $primary || ! isset( $allowed[ $primary ] ) ) { return array(); }
+		$categories = array( $primary );
+		foreach ( (array) ( $config['odp_categories'] ?? array() ) as $category ) {
+			if ( is_string( $category ) && '' !== $category && isset( $allowed[ $category ] ) ) { $categories[] = $category; }
+		}
+		return array_values( array_unique( $categories ) );
 	}
 
 	public static function get_odp_categories(): array {
@@ -91,6 +128,7 @@ final class GHCA_Audit_Mapping {
 			'individual_plan'                      => 'Implementation of the individual plan',
 			'job_related'                          => 'Job-related knowledge',
 			'general'                              => 'General / Elective',
+			'odp_annual_training'                  => 'ODP Annual Training',
 		);
 	}
 
@@ -112,7 +150,7 @@ final class GHCA_Audit_Mapping {
 
 		$mapping_data = get_option( self::OPTION_NAME, array() );
 		$odp_cats     = self::get_odp_categories();
-		$oltl_cats    = self::get_oltl_categories();
+		$oltl_requirements = class_exists( 'GHCA_ACD_OLTL_Readiness' ) ? GHCA_ACD_OLTL_Readiness::annual_requirements() : array();
 
 		// Fetch all LearnDash courses
 		$courses = get_posts( array(
@@ -144,7 +182,9 @@ final class GHCA_Audit_Mapping {
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Multi-Framework Audit Mapping', 'ghca-acd' ); ?></h1>
-			<p><?php esc_html_e( 'Map your existing LearnDash courses to specific state compliance frameworks (ODP & OLTL). Drag and drop courses to set their display order in the generated Compliance Packet.', 'ghca-acd' ); ?></p>
+			<?php settings_errors( self::OPTION_NAME ); ?>
+			<p><?php esc_html_e( 'Map platform courses to ODP and verified OLTL Chapter 52 training requirements. OLTL mappings are explicit and do not alter ODP calculations.', 'ghca-acd' ); ?></p>
+			<p><?php esc_html_e( 'The primary ODP category receives the course hours once. Additional categories record topic coverage only. Review the actual course content, not just its title. Mapping is not individual-plan training evidence. Edit descriptions in the linked LearnDash course; no course content is changed here.', 'ghca-acd' ); ?></p>
 			
 			<form action="options.php" method="post">
 				<?php settings_fields( 'ghca_acd_audit_settings' ); ?>
@@ -156,7 +196,7 @@ final class GHCA_Audit_Mapping {
 							<th><?php esc_html_e( 'Course Name', 'ghca-acd' ); ?></th>
 							<th style="width: 100px; text-align: center;"><?php esc_html_e( 'Orientation?', 'ghca-acd' ); ?></th>
 							<th><?php esc_html_e( 'ODP QA&I Category', 'ghca-acd' ); ?></th>
-							<th><?php esc_html_e( 'OLTL Caregiver Category', 'ghca-acd' ); ?></th>
+							<th><?php esc_html_e( 'OLTL Chapter 52 Topics', 'ghca-acd' ); ?></th>
 							<th style="width: 100px;"><?php esc_html_e( 'Credit Hrs', 'ghca-acd' ); ?></th>
 						</tr>
 					</thead>
@@ -169,7 +209,7 @@ final class GHCA_Audit_Mapping {
 							<?php foreach ( $display_courses as $index => $course ) : 
 								$c_data = $mapping_data[ $course->ID ] ?? array();
 								$odp_val  = $c_data['odp_category'] ?? '';
-								$oltl_val = $c_data['oltl_category'] ?? '';
+								$oltl_values = GHCA_ACD_OLTL_Readiness::sanitize_requirement_codes( $c_data['oltl_requirements'] ?? array() );
 								$credits  = $c_data['credit_hours'] ?? 0;
 								$is_orient= ! empty( $c_data['is_orientation'] );
 								$order    = $index;
@@ -179,7 +219,10 @@ final class GHCA_Audit_Mapping {
 									<span class="dashicons dashicons-menu"></span>
 									<input type="hidden" class="ghca-sort-order" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[<?php echo esc_attr( $course->ID ); ?>][sort_order]" value="<?php echo esc_attr( $order ); ?>" />
 								</td>
-								<td><strong><?php echo esc_html( $course->post_title ); ?></strong></td>
+								<td><strong><?php echo esc_html( $course->post_title ); ?></strong><br>
+									<a href="<?php echo esc_url( get_edit_post_link( $course->ID ) ); ?>"><?php esc_html_e( 'Review course content / edit source description', 'ghca-acd' ); ?></a>
+									<p><?php echo esc_html( GHCA_Audit_Calculator::course_short_description( (int) $course->ID ) ?: 'Description missing — review the LearnDash source.' ); ?></p>
+								</td>
 								<td style="text-align: center;">
 									<input type="checkbox" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[<?php echo esc_attr( $course->ID ); ?>][is_orientation]" value="1" <?php checked( $is_orient, true ); ?> />
 								</td>
@@ -189,13 +232,15 @@ final class GHCA_Audit_Mapping {
 											<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $odp_val, $key ); ?>><?php echo esc_html( $label ); ?></option>
 										<?php endforeach; ?>
 									</select>
+									<details><summary><?php esc_html_e( 'Additional topic coverage', 'ghca-acd' ); ?></summary>
+									<?php foreach ( $odp_cats as $key => $label ) : if ( '' === $key ) { continue; } ?>
+									<label style="display:block"><input type="checkbox" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[<?php echo esc_attr( $course->ID ); ?>][odp_categories][]" value="<?php echo esc_attr( $key ); ?>" <?php checked( in_array( $key, (array) ( $c_data['odp_categories'] ?? array() ), true ) ); ?> /><?php echo esc_html( $label ); ?></label>
+									<?php endforeach; ?>
+									<label><?php esc_html_e( 'Course-content reference supporting coverage', 'ghca-acd' ); ?><input type="text" maxlength="500" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[<?php echo esc_attr( $course->ID ); ?>][odp_mapping_reference]" value="<?php echo esc_attr( $c_data['odp_mapping_reference'] ?? '' ); ?>" /></label>
+									</details>
 								</td>
 								<td>
-									<select name="<?php echo esc_attr( self::OPTION_NAME ); ?>[<?php echo esc_attr( $course->ID ); ?>][oltl_category]" style="max-width: 100%;">
-										<?php foreach ( $oltl_cats as $key => $label ) : ?>
-											<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $oltl_val, $key ); ?>><?php echo esc_html( $label ); ?></option>
-										<?php endforeach; ?>
-									</select>
+									<fieldset><?php foreach ( $oltl_requirements as $key => $label ) : ?><label style="display:block;margin-bottom:4px"><input type="checkbox" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[<?php echo esc_attr( $course->ID ); ?>][oltl_requirements][]" value="<?php echo esc_attr( $key ); ?>" <?php checked( in_array( $key, $oltl_values, true ) ); ?> /> <?php echo esc_html( $label ); ?></label><?php endforeach; ?></fieldset>
 								</td>
 								<td>
 									<input type="number" step="0.25" min="0" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[<?php echo esc_attr( $course->ID ); ?>][credit_hours]" value="<?php echo esc_attr( $credits ); ?>" style="width: 80px;" />
@@ -205,6 +250,7 @@ final class GHCA_Audit_Mapping {
 						<?php endif; ?>
 					</tbody>
 				</table>
+				<input type="hidden" name="ghca_mapping_complete" value="1" />
 				<?php submit_button(); ?>
 			</form>
 		</div>

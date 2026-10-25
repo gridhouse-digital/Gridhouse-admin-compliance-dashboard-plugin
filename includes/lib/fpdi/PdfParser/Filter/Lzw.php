@@ -95,16 +95,16 @@ class Lzw implements FilterInterface
             if ($code === 256) {
                 $this->initsTable();
             } elseif ($prevCode === 256) {
-                $uncompData .= $this->sTable[$code];
+                $uncompData .= DecodedStreamBudget::consume($this->sTable[$code]);
             } elseif ($code < $this->tIdx) {
                 $string = $this->sTable[$code];
-                $uncompData .= $string;
+                $uncompData .= DecodedStreamBudget::consume($string);
 
                 $this->addStringToTable($this->sTable[$prevCode], $string[0]);
             } else {
                 $string = $this->sTable[$prevCode];
                 $string .= $string[0];
-                $uncompData .= $string;
+                $uncompData .= DecodedStreamBudget::consume($string);
 
                 $this->addStringToTable($string);
             }

@@ -75,6 +75,42 @@ final class GHCA_Dashboard_Branding {
     return self::get()['logo_url'];
   }
 
+  /**
+   * Prefer the local uploads path so TCPDF does not depend on remote URL access.
+   */
+  public static function get_pdf_logo_source(): string {
+    $logo_url = self::get_logo_url();
+    if ( '' === $logo_url || ! function_exists( 'wp_upload_dir' ) ) {
+      return '';
+    }
+
+    $uploads = wp_upload_dir();
+    if ( ! empty( $uploads['error'] ) || empty( $uploads['baseurl'] ) || empty( $uploads['basedir'] ) ) {
+      return '';
+    }
+
+    $logo_path = rawurldecode( (string) parse_url( $logo_url, PHP_URL_PATH ) );
+    $base_path = rtrim( rawurldecode( (string) parse_url( $uploads['baseurl'], PHP_URL_PATH ) ), '/' );
+    if ( '' === $logo_path || '' === $base_path || 0 !== strpos( $logo_path, $base_path . '/' ) ) {
+      return '';
+    }
+
+    $relative       = ltrim( substr( $logo_path, strlen( $base_path ) ), '/' );
+    $base_real      = realpath( $uploads['basedir'] );
+    $candidate_real = realpath( trailingslashit( $uploads['basedir'] ) . str_replace( '/', DIRECTORY_SEPARATOR, $relative ) );
+    if ( false === $base_real || false === $candidate_real || ! is_readable( $candidate_real ) ) {
+      return '';
+    }
+
+    $base_normalized      = rtrim( wp_normalize_path( $base_real ), '/' ) . '/';
+    $candidate_normalized = wp_normalize_path( $candidate_real );
+    if ( 0 !== strpos( strtolower( $candidate_normalized ), strtolower( $base_normalized ) ) ) {
+      return '';
+    }
+
+    return $candidate_real;
+  }
+
   public static function get_support_email(): string {
     return self::get()['support_email'];
   }
@@ -83,7 +119,7 @@ final class GHCA_Dashboard_Branding {
     $brand = self::get();
 
     return sprintf(
-      '.ghca-ecd,.ghca-acd,.ghca-acd__cert-modal,.ghca-acd__drawer,.ghca-acd__edit-modal{--ghca-primary:%1$s;--ghca-primary-dark:%2$s;--ghca-primary-soft:%3$s;--ghca-secondary:%4$s;--ghca-accent:%5$s;--ghca-ring:0 0 0 4px %6$s;}',
+      '.ghca-ecd,.ghca-acd,.ghca-acd__cert-modal,.ghca-acd__drawer,.ghca-acd__edit-modal,.ghca-acd__reminder-modal,.ghca-acd__history-modal,.ghca-acd__pdf-modal,.ghca-jotform-modal{--ghca-primary:%1$s;--ghca-primary-dark:%2$s;--ghca-primary-soft:%3$s;--ghca-secondary:%4$s;--ghca-accent:%5$s;--ghca-ring:0 0 0 4px %6$s;}',
       esc_attr( $brand['primary'] ),
       esc_attr( $brand['primary_dark'] ),
       esc_attr( $brand['primary_soft'] ),

@@ -94,7 +94,8 @@ final class GHCA_Audit_Export {
 				'Implementation of Individual Plan',
 				'Total 6100 Annual training hours',
 				'Additional training hours',
-				'Total training hours'
+				'Total training hours',
+				'Evidence issues'
 		);
 		fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $headers ) );
 
@@ -110,15 +111,16 @@ final class GHCA_Audit_Export {
 				$data['doh'],
 				$data['start_date'],
 				$data['end_date'],
-				$data['person_centered'],
-				$data['abuse'],
-				$data['rights'],
-				$data['incidents'],
-				$data['behavior'],
-				$data['isp'],
+				GHCA_Audit_Calculator::category_display( $data, 'person_centered' ),
+				GHCA_Audit_Calculator::category_display( $data, 'abuse_prevention' ),
+				GHCA_Audit_Calculator::category_display( $data, 'individual_rights' ),
+				GHCA_Audit_Calculator::category_display( $data, 'reporting_incidents' ),
+				GHCA_Audit_Calculator::category_display( $data, 'behavior_supports' ),
+				GHCA_Audit_Calculator::category_display( $data, 'individual_plan' ),
 				$data['total_annual_hrs'],
 				$data['additional_hrs'],
-				$data['total_hrs']
+				$data['total_hrs'],
+				implode( ' | ', $data['evidence_issues'] ?? array() )
 			);
 			fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $row ) );
 		}
@@ -138,7 +140,8 @@ final class GHCA_Audit_Export {
 				'Reporting Incidents',
 				'Job-related knowledge',
 				'Orientation Completion Date',
-				'Orientation completed within 30 days of hire?'
+				'Orientation completed within 30 days of hire?',
+				'Evidence issues'
 		);
 		fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $headers ) );
 
@@ -154,13 +157,14 @@ final class GHCA_Audit_Export {
 				$data['doh'],
 				$data['first_service_date'],
 				$data['worked_alone_date'],
-				$data['person_centered'],
-				$data['abuse'],
-				$data['rights'],
-				$data['incidents'],
-				$data['job_related'],
+				GHCA_Audit_Calculator::category_display( $data, 'person_centered' ),
+				GHCA_Audit_Calculator::category_display( $data, 'abuse_prevention' ),
+				GHCA_Audit_Calculator::category_display( $data, 'individual_rights' ),
+				GHCA_Audit_Calculator::category_display( $data, 'reporting_incidents' ),
+				GHCA_Audit_Calculator::category_display( $data, 'job_related' ),
 				$data['completion_date'],
-				$data['completed_within_30']
+				$data['completed_within_30'],
+				implode( ' | ', $data['evidence_issues'] ?? array() )
 			);
 			fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $row ) );
 		}

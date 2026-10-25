@@ -16,7 +16,9 @@ final class GHCA_ACD_Audit_UI {
 		$url_annual = wp_nonce_url( admin_url( 'admin-post.php?action=ghca_acd_audit_export_csv&tracker=annual' ), 'ghca_acd_audit_export_csv' );
 		$url_orient = wp_nonce_url( admin_url( 'admin-post.php?action=ghca_acd_audit_export_csv&tracker=orientation' ), 'ghca_acd_audit_export_csv' );
 		
-		$employees = GHCA_ACD_Data_Provider::get_employee_user_ids();
+		$employees = GHCA_ACD_Roles::user_can_manage_users()
+			? GHCA_ACD_Data_Provider::get_employee_user_ids()
+			: GHCA_ACD_Data_Provider::get_active_employee_user_ids();
 		
 		ob_start();
 		?>
@@ -37,7 +39,7 @@ final class GHCA_ACD_Audit_UI {
 				</a>
 			</div>
 			
-			<div class="ghca-acd__table-wrap">
+			<div class="ghca-acd__table-wrap" tabindex="0" role="group" aria-label="Audit data table">
 				<table class="ghca-acd__table ghca-acd__table--audit">
 					<thead>
 						<tr>
@@ -72,11 +74,8 @@ final class GHCA_ACD_Audit_UI {
 								$worked_alone  = get_user_meta( $user_id, 'ghca_worked_alone_date', true );
 								$exclude_user  = get_user_meta( $user_id, 'ghca_audit_exclude', true );
 
-								$doh_ts = GHCA_Compliance_Program::get_enrollment_timestamp( $user_id, GHCA_Compliance_Program::get_user_new_hire_group_ids( $user_id ) );
-								if ( ! $doh_ts && $user ) {
-									$doh_ts = strtotime( $user->user_registered );
-								}
-								$doh = $doh_ts ? gmdate( 'm/d/Y', $doh_ts ) : '';
+								$doh_ts = GHCA_ACD_Employment_Record::timestamp( (int) $user_id );
+								$doh = $doh_ts ? wp_date( 'm/d/Y', $doh_ts ) : __( 'Missing verified date', 'ghca-acd' );
 								?>
 								<tr data-user-id="<?php echo esc_attr( $user_id ); ?>">
 									<td><?php echo esc_html( GHCA_ACD_Data_Provider::get_user_full_name( $user_id, $user ) ); ?></td>
@@ -95,8 +94,10 @@ final class GHCA_ACD_Audit_UI {
 										</label>
 									</td>
 									<td style="white-space: nowrap;">
+										<?php if ( GHCA_ACD_Roles::user_can_view_employee_documents() ) : ?>
 										<button type="button" class="ghca-acd__btn ghca-acd__btn--sm" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="orientation" title="<?php esc_attr_e( 'Download Orientation Packet', 'ghca-acd' ); ?>" style="padding: 4px 8px; margin-right: 4px;">Ori.</button>
 										<button type="button" class="ghca-acd__btn ghca-acd__btn--sm" data-ghca-pdf-packet="<?php echo esc_attr( (string) $user_id ); ?>" data-tracker="annual" title="<?php esc_attr_e( 'Download Annual Packet', 'ghca-acd' ); ?>" style="padding: 4px 8px;">Ann.</button>
+										<?php endif; ?>
 									</td>
 									<td>
 										<button type="button" class="ghca-acd__btn ghca-acd__btn--sm ghca-audit-save-btn">
@@ -147,13 +148,14 @@ final class GHCA_ACD_Audit_UI {
 							statusSpan.style.display = 'inline-block';
 							setTimeout(() => { statusSpan.style.display = 'none'; }, 2000);
 						} else {
-							alert( res.data || 'Error saving.' );
+							var m = res.data || 'Error saving.';
+							if ( window.ghcaAcdToast ) { window.ghcaAcdToast( m, true ); } else { console.error( m ); }
 						}
 					})
 					.catch(err => {
 						this.disabled = false;
 						this.textContent = 'Save';
-						alert( 'Network error.' );
+						if ( window.ghcaAcdToast ) { window.ghcaAcdToast( 'Network error.', true ); } else { console.error( 'Network error.' ); }
 					});
 				});
 			});
