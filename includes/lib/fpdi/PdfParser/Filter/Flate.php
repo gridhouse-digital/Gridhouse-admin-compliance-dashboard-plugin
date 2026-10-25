@@ -4,7 +4,7 @@
  * This file is part of FPDI
  *
  * @package   setasign\Fpdi
- * @copyright Copyright (c) 2023 Setasign GmbH & Co. KG (https://www.setasign.com)
+ * @copyright Copyright (c) 2026 Setasign GmbH & Co. KG (https://www.setasign.com)
  * @license   http://opensource.org/licenses/mit-license The MIT License
  */
 
@@ -54,21 +54,21 @@ class Flate implements FilterInterface
             $data = (($data !== '') ? @\gzuncompress($data, self::MAX_DECODED_BYTES + 1) : '');
             if ($data === false) {
                 // let's try if the checksum is CRC32
-                $fh = fopen('php://temp', 'w+b');
-                fwrite($fh, "\x1f\x8b\x08\x00\x00\x00\x00\x00" . $oData);
+                $fh = \fopen('php://temp', 'w+b');
+                \fwrite($fh, "\x1f\x8b\x08\x00\x00\x00\x00\x00" . $oData);
                 // "window" == 31 -> 16 + (8 to 15): Uses the low 4 bits of the value as the window size logarithm.
                 //                   The input must include a gzip header and trailer (via 16).
-                stream_filter_append($fh, 'zlib.inflate', STREAM_FILTER_READ, ['window' => 31]);
-                fseek($fh, 0);
-                $data = @stream_get_contents($fh, self::MAX_DECODED_BYTES + 1);
-                fclose($fh);
+                \stream_filter_append($fh, 'zlib.inflate', \STREAM_FILTER_READ, ['window' => 31]);
+                \fseek($fh, 0);
+                $data = @\stream_get_contents($fh, self::MAX_DECODED_BYTES + 1);
+                \fclose($fh);
 
                 if ($data && \strlen($data) <= self::MAX_DECODED_BYTES) {
                     return self::consumeDecodedBytes($data);
                 }
 
                 // Try this fallback (remove the zlib stream header)
-                $data = @(gzinflate(substr($oData, 2), self::MAX_DECODED_BYTES + 1));
+                $data = @(\gzinflate(\substr($oData, 2), self::MAX_DECODED_BYTES + 1));
 
                 if ($data === false || \strlen($data) > self::MAX_DECODED_BYTES) {
                     throw new FlateException(

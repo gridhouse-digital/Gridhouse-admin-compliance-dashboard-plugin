@@ -4,7 +4,7 @@
  * This file is part of FPDI
  *
  * @package   setasign\Fpdi
- * @copyright Copyright (c) 2023 Setasign GmbH & Co. KG (https://www.setasign.com)
+ * @copyright Copyright (c) 2026 Setasign GmbH & Co. KG (https://www.setasign.com)
  * @license   http://opensource.org/licenses/mit-license The MIT License
  */
 
@@ -118,12 +118,18 @@ class Page
         if ($inherited && \in_array($name, $inheritedKeys, true)) {
             if ($this->inheritedAttributes === null) {
                 $this->inheritedAttributes = [];
-                $inheritedKeys = \array_filter($inheritedKeys, function ($key) use ($dict) {
+                $inheritedKeys = \array_filter($inheritedKeys, static function ($key) use ($dict) {
                     return !isset($dict->value[$key]);
                 });
 
                 if (\count($inheritedKeys) > 0) {
-                    $parentDict = PdfType::resolve(PdfDictionary::get($dict, 'Parent'), $this->parser);
+                    $ensuredObjectList = [];
+                    $parentDict = PdfType::resolve(
+                        PdfDictionary::get($dict, 'Parent'),
+                        $this->parser,
+                        false,
+                        $ensuredObjectList
+                    );
                     while ($parentDict instanceof PdfDictionary) {
                         foreach ($inheritedKeys as $index => $key) {
                             if (isset($parentDict->value[$key])) {
@@ -134,7 +140,12 @@ class Page
 
                         /** @noinspection NotOptimalIfConditionsInspection */
                         if (isset($parentDict->value['Parent']) && \count($inheritedKeys) > 0) {
-                            $parentDict = PdfType::resolve(PdfDictionary::get($parentDict, 'Parent'), $this->parser);
+                            $parentDict = PdfType::resolve(
+                                PdfDictionary::get($parentDict, 'Parent'),
+                                $this->parser,
+                                false,
+                                $ensuredObjectList
+                            );
                         } else {
                             break;
                         }
@@ -259,6 +270,8 @@ class Page
                 if (!($content instanceof PdfStream)) {
                     continue;
                 }
+                // Local policy (GHCA): a content stream that cannot be unfiltered, including one that hits the
+                // decoded-byte limits, must abort the import instead of yielding a silently blank page.
                 $result[] = $content->getUnfilteredStream();
             }
 
@@ -266,6 +279,7 @@ class Page
         }
 
         if ($contents instanceof PdfStream) {
+            // Local policy (GHCA): see above; never swallow unfilter/limit failures.
             return $contents->getUnfilteredStream();
         }
 
@@ -280,6 +294,8 @@ class Page
      *
      * All coordinates are normalized in view to rotation and translation of the boundary-box, so that their
      * origin is lower-left.
+     *
+     * The URI is the binary value of the PDF string object. It can be in PdfDocEncoding or in UTF-16BE encoding.
      *
      * @return array
      */
@@ -332,7 +348,7 @@ class Page
                 }
 
                 $rect = PdfType::resolve(PdfDictionary::get($annotation, 'Rect'), $this->parser);
-                if (!$rect instanceof PdfArray || count($rect->value) !== 4) {
+                if (!$rect instanceof PdfArray || \count($rect->value) !== 4) {
                     continue;
                 }
 
@@ -368,7 +384,7 @@ class Page
                 $quadPoints = PdfType::resolve(PdfDictionary::get($annotation, 'QuadPoints'), $this->parser);
                 $normalizedQuadPoints = [];
                 if ($quadPoints instanceof PdfArray) {
-                    $quadPointsCount = count($quadPoints->value);
+                    $quadPointsCount = \count($quadPoints->value);
                     if ($quadPointsCount % 8 === 0) {
                         for ($i = 0; ($i + 1) < $quadPointsCount; $i += 2) {
                             $x = PdfNumeric::ensure(PdfType::resolve($quadPoints->value[$i], $this->parser));
