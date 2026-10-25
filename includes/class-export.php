@@ -3,6 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) {
   exit;
 }
 
+require_once __DIR__ . '/class-csv-writer.php';
+
 final class GHCA_ACD_Export {
   public static function init(): void {
     add_action( 'admin_post_ghca_acd_export_csv', array( __CLASS__, 'handle_export' ) );
@@ -49,9 +51,9 @@ final class GHCA_ACD_Export {
       wp_die( esc_html__( 'Export failed.', 'ghca-acd' ) );
     }
 
-    fputcsv(
+    GHCA_ACD_CSV::write_row(
       $out,
-      array_map( array( __CLASS__, 'csv_safe' ), array(
+      array(
         'Employee Name',
         'Email',
         'Group',
@@ -62,7 +64,7 @@ final class GHCA_ACD_Export {
         'Certificate',
         'Last Activity',
         'Status',
-      ) )
+      )
     );
 
     foreach ( $employees as $employee ) {
@@ -78,18 +80,11 @@ final class GHCA_ACD_Export {
         $employee['last_activity_label'],
         $employee['status_label'],
       );
-      fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $row ) );
+      GHCA_ACD_CSV::write_row( $out, $row );
     }
 
     fclose( $out );
     exit;
   }
 
-  private static function csv_safe( $value ): string {
-    $value = (string) $value;
-    if ( $value !== '' && in_array( $value[0], array( '=', '+', '-', '@', "\t", "\r" ), true ) ) {
-      $value = "'" . $value; // leading apostrophe = Excel treats as text
-    }
-    return $value;
-  }
 }
