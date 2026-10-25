@@ -135,7 +135,7 @@ final class GHCA_Audit_PDF_Jobs {
 
 			self::ensure_dir( self::temp_base() );
 			self::ensure_dir( self::packets_base() );
-			self::ensure_dir( self::temp_dir( $job_id ) );
+			self::create_job_dir( $job_id );
 
 			$course_ids = array_slice(
 				array_pad( array_map( 'intval', $course_ids ), count( $urls ), 0 ),
@@ -237,9 +237,11 @@ final class GHCA_Audit_PDF_Jobs {
 		}
 	}
 
-	public static function delete_job( string $job_id ): void {
+	/** @return bool True when the job record, folder and packet are all gone. */
+	public static function delete_job( string $job_id ): bool {
 		if ( ! self::is_valid_job_id( $job_id ) ) {
-			return;
+			self::log_failure( 'invalid_job_id', $job_id );
+			return false;
 		}
 		$manifest = get_transient( self::TRANSIENT_PREFIX . $job_id );
 		delete_transient( self::TRANSIENT_PREFIX . $job_id );
@@ -249,13 +251,22 @@ final class GHCA_Audit_PDF_Jobs {
 				delete_transient( $owner_key );
 			}
 		}
-		self::rmdir_recursive( self::temp_dir( $job_id ) );
-		if ( file_exists( self::packet_path( $job_id ) ) ) {
-			@unlink( self::packet_path( $job_id ) );
+		$ok = self::rmdir_recursive( self::temp_dir( $job_id ) );
+		$packet = self::packet_path( $job_id );
+		if ( file_exists( $packet ) && ! self::remove_file( $packet ) ) {
+			self::log_failure( 'packet_unlink_failed', $job_id );
+			$ok = false;
 		}
+		return $ok;
 	}
 
-	/** Deletes temp folders and finished packets older than TTL. Cheap; runs on every init. */
+	/**
+	 * Deletes orphaned temp folders, finished packets and stale lock files older than TTL.
+	 * Cheap; runs on every packet start and on wp_scheduled_delete.
+	 *
+	 * Only touches folders whose name is a valid job id and that have no live job
+	 * record, owner pointer or held lock. Owner locks are never expired here.
+	 */
 	public static function gc(): void {
 		$now = time();
 		try {
@@ -265,26 +276,67 @@ final class GHCA_Audit_PDF_Jobs {
 			return;
 		}
 
-		foreach ( (array) glob( $temp_base . '/*', GLOB_ONLYDIR ) as $dir ) {
-			if ( self::is_expired( (int) @filemtime( $dir ), $now ) ) {
-				self::rmdir_recursive( $dir );
-			}
-		}
-
-		foreach ( (array) glob( $packets_base . '/*.pdf' ) as $file ) {
-			if ( self::is_expired( (int) @filemtime( $file ), $now ) ) {
-				@unlink( $file );
-			}
-		}
-
-		foreach ( (array) glob( $packets_base . '/*.lock' ) as $file ) {
-			if ( 0 === strpos( basename( $file ), 'owner_' ) ) {
+		foreach ( self::list_entries( $temp_base ) as $name ) {
+			$dir = $temp_base . '/' . $name;
+			if ( ! self::is_valid_job_id( $name ) || is_link( $dir ) || ! is_dir( $dir ) ) {
 				continue;
 			}
-			if ( self::is_expired( (int) @filemtime( $file ), $now ) ) {
-				@unlink( $file );
+			if ( self::job_is_live( $name ) ) {
+				continue;
+			}
+			$mtime = self::mtime( $dir, $name );
+			if ( false === $mtime || ! self::is_expired( $mtime, $now ) ) {
+				continue;
+			}
+			$lock = self::acquire_job_lock( $name );
+			if ( false === $lock ) {
+				continue; // A request is still working on it.
+			}
+			if ( self::rmdir_recursive( $dir ) && is_file( self::lock_path( 'job_' . $name ) ) && ! self::remove_file( self::lock_path( 'job_' . $name ) ) ) {
+				self::log_failure( 'lock_unlink_failed', $name );
+			}
+			self::release_lock( $lock );
+		}
+
+		foreach ( self::list_entries( $packets_base ) as $name ) {
+			$file = $packets_base . '/' . $name;
+			if ( is_link( $file ) || ! is_file( $file ) ) {
+				continue;
+			}
+			if ( preg_match( '/^([a-f0-9]{32})_packet\.pdf$/D', $name, $m ) ) {
+				$mtime = self::mtime( $file, $m[1] );
+				if ( false !== $mtime && self::is_expired( $mtime, $now ) && ! self::remove_file( $file ) ) {
+					self::log_failure( 'packet_unlink_failed', $m[1] );
+				}
+			} elseif ( preg_match( '/^(?:job_([a-f0-9]{32})|broker_([a-f0-9]{32})_[0-9]+)\.lock$/D', $name, $m ) ) {
+				// Owner locks (owner_*.lock) are deliberately never matched.
+				$job_id = '' !== $m[1] ? $m[1] : ( $m[2] ?? '' );
+				if ( self::job_is_live( $job_id ) || is_dir( self::temp_dir( $job_id ) ) ) {
+					continue;
+				}
+				$mtime = self::mtime( $file, $job_id );
+				if ( false === $mtime || ! self::is_expired( $mtime, $now ) ) {
+					continue;
+				}
+				$handle = @fopen( $file, 'c+b' );
+				if ( false === $handle ) {
+					self::log_failure( 'lock_open_failed', $job_id );
+					continue;
+				}
+				if ( flock( $handle, LOCK_EX | LOCK_NB ) ) {
+					if ( ! self::remove_file( $file ) ) {
+						self::log_failure( 'lock_unlink_failed', $job_id );
+					}
+				}
+				self::release_lock( $handle );
 			}
 		}
+	}
+
+	/** A job is live while its manifest transient exists (the owner pointer shares its TTL). */
+	private static function job_is_live( string $job_id ): bool {
+		$manifest = get_transient( self::TRANSIENT_PREFIX . $job_id );
+		return false !== $manifest && null !== $manifest;
 	}
 
 	/** @return resource|false */
@@ -403,13 +455,122 @@ final class GHCA_Audit_PDF_Jobs {
 		return $lock;
 	}
 
-	private static function rmdir_recursive( string $dir ): void {
+	/** Creates one private per-job folder. Protection comes from the already-verified parent. */
+	private static function create_job_dir( string $job_id ): void {
+		$base = self::temp_base();
+		// Fail closed: never create a job folder unless the parent's deny-all files exist.
+		if ( ! is_file( $base . '/.htaccess' ) || ! is_file( $base . '/index.html' ) ) {
+			throw new RuntimeException( 'Private packet storage protection is missing.' );
+		}
+		$dir = self::temp_dir( $job_id );
 		if ( ! is_dir( $dir ) ) {
-			return;
+			wp_mkdir_p( $dir );
 		}
-		foreach ( (array) glob( $dir . '/*' ) as $item ) {
-			is_dir( $item ) ? self::rmdir_recursive( $item ) : @unlink( $item );
+		if ( ! is_dir( $dir ) || ! @chmod( $dir, 0700 ) ) {
+			throw new RuntimeException( 'Private packet storage is unavailable.' );
 		}
-		@rmdir( $dir );
+		if ( '\\' !== DIRECTORY_SEPARATOR ) {
+			clearstatcache( true, $dir );
+			if ( 0700 !== ( fileperms( $dir ) & 0777 ) ) {
+				throw new RuntimeException( 'Private packet storage permissions are unsafe.' );
+			}
+		}
+	}
+
+	/** @return array<int,string> Entry names excluding . and .. (hidden files included). */
+	private static function list_entries( string $dir ): array {
+		$entries = is_dir( $dir ) ? scandir( $dir ) : false;
+		if ( false === $entries ) {
+			return array();
+		}
+		return array_values( array_diff( $entries, array( '.', '..' ) ) );
+	}
+
+	/** @return int|false */
+	private static function mtime( string $path, string $job_id ) {
+		clearstatcache( true, $path );
+		$mtime = filemtime( $path );
+		if ( false === $mtime ) {
+			self::log_failure( 'mtime_unreadable', $job_id );
+		}
+		return $mtime;
+	}
+
+	/** Unlinks a file or symlink (never following it). */
+	private static function remove_file( string $path ): bool {
+		if ( self::forced_failure( 'unlink' ) ) {
+			return false;
+		}
+		return unlink( $path );
+	}
+
+	/** Test seam: lets tests simulate an unremovable path without needing OS permissions. */
+	private static function forced_failure( string $operation ): bool {
+		return function_exists( 'apply_filters' ) && true === apply_filters( 'ghca_acd_pdf_jobs_force_fs_failure', false, $operation );
+	}
+
+	/**
+	 * Removes one per-job temp folder and everything in it, hidden files included.
+	 * Refuses anything that is not a direct child of the temp base named by a valid job id.
+	 */
+	private static function rmdir_recursive( string $dir ): bool {
+		$job_id = basename( $dir );
+		if ( ! self::is_valid_job_id( $job_id ) ) {
+			self::log_failure( 'rmdir_refused', $job_id );
+			return false;
+		}
+		try {
+			$base = self::temp_base();
+		} catch ( RuntimeException $exception ) {
+			self::log_failure( 'rmdir_refused', $job_id );
+			return false;
+		}
+		if ( wp_normalize_path( dirname( $dir ) ) !== wp_normalize_path( $base ) ) {
+			self::log_failure( 'rmdir_refused', $job_id );
+			return false;
+		}
+		if ( ! is_link( $dir ) && ! file_exists( $dir ) ) {
+			return true;
+		}
+		if ( ! is_link( $dir ) ) {
+			$real_base = realpath( $base );
+			$real_dir  = realpath( $dir );
+			if ( false === $real_base || false === $real_dir || wp_normalize_path( dirname( $real_dir ) ) !== wp_normalize_path( $real_base ) ) {
+				self::log_failure( 'rmdir_refused', $job_id );
+				return false;
+			}
+		}
+		if ( ! self::remove_tree( $dir ) ) {
+			self::log_failure( 'rmdir_failed', $job_id );
+			return false;
+		}
+		return true;
+	}
+
+	private static function remove_tree( string $path ): bool {
+		if ( is_link( $path ) ) {
+			// Remove the link itself; a directory symlink on Windows needs rmdir.
+			return self::remove_file( $path ) || ( is_dir( $path ) && ! self::forced_failure( 'rmdir' ) && rmdir( $path ) );
+		}
+		if ( ! is_dir( $path ) ) {
+			return self::remove_file( $path );
+		}
+		$ok = true;
+		foreach ( self::list_entries( $path ) as $name ) {
+			$ok = self::remove_tree( $path . '/' . $name ) && $ok;
+		}
+		if ( ! $ok || self::forced_failure( 'rmdir' ) ) {
+			return false;
+		}
+		return rmdir( $path );
+	}
+
+	/** Internal log line: error code and a short job-id hash only; never paths or user data. */
+	private static function log_failure( string $code, string $job_id ): void {
+		$hash = substr( hash( 'sha256', $job_id ), 0, 10 );
+		if ( function_exists( 'do_action' ) ) {
+			do_action( 'ghca_acd_pdf_jobs_failure', $code, $hash );
+		}
+		error_log( 'ghca_acd packet jobs: ' . $code . ' job=' . $hash );
 	}
 }

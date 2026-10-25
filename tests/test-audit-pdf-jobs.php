@@ -9,6 +9,8 @@ if ( '\\' === DIRECTORY_SEPARATOR && ! defined( 'GHCA_ACD_PRIVATE_DIR' ) ) {
 function wp_normalize_path( $value ) { return str_replace( '\\', '/', $value ); }
 function wp_mkdir_p( $dir ) { return is_dir( $dir ) || mkdir( $dir, 0777, true ); }
 function wp_upload_dir() { return array( 'basedir' => ABSPATH . 'uploads' ); }
+// gc() now consults job records before removing a folder; no live jobs in this fixture.
+function get_transient( $key ) { return false; }
 require_once __DIR__ . '/../includes/class-audit-pdf-jobs.php';
 
 $fails = 0;
