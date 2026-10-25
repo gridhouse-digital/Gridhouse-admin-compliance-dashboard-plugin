@@ -270,17 +270,24 @@ class Page
                 if (!($content instanceof PdfStream)) {
                     continue;
                 }
-                // Local policy (GHCA): a content stream that cannot be unfiltered, including one that hits the
-                // decoded-byte limits, must abort the import instead of yielding a silently blank page.
-                $result[] = $content->getUnfilteredStream();
+
+                try {
+                    $result[] = $content->getUnfilteredStream();
+                } catch (FilterException $e) {
+                    // ignore streams that cannot be unfiltered
+                }
             }
 
             return \implode("\n", $result);
         }
 
         if ($contents instanceof PdfStream) {
-            // Local policy (GHCA): see above; never swallow unfilter/limit failures.
-            return $contents->getUnfilteredStream();
+            try {
+                return $contents->getUnfilteredStream();
+            } catch (FilterException $e) {
+                // ignore streams that cannot be unfiltered
+                return '';
+            }
         }
 
         throw new PdfReaderException(

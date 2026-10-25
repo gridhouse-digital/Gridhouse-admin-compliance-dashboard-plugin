@@ -913,6 +913,12 @@ final class GHCA_Audit_PDF {
 		if ( ! is_readable( $path ) ) {
 			return false;
 		}
+		// Plugin-owned evidence integrity check. FPDI copies a single content stream without decoding it and turns
+		// any undecodable stream into a blank page (FpdiTrait::importPage), so corrupt or over-limit evidence would
+		// otherwise be merged silently. Verify every page's content streams here and refuse the certificate.
+		if ( ! self::certificate_content_is_decodable( $path ) ) {
+			return false;
+		}
 		try {
 			\setasign\Fpdi\PdfParser\Filter\Flate::resetDecodedBudget();
 			$page_count = $pdf->setSourceFile( $path );
@@ -930,6 +936,40 @@ final class GHCA_Audit_PDF {
 			$total_pages += (int) $page_count;
 		} catch ( \Exception $e ) {
 			// Malformed or encrypted certificate
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * True only when every page of the PDF has content streams that decode within the F-006 decoded-byte limits.
+	 * Uses FPDI's public reader API and calls getUnfilteredStream() directly, so decode and limit failures
+	 * propagate instead of being skipped. Any problem (corrupt stream, over-limit, malformed or recursive
+	 * structure, unreadable file) returns false; nothing about the file is reported to the caller.
+	 */
+	public static function certificate_content_is_decodable( string $path ): bool {
+		try {
+			\setasign\Fpdi\PdfParser\Filter\Flate::resetDecodedBudget();
+			$reader = new \setasign\Fpdi\PdfReader\PdfReader( new \setasign\Fpdi\PdfParser\PdfParser( \setasign\Fpdi\PdfParser\StreamReader::createByFile( $path ) ) );
+			$pages  = $reader->getPageCount();
+			if ( $pages < 1 || $pages > self::MAX_CERTIFICATE_PAGES ) {
+				return false;
+			}
+			$parser = $reader->getParser();
+			for ( $number = 1; $number <= $pages; $number++ ) {
+				$contents = \setasign\Fpdi\PdfParser\Type\PdfType::resolve(
+					\setasign\Fpdi\PdfParser\Type\PdfDictionary::get( $reader->getPage( $number )->getPageDictionary(), 'Contents' ),
+					$parser
+				);
+				$streams = $contents instanceof \setasign\Fpdi\PdfParser\Type\PdfArray ? $contents->value : array( $contents );
+				foreach ( $streams as $entry ) {
+					$stream = \setasign\Fpdi\PdfParser\Type\PdfType::resolve( $entry, $parser );
+					if ( $stream instanceof \setasign\Fpdi\PdfParser\Type\PdfStream ) {
+						$stream->getUnfilteredStream(); // throws on a corrupt or over-limit stream
+					}
+				}
+			}
+		} catch ( \Throwable $e ) {
 			return false;
 		}
 		return true;

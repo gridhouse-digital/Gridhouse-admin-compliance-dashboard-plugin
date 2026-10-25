@@ -45,3 +45,16 @@ function append_update( string $pdf, array $changed, ?int $prev = null, string $
 	$x = $shift + strlen( $body );
 	return $pdf . $body . xref_section( $offsets ) . 'trailer << /Size 5 /Root 1 0 R /Prev ' . $prev . " $extra >>\nstartxref\n$x\n%%EOF\n";
 }
+
+/** A FlateDecode stream object body for $data (already-compressed or garbage bytes). */
+function flate_stream_object( string $data ): string {
+	return '<< /Length ' . strlen( $data ) . " /Filter /FlateDecode >>\nstream\n" . $data . "\nendstream";
+}
+/** A PDF whose single page has two content streams (objects 4 and 5). */
+function build_two_stream_pdf( string $first, string $second ): string {
+	$objects = base_objects();
+	$objects[3] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents [4 0 R 5 0 R] >>';
+	$objects[4] = $first;
+	$objects[5] = $second;
+	return build_pdf( $objects );
+}

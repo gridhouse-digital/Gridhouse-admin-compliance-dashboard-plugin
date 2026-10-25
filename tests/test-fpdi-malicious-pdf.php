@@ -48,11 +48,8 @@ $fixtures['recursive page tree (A -> B -> A)'] = array( build_pdf( $loop2 ), 're
 $parent = base_objects(); $parent[3] = '<< /Type /Page /Parent 3 0 R /Contents 4 0 R >>';
 $fixtures['page whose /Parent is itself (inherited attributes)'] = array( build_pdf( $parent ), 'reject_or_ok' );
 
-// F-006 carried through the page-content path: a Flate content stream inflating past the 32 MiB cap must abort,
-// not import as a blank page.
-$big = gzcompress( str_repeat( "\0", 33 * 1024 * 1024 ), 9 );
-$bigobj = base_objects(); $bigobj[4] = '<< /Length ' . strlen( $big ) . " /Filter /FlateDecode >>\nstream\n" . $big . "\nendstream";
-$fixtures['content stream inflating past the decoded-byte cap'] = array( build_pdf( $bigobj ), 'reject' );
+// (Undecodable / over-limit content streams are NOT a parser-level rejection: FPDI 2.6.8+ ignores them. The plugin's own
+// evidence integrity check refuses them - see tests/test-fpdi-evidence-integrity.php.)
 
 $dir = sys_get_temp_dir() . '/ghca-fpdi-fixtures-' . getmypid();
 mkdir( $dir, 0700 );

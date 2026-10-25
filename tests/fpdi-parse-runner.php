@@ -1,5 +1,5 @@
 <?php
-// Child process for tests/test-fpdi-malicious-pdf.php. Parses one PDF the way the packet builder does
+// Child process for tests/test-fpdi-malicious-pdf.php and tests/test-fpdi-evidence-integrity.php. Parses one PDF the way the packet builder does
 // (cross-reference + page tree + first page content) and prints one JSON line. Not a standalone test.
 if ( PHP_SAPI !== 'cli' || empty( $argv[1] ) || ! is_file( $argv[1] ) ) { exit( 2 ); }
 require __DIR__ . '/../includes/lib/fpdi/autoload.php';
@@ -11,6 +11,15 @@ use setasign\Fpdi\PdfParser\Filter\Flate;
 register_shutdown_function( static function () use ( &$done ) {
 	if ( empty( $done ) ) { $e = error_get_last(); echo json_encode( array( 'status' => 'fatal', 'error' => $e['message'] ?? 'unknown' ) ), "\n"; }
 } );
+if ( ( $argv[2] ?? '' ) === 'plugin-check' ) {
+	// Run the plugin-owned evidence integrity check (GHCA_Audit_PDF::certificate_content_is_decodable).
+	define( 'ABSPATH', __DIR__ . '/' );
+	require __DIR__ . '/../includes/class-audit-pdf.php';
+	$ok = GHCA_Audit_PDF::certificate_content_is_decodable( $argv[1] );
+	$done = true;
+	echo json_encode( array( 'status' => $ok ? 'accepted' : 'rejected', 'peak_mb' => round( memory_get_peak_usage( true ) / 1048576, 1 ) ) ), "\n";
+	exit( 0 );
+}
 try {
 	Flate::resetDecodedBudget();
 	$reader = new PdfReader( new PdfParser( StreamReader::createByFile( $argv[1] ) ) );
