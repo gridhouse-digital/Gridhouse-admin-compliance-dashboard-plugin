@@ -1,5 +1,7 @@
 # CodeRabbit scan 08f5c889 — reconciliation
 
+> **Historical assessment at `8385131`.** The findings table and the per-finding evidence below are a point-in-time record of the code at that commit and are intentionally not rewritten. For what has changed since, see **Current disposition** at the end.
+
 - Scan: `08f5c889`, generated Oct 24 8:42 PM against an older commit.
 - Reconciled against: **`8385131`** (`main` after PR #5, "fix(GRI-62)").
 - Method: each finding was traced to the guard (or vulnerable lines) in the code at `8385131`. A passing test alone was not accepted as closure. Line numbers are as of `8385131`.
@@ -95,7 +97,7 @@
       if (isset($trailer->value['Prev'])) { $offset = $trailer->value['Prev']->value; } else { $offset = false; }
   }
   ```
-  No visited-offset set and no chain-length cap. Reproduced with a ~400-byte synthetic PDF whose trailer `/Prev` equals its own `startxref` offset: with `memory_limit=128M` the parser dies with a non-catchable fatal ("Allowed memory size … exhausted", Tokenizer.php:65) after ~2.4 s. Bundled code was not modified. Assessment and options are in the F-005 section of the PR description / hand-off; the decision is pending approval.
+  No visited-offset set and no chain-length cap. Reproduced with a ~400-byte synthetic PDF whose trailer `/Prev` equals its own `startxref` offset: with `memory_limit=128M` the parser dies with a non-catchable fatal ("Allowed memory size … exhausted", Tokenizer.php:65) after ~2.4 s. Bundled code was not modified at `8385131`. (Historical wording: the options and approval referred to here have since been resolved; see Current disposition.)
 - **Test:** none (existing FPDI tests: `tests/test-fpdi-flate-budget.php`, `tests/test-fpdi-library-complete.php`).
 
 ## F-006 — bundled FPDI: no expanded-output or aggregate decoded-byte limit
@@ -114,6 +116,15 @@
 
 ---
 
+## Current disposition
+
+Status after the assessment above. The verdicts and evidence in the sections above are the historical record at `8385131` and are unchanged.
+
+- **F-004 (CSV field boundaries): addressed by merged PR #7**, merge commit `04bcfbafef93db8954c28dc87c35f22d84d0b768`. Every CSV export now goes through one shared writer that neutralizes formula prefixes per original field and writes with an explicit empty escape character; the test parses the output with a strict RFC 4180 reader.
+- **F-005 (bundled FPDI cyclic `/Prev`): addressed by merged PR #8**, merge commit `e7925839d24fc88ebc2b82972b0b73da616c1347`. The bundled FPDI was upgraded from 2.6.0 to 2.6.9 (the F-006 decoded-byte limits were re-applied on top), and a plugin-owned check now verifies every page's content streams before a certificate is merged. That check covers page content streams only; XObjects and other components, approval-time checks, and truncated Flate streams are tracked separately as known gaps.
+- **F-001, F-002, F-003, F-006:** no change since `8385131` (Fixed, as recorded above).
+- **Test limitations that remain:** F-001 coverage is partial (the handler test stubs the scope helpers; there is no end-to-end out-of-scope group-leader fixture), and F-002 coverage is partial (only the same-origin allow-list and response limits are tested; `sslverify`, the cookie allow-list and the redirect setting are not asserted).
+
 ## Follow-up
 
-Request a **fresh CodeRabbit scan against the final build** once the open items (F-004, F-005) are resolved, so the report reflects current code rather than the older commit scanned as `08f5c889`.
+Request a **fresh CodeRabbit scan against the final build** (one that includes PR #7 and PR #8), so the report reflects current code rather than the older commit scanned as `08f5c889`.
