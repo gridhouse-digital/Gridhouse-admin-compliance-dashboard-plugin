@@ -942,7 +942,10 @@ final class GHCA_Audit_PDF {
 	}
 
 	/**
-	 * True only when every page of the PDF has content streams that decode within the F-006 decoded-byte limits.
+	 * True only when every page either has no /Contents at all (an intentionally blank page) or has /Contents made
+	 * exclusively of PDF streams (one, or an array of them) that decode within the F-006 decoded-byte limits.
+	 * Any other /Contents entry (null, number, dictionary, nested array, dangling reference, empty array) is rejected.
+	 * Scope: page content streams only - not XObjects, fonts or other components.
 	 * Uses FPDI's public reader API and calls getUnfilteredStream() directly, so decode and limit failures
 	 * propagate instead of being skipped. Any problem (corrupt stream, over-limit, malformed or recursive
 	 * structure, unreadable file) returns false; nothing about the file is reported to the caller.
@@ -957,16 +960,21 @@ final class GHCA_Audit_PDF {
 			}
 			$parser = $reader->getParser();
 			for ( $number = 1; $number <= $pages; $number++ ) {
-				$contents = \setasign\Fpdi\PdfParser\Type\PdfType::resolve(
-					\setasign\Fpdi\PdfParser\Type\PdfDictionary::get( $reader->getPage( $number )->getPageDictionary(), 'Contents' ),
-					$parser
-				);
-				$streams = $contents instanceof \setasign\Fpdi\PdfParser\Type\PdfArray ? $contents->value : array( $contents );
-				foreach ( $streams as $entry ) {
+				$page_dictionary = $reader->getPage( $number )->getPageDictionary();
+				if ( ! isset( $page_dictionary->value['Contents'] ) ) {
+					continue; // /Contents genuinely absent: an intentionally blank page.
+				}
+				$contents = \setasign\Fpdi\PdfParser\Type\PdfType::resolve( $page_dictionary->value['Contents'], $parser );
+				$entries  = $contents instanceof \setasign\Fpdi\PdfParser\Type\PdfArray ? $contents->value : array( $contents );
+				if ( array() === $entries ) {
+					return false; // present but empty: not a content stream.
+				}
+				foreach ( $entries as $entry ) {
 					$stream = \setasign\Fpdi\PdfParser\Type\PdfType::resolve( $entry, $parser );
-					if ( $stream instanceof \setasign\Fpdi\PdfParser\Type\PdfStream ) {
-						$stream->getUnfilteredStream(); // throws on a corrupt or over-limit stream
+					if ( ! $stream instanceof \setasign\Fpdi\PdfParser\Type\PdfStream ) {
+						return false; // null, number, dictionary, nested array, dangling reference ...
 					}
+					$stream->getUnfilteredStream(); // throws on a corrupt or over-limit stream
 				}
 			}
 		} catch ( \Throwable $e ) {

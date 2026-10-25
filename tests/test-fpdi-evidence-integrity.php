@@ -27,13 +27,28 @@ preg_match( '/startxref\n(\d+)\n/', $a, $m ); $a_off = (int) $m[1];
 $ab = append_update( $a, array( 4 => $stub ), $a_off );
 preg_match( '/startxref\n(\d+)\n%%EOF\n$/', $ab, $m );
 
+$with_contents = static function ( string $contents_value, array $extra = array() ): string {
+	$o = base_objects(); $o[3] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents ' . $contents_value . ' >>';
+	return build_pdf( $extra + $o );
+};
 $cases = array(
 	// label => array( pdf bytes, expected )
 	'normal valid PDF (plain content stream)'                => array( build_pdf( base_objects() ), 'accepted' ),
 	'normal valid PDF (Flate content stream)'                => array( $single( flate_stream_object( $valid ) ), 'accepted' ),
 	'normal valid PDF, two content streams'                  => array( build_two_stream_pdf( flate_stream_object( $valid ), $stub ), 'accepted' ),
 	'normal multi-update PDF (3 xref sections)'              => array( $multi_update, 'accepted' ),
-	'page with no content stream (blank page)'               => array( build_pdf( array( 1 => '<< /Type /Catalog /Pages 2 0 R >>', 2 => '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', 3 => '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>' ) ), 'accepted' ),
+	'/Contents absent (intentionally blank page)'            => array( build_pdf( array( 1 => '<< /Type /Catalog /Pages 2 0 R >>', 2 => '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', 3 => '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>' ) ), 'accepted' ),
+	'single /Contents that is a dictionary, not a stream'    => array( $with_contents( '5 0 R', array( 5 => '<< /Foo 1 >>' ) ), 'rejected' ),
+	'single /Contents that is a number'                      => array( $with_contents( '42' ), 'rejected' ),
+	// PDF 32000-1 7.3.7: a dictionary entry whose value is null is equivalent to the entry being absent, and the FPDI
+	// parser drops it, so `/Contents null` is the same intentionally blank page as an absent /Contents (not a gap).
+	'/Contents null (spec: same as absent)'                  => array( $with_contents( 'null' ), 'accepted' ),
+	'single /Contents that is a dangling reference'          => array( $with_contents( '99 0 R' ), 'rejected' ),
+	'mixed array: valid stream + dictionary'                 => array( $with_contents( '[4 0 R 5 0 R]', array( 5 => '<< /Foo 1 >>' ) ), 'rejected' ),
+	'mixed array: dictionary + valid stream'                 => array( $with_contents( '[5 0 R 4 0 R]', array( 5 => '<< /Foo 1 >>' ) ), 'rejected' ),
+	'mixed array: valid stream + null'                       => array( $with_contents( '[4 0 R null]' ), 'rejected' ),
+	'mixed array: valid stream + number'                     => array( $with_contents( '[4 0 R 7]' ), 'rejected' ),
+	'empty /Contents array'                                  => array( $with_contents( '[]' ), 'rejected' ),
 	'one corrupt content stream'                             => array( $single( flate_stream_object( $garbage ) ), 'rejected' ),
 	'one over-limit content stream (33 MiB decoded)'         => array( $single( flate_stream_object( $big ) ), 'rejected' ),
 	'two content streams, one corrupt'                       => array( build_two_stream_pdf( flate_stream_object( $garbage ), $stub ), 'rejected' ),

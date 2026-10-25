@@ -103,7 +103,20 @@ foreach ( array( 'single Flate content stream' => $single( flate_stream_object( 
 	GHCA_Audit_PDF_Jobs::delete_job( $GLOBALS['last_job_id'] );
 }
 
+$with_contents = static function ( string $contents_value, array $extra = array() ): string {
+	$o = base_objects(); $o[3] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents ' . $contents_value . ' >>';
+	return build_pdf( $extra + $o );
+};
+$blank = build_pdf( array( 1 => '<< /Type /Catalog /Pages 2 0 R >>', 2 => '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', 3 => '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>' ) );
+$ok = merge_with_certificate( $blank );
+ca_check( $ok->success && ! empty( $ok->data['download_url'] ), 'control: an absent /Contents (intentionally blank page) still merges' );
+GHCA_Audit_PDF_Jobs::delete_job( $GLOBALS['last_job_id'] );
+
 $bad = array(
+	'single non-stream /Contents (dictionary)' => $with_contents( '5 0 R', array( 5 => '<< /Foo 1 >>' ) ),
+	'single non-stream /Contents (number)'     => $with_contents( '42' ),
+	'mixed array: valid stream + dictionary'   => $with_contents( '[4 0 R 5 0 R]', array( 5 => '<< /Foo 1 >>' ) ),
+	'mixed array: valid stream + null'         => $with_contents( '[4 0 R null]' ),
 	'one corrupt stream'                  => $single( flate_stream_object( $garbage ) ),
 	'one over-limit stream'               => $single( flate_stream_object( $big ) ),
 	'two streams, one corrupt'            => build_two_stream_pdf( flate_stream_object( $garbage ), $stub ),
