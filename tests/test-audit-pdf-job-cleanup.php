@@ -12,6 +12,8 @@ function delete_transient( $k ) { unset( $GLOBALS['transients'][ $k ] ); return 
 function apply_filters( $hook, $value, ...$args ) { return 'ghca_acd_pdf_jobs_force_fs_failure' === $hook && $GLOBALS['force_fs_failure'] ? true : $value; }
 function __( $t, $d = '' ) { return $t; }
 class WP_Error { public function __construct( ...$a ) {} }
+// Optional: run as an unprivileged user against a directory it owns (outside the repo) so chmod-based failures are real.
+if ( getenv( 'GHCA_TEST_PRIVATE_DIR' ) && is_dir( getenv( 'GHCA_TEST_PRIVATE_DIR' ) ) ) { define( 'GHCA_ACD_PRIVATE_DIR', getenv( 'GHCA_TEST_PRIVATE_DIR' ) ); }
 $log = sys_get_temp_dir() . '/ghca-cleanup-test-' . getmypid() . '.log';
 ini_set( 'log_errors', '1' );
 ini_set( 'error_log', $log );
@@ -29,7 +31,7 @@ function make_job_dir( string $id, bool $hidden = true, int $age = 0 ): string {
 	if ( $age ) { touch( $dir, time() - $age ); }
 	return $dir;
 }
-$id1 = str_repeat( 'a1', 16 ); $id2 = str_repeat( 'b2', 16 ); $id3 = str_repeat( 'c3', 16 ); $id4 = str_repeat( 'd4', 16 );
+$id1 = str_repeat( 'a1', 16 ); $id2 = str_repeat( 'b2', 16 ); $id3 = str_repeat( 'c3', 16 ); $id4 = str_repeat( 'd4', 16 ); $id5 = str_repeat( 'e5', 16 );
 $old = GHCA_Audit_PDF_Jobs::TTL + 600;
 
 // create_job: parent protection exists before any job folder, and the job folder carries none of its own.
@@ -110,6 +112,53 @@ $logged = (string) file_get_contents( $log );
 check( 1 === preg_match( '/rmdir_failed job=[a-f0-9]{10}\b/', $logged ), 'failure is logged with an error code and a short job hash' );
 check( false === strpos( $logged, $id1 ) && false === strpos( $logged, $base ) && false === strpos( $logged, sys_get_temp_dir() ) && false === strpos( $logged, 'ghca-compliance' ), 'log has no full job id, path or temp dir' );
 check( true === GHCA_Audit_PDF_Jobs::delete_job( $id1 ) && ! file_exists( $dir ), 'a later attempt succeeds once the fault clears' );
+
+
+// --- Native PHP warnings are contained; only a code and short hash are logged -----------------
+$seen = array();
+set_error_handler( static function ( int $no, string $str ) use ( &$seen ): bool { $seen[] = $str; return true; } );
+$probe = GHCA_Audit_PDF_Jobs::packet_path( $id1 ); mkdir( $probe );
+$packets_dir = GHCA_Audit_PDF_Jobs::packets_base();
+$n = count( $seen ); $control_warnings = 0; unlink( $probe ); $control_warnings = count( $seen );
+check( count( $seen ) > $n && false !== strpos( (string) end( $seen ), $packets_dir ), 'control: a raw failing unlink emits a native warning that contains the path' );
+
+// Real failure 1: the packet path is a directory, so unlink() truly fails (works as root too).
+file_put_contents( $log, '' ); $n = count( $seen );
+check( false === GHCA_Audit_PDF_Jobs::delete_job( $id1 ), 'real failing unlink: delete_job reports failure' );
+check( $n === count( $seen ), 'real failing unlink: no PHP warning escapes' );
+$logged = (string) file_get_contents( $log );
+check( 1 === preg_match( '/^(\[[^\]]+\] )?ghca_acd packet jobs: packet_unlink_failed job=[a-f0-9]{10}$/', trim( $logged ) ), 'real failing unlink: log is exactly one code + short hash line' );
+check( false === strpos( $logged, $base ) && false === strpos( $logged, $packets_dir ) && false === strpos( $logged, sys_get_temp_dir() ) && false === strpos( $logged, $id1 ) && false === stripos( $logged, 'directory' ), 'real failing unlink: log has no path, full id or native message' );
+rmdir( $probe );
+
+// Real failure 2: stat of a missing file.
+file_put_contents( $log, '' ); $n = count( $seen );
+$mt = new ReflectionMethod( J(), 'mtime' ); if ( PHP_VERSION_ID < 80100 ) { $mt->setAccessible( true ); }
+check( false === $mt->invoke( null, $base . '/' . $id2 . '/missing', $id2 ) && $n === count( $seen ), 'real failing filemtime: reports false and no PHP warning escapes' );
+check( 1 === preg_match( '/mtime_unreadable job=[a-f0-9]{10}$/', trim( (string) file_get_contents( $log ) ) ) && false === strpos( (string) file_get_contents( $log ), $base ), 'real failing filemtime: logged as code + short hash only' );
+
+// Real failures 3-4 need permissions to bite, which root bypasses.
+if ( function_exists( 'posix_geteuid' ) && 0 === posix_geteuid() ) {
+	echo "SKIP: running as root, chmod-based unlink/rmdir/scandir failure cases not exercised (rerun unprivileged with GHCA_TEST_PRIVATE_DIR set)\n";
+} else {
+	// Read-only subfolder: unlink + rmdir fail with EACCES.
+	file_put_contents( $log, '' ); $n = count( $seen );
+	$dir = make_job_dir( $id5, true ); chmod( $dir . '/sub', 0500 );
+	check( false === GHCA_Audit_PDF_Jobs::delete_job( $id5 ), 'permission failure (unlink/rmdir): delete_job reports failure' );
+	check( $n === count( $seen ), 'permission failure (unlink/rmdir): no PHP warning escapes' );
+	$logged = (string) file_get_contents( $log );
+	check( 1 === preg_match( '/rmdir_failed job=[a-f0-9]{10}$/', trim( $logged ) ) && false === strpos( $logged, $base ) && false === stripos( $logged, 'permission denied' ), 'permission failure (unlink/rmdir): only code + short hash logged' );
+	chmod( $dir . '/sub', 0700 ); check( true === GHCA_Audit_PDF_Jobs::delete_job( $id5 ) && ! file_exists( $dir ), 'once permissions are restored the folder is removed' );
+	// Unreadable folder: scandir fails.
+	file_put_contents( $log, '' ); $n = count( $seen );
+	$dir = make_job_dir( $id5, true ); chmod( $dir, 0300 );
+	check( false === GHCA_Audit_PDF_Jobs::delete_job( $id5 ) && $n === count( $seen ), 'unreadable folder (scandir): failure reported, no PHP warning escapes' );
+	$logged = (string) file_get_contents( $log );
+	check( 1 === preg_match( '/rmdir_failed job=[a-f0-9]{10}$/', trim( $logged ) ) && false === strpos( $logged, $base ), 'unreadable folder (scandir): only code + short hash logged' );
+	chmod( $dir, 0700 ); GHCA_Audit_PDF_Jobs::delete_job( $id5 );
+}
+restore_error_handler();
+check( 1 === count( $seen ) && $control_warnings === count( $seen ), 'the only warning seen in this section is the deliberate control' );
 
 // Cleanup of test artifacts.
 foreach ( array( $decoy, $non_job, $evidence, $outside, $recent_orphan, $active ) as $d ) {

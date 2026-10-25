@@ -276,7 +276,13 @@ final class GHCA_Audit_PDF_Jobs {
 			return;
 		}
 
-		foreach ( self::list_entries( $temp_base ) as $name ) {
+		$temp_entries = self::list_entries( $temp_base );
+		$packet_entries = self::list_entries( $packets_base );
+		if ( null === $temp_entries || null === $packet_entries ) {
+			self::log_failure( 'scandir_failed', 'storage_base' );
+		}
+
+		foreach ( (array) $temp_entries as $name ) {
 			$dir = $temp_base . '/' . $name;
 			if ( ! self::is_valid_job_id( $name ) || is_link( $dir ) || ! is_dir( $dir ) ) {
 				continue;
@@ -298,7 +304,7 @@ final class GHCA_Audit_PDF_Jobs {
 			self::release_lock( $lock );
 		}
 
-		foreach ( self::list_entries( $packets_base ) as $name ) {
+		foreach ( (array) $packet_entries as $name ) {
 			$file = $packets_base . '/' . $name;
 			if ( is_link( $file ) || ! is_file( $file ) ) {
 				continue;
@@ -318,7 +324,9 @@ final class GHCA_Audit_PDF_Jobs {
 				if ( false === $mtime || ! self::is_expired( $mtime, $now ) ) {
 					continue;
 				}
-				$handle = @fopen( $file, 'c+b' );
+				$handle = self::quietly( static function () use ( $file ) {
+					return fopen( $file, 'c+b' );
+				} );
 				if ( false === $handle ) {
 					self::log_failure( 'lock_open_failed', $job_id );
 					continue;
@@ -477,11 +485,37 @@ final class GHCA_Audit_PDF_Jobs {
 		}
 	}
 
-	/** @return array<int,string> Entry names excluding . and .. (hidden files included). */
-	private static function list_entries( string $dir ): array {
-		$entries = is_dir( $dir ) ? scandir( $dir ) : false;
-		if ( false === $entries ) {
+	/**
+	 * Runs one filesystem call with its expected E_WARNING contained, so PHP never prints or
+	 * logs a message that embeds a private-storage path. Callers must check the return value
+	 * and report failure through log_failure(), which carries only a code and a short hash.
+	 * Other error levels still reach the normal handler; the previous handler is restored.
+	 *
+	 * @return mixed
+	 */
+	private static function quietly( callable $operation ) {
+		set_error_handler(
+			static function ( int $errno ): bool {
+				return E_WARNING === $errno;
+			}
+		);
+		try {
+			return $operation();
+		} finally {
+			restore_error_handler();
+		}
+	}
+
+	/** @return array<int,string>|null Entry names excluding . and .. (hidden files included); null if unreadable. */
+	private static function list_entries( string $dir ): ?array {
+		if ( ! is_dir( $dir ) ) {
 			return array();
+		}
+		$entries = self::quietly( static function () use ( $dir ) {
+			return scandir( $dir );
+		} );
+		if ( ! is_array( $entries ) ) {
+			return null;
 		}
 		return array_values( array_diff( $entries, array( '.', '..' ) ) );
 	}
@@ -489,7 +523,9 @@ final class GHCA_Audit_PDF_Jobs {
 	/** @return int|false */
 	private static function mtime( string $path, string $job_id ) {
 		clearstatcache( true, $path );
-		$mtime = filemtime( $path );
+		$mtime = self::quietly( static function () use ( $path ) {
+			return filemtime( $path );
+		} );
 		if ( false === $mtime ) {
 			self::log_failure( 'mtime_unreadable', $job_id );
 		}
@@ -501,7 +537,18 @@ final class GHCA_Audit_PDF_Jobs {
 		if ( self::forced_failure( 'unlink' ) ) {
 			return false;
 		}
-		return unlink( $path );
+		return true === self::quietly( static function () use ( $path ) {
+			return unlink( $path );
+		} );
+	}
+
+	private static function remove_dir( string $path ): bool {
+		if ( self::forced_failure( 'rmdir' ) ) {
+			return false;
+		}
+		return true === self::quietly( static function () use ( $path ) {
+			return rmdir( $path );
+		} );
 	}
 
 	/** Test seam: lets tests simulate an unremovable path without needing OS permissions. */
@@ -550,19 +597,20 @@ final class GHCA_Audit_PDF_Jobs {
 	private static function remove_tree( string $path ): bool {
 		if ( is_link( $path ) ) {
 			// Remove the link itself; a directory symlink on Windows needs rmdir.
-			return self::remove_file( $path ) || ( is_dir( $path ) && ! self::forced_failure( 'rmdir' ) && rmdir( $path ) );
+			return self::remove_file( $path ) || ( is_dir( $path ) && self::remove_dir( $path ) );
 		}
 		if ( ! is_dir( $path ) ) {
 			return self::remove_file( $path );
 		}
-		$ok = true;
-		foreach ( self::list_entries( $path ) as $name ) {
-			$ok = self::remove_tree( $path . '/' . $name ) && $ok;
-		}
-		if ( ! $ok || self::forced_failure( 'rmdir' ) ) {
+		$entries = self::list_entries( $path );
+		if ( null === $entries ) {
 			return false;
 		}
-		return rmdir( $path );
+		$ok = true;
+		foreach ( $entries as $name ) {
+			$ok = self::remove_tree( $path . '/' . $name ) && $ok;
+		}
+		return $ok && self::remove_dir( $path );
 	}
 
 	/** Internal log line: error code and a short job-id hash only; never paths or user data. */
