@@ -3,6 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/class-csv-writer.php';
+
 final class GHCA_Audit_Export {
 	public static function init(): void {
 		add_action( 'admin_post_ghca_acd_audit_export_csv', array( __CLASS__, 'handle_export' ) );
@@ -70,13 +72,6 @@ final class GHCA_Audit_Export {
 		exit;
 	}
 
-	private static function csv_safe( $value ): string {
-		$value = (string) $value;
-		if ( $value !== '' && in_array( $value[0], array( '=', '+', '-', '@', "\t", "\r" ), true ) ) {
-			$value = "'" . $value; // leading apostrophe = Excel treats as text
-		}
-		return $value;
-	}
 
 	private static function generate_annual_csv( $out, array $employees, array $mappings ): void {
 		$headers = array(
@@ -97,7 +92,7 @@ final class GHCA_Audit_Export {
 				'Total training hours',
 				'Evidence issues'
 		);
-		fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $headers ) );
+		GHCA_ACD_CSV::write_row( $out, $headers );
 
 		foreach ( $employees as $employee ) {
 			$data = GHCA_Audit_Calculator::calculate_employee_audit_data( $employee, 'annual', $mappings );
@@ -122,7 +117,7 @@ final class GHCA_Audit_Export {
 				$data['total_hrs'],
 				implode( ' | ', $data['evidence_issues'] ?? array() )
 			);
-			fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $row ) );
+			GHCA_ACD_CSV::write_row( $out, $row );
 		}
 	}
 
@@ -143,7 +138,7 @@ final class GHCA_Audit_Export {
 				'Orientation completed within 30 days of hire?',
 				'Evidence issues'
 		);
-		fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $headers ) );
+		GHCA_ACD_CSV::write_row( $out, $headers );
 
 		foreach ( $employees as $employee ) {
 			$data = GHCA_Audit_Calculator::calculate_employee_audit_data( $employee, 'orientation', $mappings );
@@ -166,7 +161,7 @@ final class GHCA_Audit_Export {
 				$data['completed_within_30'],
 				implode( ' | ', $data['evidence_issues'] ?? array() )
 			);
-			fputcsv( $out, array_map( array( __CLASS__, 'csv_safe' ), $row ) );
+			GHCA_ACD_CSV::write_row( $out, $row );
 		}
 	}
 
