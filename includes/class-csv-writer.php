@@ -13,10 +13,13 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 final class GHCA_ACD_CSV {
 
-	/** Prefix a leading formula character so spreadsheets treat the cell as text. */
+	/**
+	 * Prefix a leading formula character so spreadsheets treat the cell as text.
+	 * Only the first character decides: line breaks inside a value are left alone.
+	 */
 	public static function neutralize( $value ): string {
 		$value = (string) $value;
-		if ( '' !== $value && in_array( $value[0], array( '=', '+', '-', '@', "\t", "\r" ), true ) ) {
+		if ( '' !== $value && in_array( $value[0], array( '=', '+', '-', '@', "\t", "\r", "\n" ), true ) ) {
 			$value = "'" . $value;
 		}
 		return $value;

@@ -7,45 +7,12 @@ require_once __DIR__ . '/../includes/class-csv-writer.php';
 $csv_fails = 0;
 function csv_check( bool $ok, string $label ): void { global $csv_fails; echo ( $ok ? 'PASS' : 'FAIL' ) . ": $label\n"; $ok || $csv_fails++; }
 
-/** Strict RFC 4180 reader: a closing quote must be followed by a comma, a line end or EOF. @return array<int,array<int,string>>|null null when malformed */
-function rfc4180_parse( string $data ): ?array {
-	$rows = array(); $row = array(); $field = ''; $quoted = false; $just_closed = false; $at_field_start = true;
-	$n = strlen( $data );
-	for ( $i = 0; $i < $n; $i++ ) {
-		$c = $data[ $i ];
-		if ( $quoted ) {
-			if ( '"' === $c ) {
-				if ( $i + 1 < $n && '"' === $data[ $i + 1 ] ) { $field .= '"'; $i++; } else { $quoted = false; $just_closed = true; }
-			} else { $field .= $c; }
-			continue;
-		}
-		if ( $just_closed && ',' !== $c && "\n" !== $c && "\r" !== $c ) { return null; }
-		if ( '"' === $c ) {
-			if ( ! $at_field_start ) { return null; }
-			$quoted = true; $at_field_start = false; continue;
-		}
-		if ( ',' === $c ) { $row[] = $field; $field = ''; $just_closed = false; $at_field_start = true; continue; }
-		if ( "\n" === $c || "\r" === $c ) {
-			if ( "\r" === $c && $i + 1 < $n && "\n" === $data[ $i + 1 ] ) { $i++; }
-			$row[] = $field; $rows[] = $row; $row = array(); $field = ''; $just_closed = false; $at_field_start = true; continue;
-		}
-		$field .= $c; $at_field_start = false;
-	}
-	if ( $quoted ) { return null; }
-	if ( '' !== $field || $row || ! $at_field_start ) { $row[] = $field; $rows[] = $row; }
-	return $rows;
-}
-function write_csv( array $rows ): string {
-	$h = fopen( 'php://memory', 'w+' );
-	foreach ( $rows as $r ) { GHCA_ACD_CSV::write_row( $h, $r ); }
-	rewind( $h ); $out = stream_get_contents( $h ); fclose( $h );
-	return $out;
-}
+require __DIR__ . '/csv-strict-parser.php';
 
-$prefixes = array( '=', '+', '-', '@', "\t", "\r" );
+$prefixes = array( '=', '+', '-', '@', "\t", "\r", "\n" );
 $tricky = array(
 	'Doe\\"', '\\"', '"\\"', '\\\\', '\\', '"', '""', 'a,b', "line1\nline2", "line1\r\nline2", "cr\rcr", 'plain',
-	'\\",=1+1', '",=1+1', '=\\"x', '=1+1', '+SUM(A1)', '-2+3', '@cmd', "\t=1", "\r=1", "=\"x\",\"y\"", "=a\nb", ',=1+1', '\\",@x,"', 'ünï=cödé', '',
+	'\\",=1+1', '",=1+1', "\n=1+1", "\n", "\nplain", "\r\n=1+1", "a\r\nb", "a\nb\n", '=\\"x', '=1+1', '+SUM(A1)', '-2+3', '@cmd', "\t=1", "\r=1", "=\"x\",\"y\"", "=a\nb", ',=1+1', '\\",@x,"', 'ünï=cödé', '',
 );
 foreach ( $prefixes as $p ) { $tricky[] = $p . 'x'; $tricky[] = $p . '\\",' . $p; }
 
@@ -62,7 +29,7 @@ foreach ( $rows as $r => $row ) {
 	foreach ( $row as $c => $orig ) {
 		$expected = '' !== $orig && in_array( $orig[0], $prefixes, true ) ? "'" . $orig : $orig;
 		if ( $got[ $c ] !== $expected ) { $ok_fields = false; }
-		if ( '' !== $got[ $c ] && in_array( $got[ $c ][0], array( '=', '+', '-', '@', "\t", "\r" ), true ) ) { $ok_neutral = false; }
+		if ( '' !== $got[ $c ] && in_array( $got[ $c ][0], $prefixes, true ) ) { $ok_neutral = false; }
 	}
 }
 csv_check( $ok_count, 'field count is preserved for every row (backslash, quote, comma, newline, CR, tab, formula inputs)' );
@@ -71,6 +38,14 @@ csv_check( $ok_neutral, 'no parsed field starts with a formula character' );
 // Neutralisation applies to each original field, not to the row.
 $p = rfc4180_parse( write_csv( array( array( 'safe', '=1+1', "x\n=1+1", '\\",=1+1' ) ) ) );
 csv_check( array( 'safe', "'=1+1", "x\n=1+1", '\\",=1+1' ) === $p[0], 'formula text is neutralised per field; embedded (non-leading) formula text is untouched' );
+// Leading line feed (CodeRabbit finding on PR #9): neutralised like the other formula prefixes; line breaks elsewhere are untouched.
+$lf = rfc4180_parse( write_csv( array( array( "\n=1+1", "\nplain", "\r\n=1+1", "line1\nline2", "a\r\nb", "x\n=1+1", "=1+1" ) ) ) );
+csv_check( array( array( "'\n=1+1", "'\nplain", "'\r\n=1+1", "line1\nline2", "a\r\nb", "x\n=1+1", "'=1+1" ) ) === $lf, 'leading LF/CRLF fields are neutralised; embedded line breaks (LF, CRLF) keep their exact value; exact field count and values after strict parsing' );
+csv_check( "'\n=1+1" === GHCA_ACD_CSV::neutralize( "\n=1+1" ) && "line1\nline2" === GHCA_ACD_CSV::neutralize( "line1\nline2" ) && "a\r\nb" === GHCA_ACD_CSV::neutralize( "a\r\nb" ) && '' === GHCA_ACD_CSV::neutralize( '' ), 'neutralize(): leading LF prefixed, embedded breaks and empty string untouched' );
+foreach ( array( '=', '+', '-', '@', "\t", "\r" ) as $existing ) {
+	csv_check( "'" . $existing . 'x' === GHCA_ACD_CSV::neutralize( $existing . 'x' ), 'existing prefix still neutralised: ' . json_encode( $existing ) );
+}
+
 // Regression for the reported bypass: with the default escape this row mis-parses.
 $h = fopen( 'php://memory', 'w+' ); fputcsv( $h, array( 'Doe\\"', ',=1+1', 'tail' ) ); rewind( $h ); $legacy = rfc4180_parse( stream_get_contents( $h ) );
 csv_check( null === $legacy || array( 'Doe\\"', ',=1+1', 'tail' ) !== $legacy[0], 'control: PHP default-escape fputcsv does corrupt this row (the bug being fixed)' );
@@ -81,16 +56,17 @@ csv_check( array( array( 'Doe\\"', ",=1+1", 'tail' ) ) === array_map( static fun
 global $fixture, $mappings;
 reset_fixture();
 $mappings = array( 900001 => array( 'odp_category' => 'person_centered', 'credit_hours' => 1, 'is_orientation' => 1 ) );
-$employees = array( array( 'user_id' => 900001, 'name' => '=Doe\\",@x Last\\",+1"' ) );
+$employees = array( array( 'user_id' => 900001, 'name' => '=Doe\\",@x Last\\",+1"' ), array( 'user_id' => 900001, 'name' => "\n=Lf Last\nName" ) );
 foreach ( array( 'annual', 'orientation' ) as $tracker ) {
 	$h = fopen( 'php://memory', 'w+' );
 	$m = new ReflectionMethod( 'GHCA_Audit_Export', 'generate_' . $tracker . '_csv' ); if ( PHP_VERSION_ID < 80100 ) { $m->setAccessible( true ); }
 	$m->invoke( null, $h, $employees, $mappings );
 	rewind( $h ); $data = stream_get_contents( $h ); fclose( $h );
 	$rows = rfc4180_parse( $data );
-	csv_check( null !== $rows && 2 === count( $rows ) && count( $rows[0] ) === count( $rows[1] ), "$tracker audit export: strict parse succeeds and the data row has as many fields as the header" );
+	csv_check( null !== $rows && 3 === count( $rows ) && count( $rows[0] ) === count( $rows[1] ) && count( $rows[0] ) === count( $rows[2] ), "$tracker audit export: strict parse succeeds and every data row has as many fields as the header" );
 	csv_check( "'=Doe\\\",@x" === $rows[1][1] && "Last\\\",+1\"" === $rows[1][0], "$tracker audit export: hostile name stays in its own fields" );
 	csv_check( "'=Doe\\\",@x" === $rows[1][1], "$tracker audit export: formula-leading first name is neutralised" );
+	csv_check( "'\n=Lf" === $rows[2][1] && "Last\nName" === $rows[2][0], "$tracker audit export: a first name starting with a line feed is neutralised and an embedded line break in the last name keeps its value" );
 }
 
 // No export may call fputcsv directly (the default escape would come back).
