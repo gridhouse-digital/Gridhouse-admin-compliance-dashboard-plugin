@@ -1,4 +1,4 @@
-# Beta 14 — drawer confirmations and profile save order
+# 1.7.3-rc.1 (functionally identical to beta 14) — drawer confirmations and profile save order
 
 Run `php tests/test-agency-drawer.php` (345 cumulative synthetic checks), `php tests/test-course-incomplete.php`, `php tests/test-annual-cycle-settings.php`, `php tests/test-agency-profile.php`, `php tests/test-settings-console.php` and both console JavaScript tests. PHP syntax checks cover all 160 PHP files. Actual PHP-rendered forms and dashboard/agency JavaScript passed an intercepted-AJAX browser regression at 1440×1000 and 390×844: independent save/reload, withdrawal status, reporting-date switching, advanced review save, visible error/recovery, no script errors or mobile overflow. This is not an installed WordPress or live-role verification.
 
