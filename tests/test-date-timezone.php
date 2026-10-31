@@ -11,6 +11,12 @@ function orientation_for( $raw, string $hire = '2025-10-17' ): array {
 	$fixture['meta']['ghca_acd_verified_employment']['date'] = $hire;
 	$fixture['completed'][900001] = true;
 	$fixture['meta']['course_completed_900001'] = $raw;
+	// The other four required areas are complete early so the case under test decides the date.
+	foreach ( array( 900011 => 'abuse_prevention', 900012 => 'individual_rights', 900013 => 'reporting_incidents', 900014 => 'job_related' ) as $id => $area ) {
+		$mappings[ $id ] = array( 'odp_category' => $area, 'credit_hours' => 1, 'is_orientation' => 1 );
+		$fixture['completed'][ $id ] = true;
+		$fixture['meta'][ 'course_completed_' . $id ] = '2025-10-18';
+	}
 	return calculate( 'orientation' );
 }
 
@@ -52,6 +58,9 @@ function external_orientation( string $date ): array {
 	$mappings = array();
 	$fixture['meta']['ghca_acd_verified_employment']['date'] = '2025-10-17';
 	$fixture['external'] = array( array( 'revision_id' => 900030, 'training_id' => 900031, 'snapshot_digest' => 'synthetic', 'manifest' => array(), 'snapshot' => array( 'completion_date' => $date, 'category' => 'person_centered', 'credit_hours' => 2, 'title' => 'Synthetic external', 'applies_to_orientation' => true ) ) );
+	foreach ( array( 'abuse_prevention', 'individual_rights', 'reporting_incidents', 'job_related' ) as $i => $area ) {
+		$fixture['external'][] = array( 'revision_id' => 900040 + $i, 'training_id' => 900050 + $i, 'snapshot_digest' => 'synthetic', 'manifest' => array(), 'snapshot' => array( 'completion_date' => '2025-10-18', 'category' => $area, 'credit_hours' => 1, 'title' => 'Synthetic ' . $area, 'applies_to_orientation' => true ) );
+	}
 	return calculate( 'orientation' );
 }
 foreach ( array( 'America/Toronto', 'Pacific/Auckland' ) as $zone ) {
@@ -60,7 +69,7 @@ foreach ( array( 'America/Toronto', 'Pacific/Auckland' ) as $zone ) {
 	$d31 = external_orientation( '2025-11-17' );
 	check( '11/16/2025' === $d30['completion_date'] && 'Yes' === $d30['completed_within_30'], $zone . ': external orientation certificate on day 30 keeps its date and is Yes' );
 	check( '11/17/2025' === $d31['completion_date'] && 'No' === $d31['completed_within_30'], $zone . ': external orientation certificate on day 31 is No' );
-	check( '11/16/2025' === wp_date( 'm/d/Y', $d30['raw_completed_courses'][0]['date'] ), $zone . ': certificate row displays the entered calendar date' );
+	check( '11/16/2025' === wp_date( 'm/d/Y', array_values( array_filter( $d30['raw_completed_courses'], static fn( $c ) => 'external:900030' === $c['course_key'] ) )[0]['date'] ), $zone . ': certificate row displays the entered calendar date' );
 }
 
 // Annual window boundaries, evaluated in the site zone.

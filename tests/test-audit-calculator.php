@@ -129,6 +129,7 @@ $GLOBALS['audit_test_users'][292] = (object) array(
 );
 $GLOBALS['audit_test_enrolled'][292] = array( 2180 );
 $GLOBALS['audit_test_completed'][292][2180] = audit_ts( '2026-06-18 12:00:00', $timezone );
+foreach ( array( 301, 302, 303, 304 ) as $audit_area_course ) { $GLOBALS['audit_test_completed'][292][ $audit_area_course ] = audit_ts( '2026-06-10 12:00:00', $timezone ); }
 $GLOBALS['wp_roles'] = (object) array(
 	'roles' => array( 'subscriber' => array( 'name' => 'Employee' ) ),
 );
@@ -138,6 +139,10 @@ $orientation_audit = GHCA_Audit_Calculator::calculate_employee_audit_data(
 	array(
 		135  => array( 'odp_category' => 'person_centered', 'credit_hours' => 1, 'is_orientation' => 1 ),
 		2180 => array( 'odp_category' => 'person_centered', 'credit_hours' => 1, 'is_orientation' => 1 ),
+		301  => array( 'odp_category' => 'abuse_prevention', 'credit_hours' => 1, 'is_orientation' => 1 ),
+		302  => array( 'odp_category' => 'individual_rights', 'credit_hours' => 1, 'is_orientation' => 1 ),
+		303  => array( 'odp_category' => 'reporting_incidents', 'credit_hours' => 1, 'is_orientation' => 1 ),
+		304  => array( 'odp_category' => 'job_related', 'credit_hours' => 1, 'is_orientation' => 1 ),
 	)
 );
 audit_check( $orientation_audit['completion_date'] === '06/18/2026', 'orientation completion date uses the employee completed course' );
@@ -149,6 +154,10 @@ $incomplete_orientation_audit = GHCA_Audit_Calculator::calculate_employee_audit_
 	array(
 		135  => array( 'odp_category' => 'person_centered', 'credit_hours' => 1, 'is_orientation' => 1 ),
 		2180 => array( 'odp_category' => 'person_centered', 'credit_hours' => 1, 'is_orientation' => 1 ),
+		301  => array( 'odp_category' => 'abuse_prevention', 'credit_hours' => 1, 'is_orientation' => 1 ),
+		302  => array( 'odp_category' => 'individual_rights', 'credit_hours' => 1, 'is_orientation' => 1 ),
+		303  => array( 'odp_category' => 'reporting_incidents', 'credit_hours' => 1, 'is_orientation' => 1 ),
+		304  => array( 'odp_category' => 'job_related', 'credit_hours' => 1, 'is_orientation' => 1 ),
 	)
 );
 audit_check( $incomplete_orientation_audit['completed_within_30'] === 'No', 'incomplete assigned orientation courses still fail the 30-day check' );
