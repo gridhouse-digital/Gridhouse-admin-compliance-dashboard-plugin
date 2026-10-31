@@ -177,7 +177,7 @@ final class GHCA_ACD_Table_UI {
     return (string) ob_get_clean();
   }
 
-  public static function render_sortable_header( string $column_key, string $label, string $current_orderby, string $current_order ): string {
+  public static function render_sortable_header( string $column_key, string $label, string $current_orderby, string $current_order, string $help = '' ): string {
     $is_active  = $current_orderby === $column_key;
     $next_order = $is_active && $current_order === 'asc' ? 'desc' : 'asc';
     
@@ -198,8 +198,8 @@ final class GHCA_ACD_Table_UI {
      */
     $aria_sort = $is_active ? ( 'asc' === $current_order ? 'ascending' : 'descending' ) : 'none';
     ?>
-    <th class="<?php echo esc_attr( $class ); ?>" data-ghca-sort="<?php echo esc_attr( $column_key ); ?>" data-ghca-sort-order="<?php echo esc_attr( $next_order ); ?>" scope="col" aria-sort="<?php echo esc_attr( $aria_sort ); ?>">
-      <button type="button" class="ghca-acd__sort-inner">
+    <th class="<?php echo esc_attr( $class ); ?>" data-ghca-sort="<?php echo esc_attr( $column_key ); ?>" data-ghca-sort-order="<?php echo esc_attr( $next_order ); ?>" scope="col" aria-sort="<?php echo esc_attr( $aria_sort ); ?>"<?php echo '' !== $help ? ' title="' . esc_attr( $help ) . '"' : ''; ?>>
+      <button type="button" class="ghca-acd__sort-inner"<?php echo '' !== $help ? ' title="' . esc_attr( $help ) . '"' : ''; ?>>
         <span><?php echo esc_html( $label ); ?></span>
         <span class="ghca-acd__sort-icon" aria-hidden="true">
           <?php if ( $is_active && $current_order === 'asc' ) : ?>
