@@ -169,6 +169,32 @@ final class GHCA_Audit_Calculator {
 		return 'Missing training';
 	}
 
+	/**
+	 * Orientation is complete only when every applicable required area (and every
+	 * agency-selected orientation row) has included evidence. The completion date is
+	 * the latest date among those required items, never an unrelated course.
+	 *
+	 * @param array<string,string> $statuses Area => category_status() result.
+	 * @param array<string,int>    $dates    Area => latest completion timestamp.
+	 * @param array<int,array>     $selected Agency-selected rows (title, included, date).
+	 * @return array{met:bool,last_ts:int}
+	 */
+	public static function orientation_gate( array $statuses, array $dates, array $selected = array() ): array {
+		$last_ts = 0;
+		foreach ( $statuses as $area => $status ) {
+			if ( 'Not applicable' === $status ) { continue; }
+			if ( ! in_array( $status, array( 'Completed', 'Completed — manually verified' ), true ) ) {
+				return array( 'met' => false, 'last_ts' => 0 );
+			}
+			$last_ts = max( $last_ts, (int) ( $dates[ $area ] ?? 0 ) );
+		}
+		foreach ( $selected as $row ) {
+			if ( empty( $row['included'] ) ) { return array( 'met' => false, 'last_ts' => 0 ); }
+			$last_ts = max( $last_ts, (int) ( $row['date'] ?? 0 ) );
+		}
+		return array( 'met' => true, 'last_ts' => $last_ts );
+	}
+
 	public static function category_display( array $data, string $category ): string {
 		if ( 'individual_plan' === $category && ! empty( $data['agency_training']['isp'] ) && ( $data['category_statuses']['individual_plan'] ?? '' ) === 'Completed — manually verified' ) {
 			return 'Completed in person — agency confirmed';
@@ -552,6 +578,25 @@ final class GHCA_Audit_Calculator {
 			}
 		}
 
+		// Every applicable required orientation area must be Completed before any date or "Yes".
+		$agency_selected_courses = GHCA_Packet_Course_Selection::rows( $raw_completed_courses, $tracker_type );
+		if ( 'orientation' === $tracker_type && ! $audit_period ) {
+			$gate_statuses = array();
+			$gate_dates    = array();
+			foreach ( array( 'person_centered', 'abuse_prevention', 'individual_rights', 'reporting_incidents', 'job_related' ) as $area ) {
+				// Lack of a mapping is not an applicability decision: an unmapped area stays "Needs review" and blocks.
+				$gate_statuses[ $area ] = self::category_status( $metrics[ $area ]['completed'], isset( $mapped_categories[ $area ] ), isset( $invalid_categories[ $area ] ), false );
+				$gate_dates[ $area ]    = (int) $metrics[ $area ]['date'];
+			}
+			$gate = self::orientation_gate( $gate_statuses, $gate_dates, $agency_selected_courses );
+			if ( ! $gate['met'] ) {
+				$all_orientation_met        = false;
+				$orientation_completed_date = 0;
+			} elseif ( ! $program_incomplete ) {
+				$orientation_completed_date = max( $gate['last_ts'], (int) ( $new_hire_program['last_completion_ts'] ?? 0 ) );
+			}
+		}
+
 		// Orientation within 30 days?
 		$completed_within_30 = 'No';
 		if ( $all_orientation_met && $orientation_completed_date > 0 && $doh_ts > 0 ) {
@@ -564,7 +609,7 @@ final class GHCA_Audit_Calculator {
 		// Worked Alone Verification
 		$worked_alone_date_raw = get_user_meta( $user_id, 'ghca_worked_alone_date', true );
 		$worked_alone_compliant = 'N/A';
-		if ( $program_incomplete ) {
+		if ( $program_incomplete || ( 'orientation' === $tracker_type && ! $audit_period && ! $all_orientation_met ) ) {
 			$worked_alone_compliant = 'Not complete';
 		} elseif ( ! empty( $worked_alone_date_raw ) && $orientation_completed_date > 0 ) {
 			// Compare local calendar dates: a date-only entry must not precede a same-day completion.
@@ -690,7 +735,7 @@ final class GHCA_Audit_Calculator {
 			
 			// Raw data for PDF
 			'raw_completed_courses' => $raw_completed_courses,
-			'agency_selected_courses' => GHCA_Packet_Course_Selection::rows( $raw_completed_courses, $tracker_type ),
+			'agency_selected_courses' => $agency_selected_courses,
 			'evidence_issues' => $evidence_issues,
 		);
 	}
