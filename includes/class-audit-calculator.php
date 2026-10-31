@@ -584,10 +584,8 @@ final class GHCA_Audit_Calculator {
 			$gate_statuses = array();
 			$gate_dates    = array();
 			foreach ( array( 'person_centered', 'abuse_prevention', 'individual_rights', 'reporting_incidents', 'job_related' ) as $area ) {
-				// An area with no orientation course mapped is outside this agency's program; mapped-but-missing or invalid evidence still blocks.
-				$gate_statuses[ $area ] = ! isset( $mapped_categories[ $area ] ) && ! isset( $invalid_categories[ $area ] ) && ! $metrics[ $area ]['completed']
-					? 'Not applicable'
-					: self::category_status( $metrics[ $area ]['completed'], isset( $mapped_categories[ $area ] ), isset( $invalid_categories[ $area ] ), false );
+				// Lack of a mapping is not an applicability decision: an unmapped area stays "Needs review" and blocks.
+				$gate_statuses[ $area ] = self::category_status( $metrics[ $area ]['completed'], isset( $mapped_categories[ $area ] ), isset( $invalid_categories[ $area ] ), false );
 				$gate_dates[ $area ]    = (int) $metrics[ $area ]['date'];
 			}
 			$gate = self::orientation_gate( $gate_statuses, $gate_dates, $agency_selected_courses );

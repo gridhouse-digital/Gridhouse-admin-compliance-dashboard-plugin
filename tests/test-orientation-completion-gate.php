@@ -78,6 +78,12 @@ $GLOBALS['audit_test_completed'][101][204] = gate_ts( '2026-11-02 12:00:00' );
 $data = gate_run( $mappings );
 gate_check( '11/02/2026' === $data['completion_date'] && 'Yes' !== $data['completed_within_30'], 'c: last required item after day 30 is not "Yes"' );
 
+// (e) four areas complete, the fifth has no mapped course: unmapped is Needs review and blocks.
+$four = $mappings; unset( $four[205] );
+$GLOBALS['audit_test_completed'][101] = array( 201 => gate_ts( '2026-10-05 12:00:00' ), 202 => gate_ts( '2026-10-12 12:00:00' ), 203 => gate_ts( '2026-10-08 12:00:00' ), 204 => gate_ts( '2026-10-20 12:00:00' ) );
+$data = gate_run( $four );
+gate_check( 'Needs review' === $data['category_statuses']['job_related'] && '' === $data['completion_date'] && 'Yes' !== $data['completed_within_30'], 'e: unmapped area stays Needs review and blocks date and "Yes"' );
+
 // (d) a not-applicable area does not block completion; an unapplied or missing one does.
 $statuses = array( 'person_centered' => 'Completed', 'abuse_prevention' => 'Completed', 'individual_rights' => 'Not applicable', 'reporting_incidents' => 'Completed', 'job_related' => 'Completed — manually verified' );
 $dates = array( 'person_centered' => 100, 'abuse_prevention' => 300, 'individual_rights' => 900, 'reporting_incidents' => 200, 'job_related' => 250 );

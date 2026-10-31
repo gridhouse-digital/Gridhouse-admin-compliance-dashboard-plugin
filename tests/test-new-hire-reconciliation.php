@@ -23,7 +23,9 @@ function apply_filters( $hook, $v ) {
 }
 function learndash_is_user_in_group( $u, $g ) { return in_array( $g, $GLOBALS['T']['members'][ $u ] ?? array(), true ); }
 function learndash_group_enrolled_courses( $g ) { return $GLOBALS['T']['group_courses'][ $g ] ?? array(); }
-function learndash_course_completed( $u, $c ) { return ! empty( $GLOBALS['T']['flags'][ $u ][ $c ] ); }
+// Courses 3101-3103 cover the other required orientation areas; they are not in the new-hire group and are always done the day after hire.
+function extra_area_course( $c ): bool { return in_array( (int) $c, array( 3101, 3102, 3103 ), true ); }
+function learndash_course_completed( $u, $c ) { return extra_area_course( $c ) || ! empty( $GLOBALS['T']['flags'][ $u ][ $c ] ); }
 function learndash_course_status( $c, $u, $x ) { return empty( $GLOBALS['T']['flags'][ $u ][ $c ] ) ? 'not_started' : 'completed'; }
 function learndash_course_progress( $a ) { return array( 'percentage' => 0 ); }
 function learndash_user_get_enrolled_courses( $u ) { return array( 135, 2180, 2905 ); }
@@ -38,6 +40,7 @@ function get_user_meta( $u, $k, $s ) {
 		return array( 'date' => $GLOBALS['T']['hire'][ $u ] ?? '2026-06-02', 'source' => 'Synthetic HR record', 'verified_by' => 90, 'verified_at' => time() );
 	}
 	if ( 'ghca_worked_alone_date' === $k ) { return $GLOBALS['T']['worked_alone'][ $u ] ?? ''; }
+	if ( 0 === strpos( $k, 'course_completed_' ) && extra_area_course( substr( $k, 17 ) ) ) { return ( new DateTimeImmutable( ( $GLOBALS['T']['hire'][ $u ] ?? '2026-06-02' ) . ' 12:00:00 +1 day', wp_timezone() ) )->format( 'Y-m-d H:i:s' ); }
 	if ( 0 === strpos( $k, 'course_completed_' ) ) { return $GLOBALS['T']['done'][ $u ][ (int) substr( $k, 17 ) ] ?? ''; }
 	return '';
 }
@@ -52,6 +55,9 @@ function check( bool $ok, string $m ): void { global $fails; echo ( $ok ? 'PASS'
 $mappings = array(
 	135  => array( 'odp_category' => 'person_centered', 'credit_hours' => 1, 'is_orientation' => 1 ),
 	2180 => array( 'odp_category' => 'abuse_prevention', 'credit_hours' => 1, 'is_orientation' => 1 ),
+	3101 => array( 'odp_category' => 'individual_rights', 'credit_hours' => 1, 'is_orientation' => 1 ),
+	3102 => array( 'odp_category' => 'reporting_incidents', 'credit_hours' => 1, 'is_orientation' => 1 ),
+	3103 => array( 'odp_category' => 'job_related', 'credit_hours' => 1, 'is_orientation' => 1 ),
 );
 function packet( int $u = 73 ): array {
 	global $mappings;
