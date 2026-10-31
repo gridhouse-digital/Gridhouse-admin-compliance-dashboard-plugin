@@ -469,7 +469,8 @@ final class GHCA_ACD_Data_Provider {
         $status_label = __( 'Expiring Soon', 'ghca-acd' );
       } else {
         $status_slug  = 'completed';
-        $status_label = __( 'Completed', 'ghca-acd' );
+        // LearnDash enrolled courses only; this is not orientation completion (see the audit packet).
+        $status_label = __( 'All assigned courses complete', 'ghca-acd' );
       }
     } elseif ( $is_overdue ) {
       $status_slug  = 'overdue';
@@ -1019,7 +1020,7 @@ final class GHCA_ACD_Data_Provider {
   /** @return array<string,string> */
   public static function get_status_options(): array {
     return array(
-      'completed'     => __( 'Completed', 'ghca-acd' ),
+      'completed'     => __( 'All assigned courses complete', 'ghca-acd' ),
       'expiring_soon' => __( 'Expiring Soon', 'ghca-acd' ),
       'in_progress'   => __( 'In Progress', 'ghca-acd' ),
       'not_started'   => __( 'Not Started', 'ghca-acd' ),

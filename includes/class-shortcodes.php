@@ -548,7 +548,7 @@ final class GHCA_ACD_Shortcodes {
             <th><?php esc_html_e( 'Certificate', 'ghca-acd' ); ?></th>
             <th><?php esc_html_e( 'Last Activity', 'ghca-acd' ); ?></th>
             <?php
-            echo GHCA_ACD_Table_UI::render_sortable_header( 'status_slug', __( 'Status', 'ghca-acd' ), $orderby, $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+            echo GHCA_ACD_Table_UI::render_sortable_header( 'status_slug', __( 'Status', 'ghca-acd' ), $orderby, $order, __( 'LearnDash enrolled courses only; orientation status is on the audit packet.', 'ghca-acd' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
             ?>
             <th><?php esc_html_e( 'Action', 'ghca-acd' ); ?></th>
           </tr>
@@ -635,7 +635,7 @@ final class GHCA_ACD_Shortcodes {
             <th><?php esc_html_e( 'Next Course', 'ghca-acd' ); ?></th>
             <?php
             echo GHCA_ACD_Table_UI::render_sortable_header( 'due_timestamp', __( 'Due Date', 'ghca-acd' ), $orderby, $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-            echo GHCA_ACD_Table_UI::render_sortable_header( 'status_slug', __( 'Status', 'ghca-acd' ), $orderby, $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+            echo GHCA_ACD_Table_UI::render_sortable_header( 'status_slug', __( 'Status', 'ghca-acd' ), $orderby, $order, __( 'LearnDash enrolled courses only; orientation status is on the audit packet.', 'ghca-acd' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
             ?>
             <th><?php esc_html_e( 'Last Activity', 'ghca-acd' ); ?></th>
             <th><?php esc_html_e( 'Action', 'ghca-acd' ); ?></th>
