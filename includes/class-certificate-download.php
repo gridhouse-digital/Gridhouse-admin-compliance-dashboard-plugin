@@ -5,9 +5,17 @@
  * The browser used to fetch the LearnDash certificate link itself and save
  * whatever came back as a .pdf. LearnDash can answer 200 text/html (an access
  * message, or a login page), which was then saved as a "PDF". This endpoint takes
- * only user_id + course_id (any quiz_id is rejected), derives the LearnDash link on the server,
- * fetches it with the viewer's own session, and streams the result only when it
- * really is a PDF. It never accepts a URL from the request.
+ * only user_id + course_id (any quiz_id is rejected) and never a URL.
+ *
+ * LearnDash alone decides who may view another user's certificate (administrators
+ * and group leaders). Dashboard roles such as Compliance Lead pass the plugin's own
+ * permission checks but not LearnDash's, so after the plugin has authorized the
+ * request it renders the PDF through a one-time internal broker, the same pattern
+ * the packet builder uses: a short-lived single-use token bound to the requester,
+ * employee, course and certificate; a separate internal request that carries no
+ * browser cookie; LearnDash renders as the employee. No role or capability is
+ * granted. LearnDash administrators and group leaders keep the direct fetch.
+ * Only a verified PDF is ever returned.
  *
  * @package GHCA_Admin_Compliance_Dashboard
  */
@@ -18,12 +26,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class GHCA_ACD_Certificate_Download {
 
-	const ACTION    = 'ghca_acd_certificate_download';
-	const NONCE     = 'ghca_acd_table';
-	const MAX_BYTES = 10485760;
+	const ACTION            = 'ghca_acd_certificate_download';
+	const BROKER_ACTION     = 'ghca_acd_certificate_download_broker';
+	const NONCE             = 'ghca_acd_table';
+	const MAX_BYTES         = 10485760;
+	const TOKEN_TTL         = 60;
+	const TOKEN_TRANSIENT   = 'ghca_acd_cert_dl_';
 
 	public static function init(): void {
 		add_action( 'wp_ajax_' . self::ACTION, array( __CLASS__, 'handle' ) );
+		// The internal request carries a token, not a browser session.
+		add_action( 'wp_ajax_' . self::BROKER_ACTION, array( __CLASS__, 'broker' ) );
+		add_action( 'wp_ajax_nopriv_' . self::BROKER_ACTION, array( __CLASS__, 'broker' ) );
 	}
 
 	/** Same-origin URL the drawer button points at. Carries ids only, never a certificate link. */
@@ -77,21 +91,28 @@ final class GHCA_ACD_Certificate_Download {
 			return self::error( 403 );
 		}
 
-		$link = self::course_link( $user_id, $course_id );
-		if ( '' === $link ) {
-			return self::error( 404 );
+		if ( self::should_use_broker() ) {
+			$certificate_id = self::certificate_id( $user_id, $course_id );
+			if ( $certificate_id <= 0 ) {
+				return self::error( 404 );
+			}
+			$response = self::request_via_broker( get_current_user_id(), $user_id, $course_id, $certificate_id );
+		} else {
+			$link = self::course_link( $user_id, $course_id );
+			if ( '' === $link ) {
+				return self::error( 404 );
+			}
+			$response = wp_safe_remote_get(
+				$link,
+				array(
+					'timeout'             => 25,
+					'sslverify'           => true,
+					'redirection'         => 0,
+					'limit_response_size' => self::MAX_BYTES + 1,
+					'cookies'             => self::session_cookies(),
+				)
+			);
 		}
-
-		$response = wp_safe_remote_get(
-			$link,
-			array(
-				'timeout'             => 25,
-				'sslverify'           => true,
-				'redirection'         => 0,
-				'limit_response_size' => self::MAX_BYTES + 1,
-				'cookies'             => self::session_cookies(),
-			)
-		);
 		if ( is_wp_error( $response ) ) {
 			return self::error( 502 );
 		}
@@ -138,6 +159,183 @@ final class GHCA_ACD_Certificate_Download {
 			return '';
 		}
 		return GHCA_ACD_Data_Provider::get_certificate_url( $user_id, $course_id );
+	}
+
+	/** LearnDash administrators and group leaders can already view the certificate with their own session. */
+	private static function should_use_broker(): bool {
+		if ( function_exists( 'learndash_is_admin_user' ) && learndash_is_admin_user() ) {
+			return false;
+		}
+		if ( function_exists( 'learndash_is_group_leader_user' ) && learndash_is_group_leader_user() ) {
+			return false;
+		}
+		return true;
+	}
+
+	/** The LearnDash certificate post for a completed course, or 0. */
+	private static function certificate_id( int $user_id, int $course_id ): int {
+		if (
+			! function_exists( 'learndash_course_completed' )
+			|| ! function_exists( 'learndash_get_setting' )
+			|| ! function_exists( 'learndash_get_post_type_slug' )
+			|| learndash_get_post_type_slug( 'course' ) !== get_post_type( $course_id )
+			|| ! learndash_course_completed( $user_id, $course_id )
+		) {
+			return 0;
+		}
+		$certificate_id = (int) learndash_get_setting( $course_id, 'certificate' );
+		if ( $certificate_id <= 0 || learndash_get_post_type_slug( 'certificate' ) !== get_post_type( $certificate_id ) ) {
+			return 0;
+		}
+		return $certificate_id;
+	}
+
+	/* ---------------------------------------------------------------------
+	 * One-time broker token
+	 * ------------------------------------------------------------------- */
+
+	/** Pure: is this stored record usable by exactly this token and these ids right now? */
+	public static function validate_token_record( $record, string $token, int $requester_id, int $user_id, int $course_id, int $now ): string {
+		if ( ! is_array( $record ) || ! preg_match( '/^[a-f0-9]{64}$/D', $token ) ) {
+			return 'not_found';
+		}
+		$created = (int) ( $record['created'] ?? 0 );
+		if ( $created <= 0 || $now < $created || ( $now - $created ) > self::TOKEN_TTL ) {
+			return 'expired';
+		}
+		if ( ! hash_equals( (string) ( $record['hash'] ?? '' ), hash( 'sha256', $token ) ) ) {
+			return 'token_mismatch';
+		}
+		if (
+			$requester_id <= 0 || $user_id <= 0 || $course_id <= 0
+			|| (int) ( $record['requester'] ?? 0 ) !== $requester_id
+			|| (int) ( $record['user_id'] ?? 0 ) !== $user_id
+			|| (int) ( $record['course_id'] ?? 0 ) !== $course_id
+			|| (int) ( $record['certificate_id'] ?? 0 ) <= 0
+		) {
+			return 'binding_mismatch';
+		}
+		if ( ! empty( $record['used'] ) ) {
+			return 'replayed';
+		}
+		return 'ok';
+	}
+
+	/**
+	 * Mint a 256-bit single-use token bound to requester, employee, course and
+	 * certificate. Only the SHA-256 of the token is stored (transient, 60 seconds).
+	 */
+	public static function issue_token( int $requester_id, int $user_id, int $course_id, int $certificate_id, int $now = 0 ): string {
+		$token = bin2hex( random_bytes( 32 ) );
+		set_transient(
+			self::TOKEN_TRANSIENT . substr( hash( 'sha256', $token ), 0, 40 ),
+			array(
+				'hash'           => hash( 'sha256', $token ),
+				'requester'      => $requester_id,
+				'user_id'        => $user_id,
+				'course_id'      => $course_id,
+				'certificate_id' => $certificate_id,
+				'created'        => $now > 0 ? $now : time(),
+				'used'           => false,
+			),
+			self::TOKEN_TTL
+		);
+		return $token;
+	}
+
+	/**
+	 * Claim a token exactly once under a lock. Returns the certificate id to render,
+	 * or 0 for any denial (expired, replayed, mismatched, unknown).
+	 */
+	public static function claim_token( string $token, int $requester_id, int $user_id, int $course_id, int $now = 0 ): int {
+		if ( ! preg_match( '/^[a-f0-9]{64}$/D', $token ) ) {
+			return 0;
+		}
+		$now  = $now > 0 ? $now : time();
+		$hash = hash( 'sha256', $token );
+		$key  = self::TOKEN_TRANSIENT . substr( $hash, 0, 40 );
+		$lock = GHCA_Audit_PDF_Jobs::acquire_certificate_token_lock( substr( $hash, 0, 32 ) );
+		if ( false === $lock ) {
+			return 0;
+		}
+		try {
+			$record  = get_transient( $key );
+			$verdict = self::validate_token_record( $record, $token, $requester_id, $user_id, $course_id, $now );
+			if ( 'ok' !== $verdict ) {
+				return 0;
+			}
+			$record['used'] = true;
+			$remaining      = max( 1, self::TOKEN_TTL - ( $now - (int) $record['created'] ) );
+			if ( ! set_transient( $key, $record, $remaining ) ) {
+				return 0;
+			}
+			return (int) $record['certificate_id'];
+		} finally {
+			GHCA_Audit_PDF_Jobs::release_lock( $lock );
+		}
+	}
+
+	/** Internal request: same-origin admin-ajax, no cookies, no redirects, capped size. */
+	private static function request_via_broker( int $requester_id, int $user_id, int $course_id, int $certificate_id ) {
+		$broker_url = GHCA_ACD_Data_Provider::sanitize_certificate_url( admin_url( 'admin-ajax.php' ) );
+		if ( '' === $broker_url ) {
+			return new WP_Error( 'ghca_cert_broker_url', 'unavailable' );
+		}
+		$token = self::issue_token( $requester_id, $user_id, $course_id, $certificate_id );
+		return wp_safe_remote_post(
+			$broker_url,
+			array(
+				'timeout'             => 25,
+				'sslverify'           => true,
+				'redirection'         => 0,
+				'limit_response_size' => self::MAX_BYTES + 1,
+				'body'                => array(
+					'action'       => self::BROKER_ACTION,
+					'token'        => $token,
+					'requester_id' => $requester_id,
+					'user_id'      => $user_id,
+					'course_id'    => $course_id,
+				),
+			)
+		);
+	}
+
+	/**
+	 * Pure-ish authorization for the internal request (testable): the token claim and
+	 * a re-check of the course and certificate. Returns the certificate id or 0.
+	 *
+	 * @param array<string,mixed> $post
+	 */
+	public static function authorize_broker( array $post, int $now = 0 ): int {
+		$token        = isset( $post['token'] ) ? sanitize_text_field( wp_unslash( (string) $post['token'] ) ) : '';
+		$requester_id = isset( $post['requester_id'] ) ? absint( $post['requester_id'] ) : 0;
+		$user_id      = isset( $post['user_id'] ) ? absint( $post['user_id'] ) : 0;
+		$course_id    = isset( $post['course_id'] ) ? absint( $post['course_id'] ) : 0;
+		if ( $user_id <= 0 || $course_id <= 0 || ! get_userdata( $user_id ) ) {
+			return 0;
+		}
+		$claimed = self::claim_token( $token, $requester_id, $user_id, $course_id, $now );
+		if ( $claimed <= 0 ) {
+			return 0;
+		}
+		// The token proves the plugin authorized this exact request; LearnDash state is rechecked anyway.
+		return self::certificate_id( $user_id, $course_id ) === $claimed ? $claimed : 0;
+	}
+
+	/** Internal broker endpoint: renders one employee's certificate through LearnDash. POST + token only. */
+	public static function broker(): void {
+		$certificate_id = 0;
+		if ( 'POST' === ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) {
+			$certificate_id = self::authorize_broker( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- one-time token, verified in claim_token().
+		}
+		if ( $certificate_id <= 0 ) {
+			status_header( 403 );
+			nocache_headers();
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			echo 'Certificate request is unavailable.';
+			exit;
+		}
+		GHCA_Audit_PDF::serve_certificate_pdf( absint( $_POST['user_id'] ), $certificate_id, absint( $_POST['course_id'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 	}
 
 	/** @return array<int,WP_Http_Cookie> The viewer's own login cookie only. */

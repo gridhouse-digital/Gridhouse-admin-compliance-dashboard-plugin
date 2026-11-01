@@ -244,6 +244,15 @@ final class GHCA_Audit_PDF {
 			self::deny_certificate_broker();
 		}
 
+		self::serve_certificate_pdf( $user_id, $certificate_id, $course_id );
+	}
+
+	/**
+	 * Renders one employee's LearnDash certificate PDF as that employee and exits.
+	 * Shared by the packet broker and the single-certificate download broker; callers
+	 * must already have validated their one-time token and the course/certificate pair.
+	 */
+	public static function serve_certificate_pdf( int $user_id, int $certificate_id, int $course_id ): void {
 		wp_set_current_user( $user_id );
 		while ( ob_get_level() > 0 ) {
 			ob_end_clean();

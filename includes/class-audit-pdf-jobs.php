@@ -355,6 +355,20 @@ final class GHCA_Audit_PDF_Jobs {
 		return self::acquire_lock( self::lock_path( 'job_' . $job_id ), $blocking );
 	}
 
+	/**
+	 * Non-blocking lock for one single-certificate download token. Named like a packet
+	 * broker lock so gc() removes it once it is stale.
+	 *
+	 * @param string $token_hash_prefix 32 lowercase hex chars derived from the token hash.
+	 * @return resource|false
+	 */
+	public static function acquire_certificate_token_lock( string $token_hash_prefix ) {
+		if ( ! preg_match( '/^[a-f0-9]{32}$/D', $token_hash_prefix ) ) {
+			return false;
+		}
+		return self::acquire_lock( self::lock_path( 'broker_' . $token_hash_prefix . '_0' ), false );
+	}
+
 	/** @param resource $lock */
 	public static function release_lock( $lock ): void {
 		if ( is_resource( $lock ) ) {
