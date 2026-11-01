@@ -1121,7 +1121,7 @@ final class GHCA_ACD_Data_Provider {
     return filter_var( $url, FILTER_VALIDATE_URL ) ? $url : '';
   }
 
-  private static function get_certificate_url( int $user_id, int $course_id ): string {
+  public static function get_certificate_url( int $user_id, int $course_id ): string {
     if ( function_exists( 'learndash_get_course_certificate_link' ) ) {
       $link = learndash_get_course_certificate_link( $course_id, $user_id );
       if ( is_string( $link ) && $link !== '' ) {
