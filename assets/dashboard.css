@@ -7125,3 +7125,6 @@ body.ghca-acd-page,
   font-size: 13px;
 }
 .ghca-acd__cert-download-error[hidden] { display: none; }
+
+/* Certificates panel: assigned figure shown under "Issued" */
+.ghca-acd__cert-stat-sub { margin-top: 2px; font-size: 12px; color: var(--ent-text-muted, #64748b); }
