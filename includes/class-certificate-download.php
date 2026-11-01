@@ -254,7 +254,12 @@ final class GHCA_ACD_Certificate_Download {
 		$now  = $now > 0 ? $now : time();
 		$hash = hash( 'sha256', $token );
 		$key  = self::TOKEN_TRANSIENT . substr( $hash, 0, 40 );
-		$lock = GHCA_Audit_PDF_Jobs::acquire_certificate_token_lock( substr( $hash, 0, 32 ) );
+		try {
+			$lock = GHCA_Audit_PDF_Jobs::acquire_certificate_token_lock( substr( $hash, 0, 32 ) );
+		} catch ( RuntimeException $exception ) {
+			// Private storage unusable: deny cleanly instead of a fatal error on the internal request.
+			return 0;
+		}
 		if ( false === $lock ) {
 			return 0;
 		}

@@ -218,5 +218,12 @@ dl_check( false === strpos( $src, 'add_cap' ) && false === strpos( $src, 'set_ro
 $pdfsrc = file_get_contents( __DIR__ . '/../includes/class-audit-pdf.php' );
 dl_check( substr_count( $pdfsrc, 'self::serve_certificate_pdf(' ) === 1 && false !== strpos( $pdfsrc, 'public static function serve_certificate_pdf(' ), 'the packet broker and the download broker share one LearnDash render path' );
 
+// Unusable private storage must deny cleanly (kept last: the constant affects every later lock in this process).
+$S['store'] = array(); $tok = GHCA_ACD_Certificate_Download::issue_token( 3, 9, 7, 55, $T0 );
+define( 'GHCA_ACD_PRIVATE_DIR', '/nonexistent/ghca-private-dir' );
+$threw = false; $claimed = -1;
+try { $claimed = GHCA_ACD_Certificate_Download::claim_token( $tok, 3, 9, 7, $T0 + 5 ); } catch ( Throwable $e ) { $threw = true; }
+dl_check( ! $threw && 0 === $claimed, 'unusable private storage denies the claim (returns 0) instead of throwing' );
+
 echo 0 === $fails ? "\nALL PASS\n" : "\n$fails FAILED\n";
 exit( 0 === $fails ? 0 : 1 );
