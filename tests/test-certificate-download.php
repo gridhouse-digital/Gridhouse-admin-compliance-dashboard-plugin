@@ -161,8 +161,15 @@ dl_check( 403 === $r['status'] && no_broker_activity(), 'unauthenticated request
 lead_state(); $r = run( array( 'nonce' => 'bad' ) + $req );
 dl_check( 403 === $r['status'] && no_broker_activity(), 'bad nonce is denied, no token issued' );
 
-lead_state(); $GLOBALS['S']['cert_id'] = 0; $r = run( $req );
-dl_check( 404 === $r['status'] && no_broker_activity() && false === strpos( $r['body'], '%PDF' ), 'no certificate configured: 404, no token, no broker request' );
+lead_state(); $GLOBALS['S']['cert_id'] = 0; $GLOBALS['S']['link'] = ''; $r = run( $req );
+dl_check( 404 === $r['status'] && no_broker_activity() && false === strpos( $r['body'], '%PDF' ), 'no certificate at all: 404, no token, no broker request' );
+// Stored (Uncanny) certificate PDF: no LearnDash certificate post, so no broker; validated direct fetch.
+lead_state(); $GLOBALS['S']['cert_id'] = 0; $GLOBALS['S']['link'] = 'https://example.test/wp-content/uploads/uo/cert-7-9.pdf'; $r = run( $req );
+dl_check( 200 === $r['status'] && 'application/pdf' === $r['headers']['Content-Type'] && array( 'https://example.test/wp-content/uploads/uo/cert-7-9.pdf' ) === $GLOBALS['S']['fetched'] && no_broker_activity(), 'stored certificate PDF without a LearnDash certificate post downloads via the direct fetch, no broker' );
+lead_state(); $GLOBALS['S']['cert_id'] = 0; $GLOBALS['S']['link'] = 'https://example.test/wp-content/uploads/uo/cert-7-9.pdf'; $GLOBALS['S']['remote'] = array( 'code' => 200, 'headers' => array( 'content-type' => 'text/html' ), 'body' => '<html>login</html>' ); $r = run( $req );
+dl_check( 404 === $r['status'] && false === strpos( $r['body'], '<html' ) && no_broker_activity(), 'a stored-PDF link that answers HTML is still refused' );
+lead_state(); $GLOBALS['S']['cert_id'] = 0; $GLOBALS['S']['link'] = 'https://example.test/wp-content/uploads/uo/cert-7-9.pdf'; $GLOBALS['S']['can_user'] = false; $r = run( $req );
+dl_check( 403 === $r['status'] && array() === $GLOBALS['S']['fetched'], 'the stored-PDF path is still behind the scope check' );
 lead_state(); $GLOBALS['S']['completed'] = false; $r = run( $req );
 dl_check( 404 === $r['status'] && no_broker_activity(), 'incomplete course: 404, no token, no broker request' );
 

@@ -91,11 +91,11 @@ final class GHCA_ACD_Certificate_Download {
 			return self::error( 403 );
 		}
 
-		if ( self::should_use_broker() ) {
-			$certificate_id = self::certificate_id( $user_id, $course_id );
-			if ( $certificate_id <= 0 ) {
-				return self::error( 404 );
-			}
+		// Native LearnDash certificates go through the broker for roles LearnDash would refuse.
+		// A stored certificate PDF (e.g. Uncanny Toolkit) is not rendered by LearnDash, so it keeps
+		// the validated same-origin direct fetch, exactly like the packet builder.
+		$certificate_id = self::should_use_broker() ? self::certificate_id( $user_id, $course_id ) : 0;
+		if ( $certificate_id > 0 ) {
 			$response = self::request_via_broker( get_current_user_id(), $user_id, $course_id, $certificate_id );
 		} else {
 			$link = self::course_link( $user_id, $course_id );
