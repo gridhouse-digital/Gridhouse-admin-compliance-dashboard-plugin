@@ -5,7 +5,7 @@
  * The browser used to fetch the LearnDash certificate link itself and save
  * whatever came back as a .pdf. LearnDash can answer 200 text/html (an access
  * message, or a login page), which was then saved as a "PDF". This endpoint takes
- * only user_id + course_id/quiz_id, derives the LearnDash link on the server,
+ * only user_id + course_id (any quiz_id is rejected), derives the LearnDash link on the server,
  * fetches it with the viewer's own session, and streams the result only when it
  * really is a PDF. It never accepts a URL from the request.
  *
@@ -70,15 +70,14 @@ final class GHCA_ACD_Certificate_Download {
 
 		$user_id   = isset( $request['user_id'] ) ? absint( $request['user_id'] ) : 0;
 		$course_id = isset( $request['course_id'] ) ? absint( $request['course_id'] ) : 0;
-		$quiz_id   = isset( $request['quiz_id'] ) ? absint( $request['quiz_id'] ) : 0;
-		if ( $user_id <= 0 || ( $course_id > 0 ) === ( $quiz_id > 0 ) ) {
+		if ( $user_id <= 0 || $course_id <= 0 || array_key_exists( 'quiz_id', $request ) ) {
 			return self::error( 400 );
 		}
 		if ( ! GHCA_ACD_User_Report::can_view_user( $user_id ) ) {
 			return self::error( 403 );
 		}
 
-		$link = $course_id > 0 ? self::course_link( $user_id, $course_id ) : self::quiz_link( $user_id, $quiz_id );
+		$link = self::course_link( $user_id, $course_id );
 		if ( '' === $link ) {
 			return self::error( 404 );
 		}
@@ -102,7 +101,7 @@ final class GHCA_ACD_Certificate_Download {
 			return self::error( 404 );
 		}
 
-		$title = $course_id > 0 ? get_the_title( $course_id ) : get_the_title( $quiz_id );
+		$title = get_the_title( $course_id );
 		return array(
 			'status'  => 200,
 			'headers' => array(
@@ -139,17 +138,6 @@ final class GHCA_ACD_Certificate_Download {
 			return '';
 		}
 		return GHCA_ACD_Data_Provider::get_certificate_url( $user_id, $course_id );
-	}
-
-	private static function quiz_link( int $user_id, int $quiz_id ): string {
-		if ( ! function_exists( 'learndash_get_certificate_link' ) ) {
-			return '';
-		}
-		if ( function_exists( 'learndash_get_post_type_slug' ) && learndash_get_post_type_slug( 'quiz' ) !== get_post_type( $quiz_id ) ) {
-			return '';
-		}
-		$link = learndash_get_certificate_link( $quiz_id, $user_id );
-		return is_string( $link ) ? GHCA_ACD_Data_Provider::sanitize_certificate_url( $link ) : '';
 	}
 
 	/** @return array<int,WP_Http_Cookie> The viewer's own login cookie only. */

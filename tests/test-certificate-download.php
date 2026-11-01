@@ -10,7 +10,7 @@ function wp_unslash( $v ) { return $v; }
 function absint( $v ) { return abs( (int) $v ); }
 function get_the_title( $id ) { return 'Recognizing & Reporting: Incidents/2026'; }
 function get_post_type( $id ) { return 'sfwd-courses'; }
-function learndash_get_post_type_slug( $t ) { return 'course' === $t ? 'sfwd-courses' : 'sfwd-quiz'; }
+function learndash_get_post_type_slug( $t ) { return 'sfwd-courses'; }
 function learndash_course_completed( $u, $c ) { return $GLOBALS['S']['completed']; }
 function learndash_get_course_certificate_link( $c, $u ) { return $GLOBALS['S']['link']; }
 function get_user_meta( $u, $k, $s ) { return ''; }
@@ -61,9 +61,15 @@ dl_check( 403 === $r['status'] && denied_without_fetch( $r ), 'a different, out-
 reset_state(); $r = run( array( 'user_id' => '0' ) + $req );
 dl_check( 400 === $r['status'] && denied_without_fetch( $r ), 'invalid user id is rejected' );
 reset_state(); $r = run( array( 'nonce' => 'good-nonce', 'user_id' => '9' ) );
-dl_check( 400 === $r['status'] && denied_without_fetch( $r ), 'course_id or quiz_id is required' );
+dl_check( 400 === $r['status'] && denied_without_fetch( $r ), 'course_id is required' );
+reset_state(); $r = run( array( 'nonce' => 'good-nonce', 'user_id' => '9', 'quiz_id' => '5' ) );
+dl_check( 400 === $r['status'] && denied_without_fetch( $r ), 'quiz_id alone is rejected (400), nothing fetched' );
 reset_state(); $r = run( $req + array( 'quiz_id' => '5' ) );
-dl_check( 400 === $r['status'] && denied_without_fetch( $r ), 'course_id and quiz_id together are rejected' );
+dl_check( 400 === $r['status'] && denied_without_fetch( $r ), 'quiz_id together with course_id is rejected (400), nothing fetched' );
+reset_state(); $r = run( $req + array( 'quiz_id' => '0' ) );
+dl_check( 400 === $r['status'] && denied_without_fetch( $r ), 'a zero/empty quiz_id parameter is still rejected' );
+reset_state(); $GLOBALS['S']['logged_in'] = false; $r = run( $req + array( 'quiz_id' => '5' ) );
+dl_check( 403 === $r['status'] && denied_without_fetch( $r ), 'authorization is checked before quiz_id handling (unauthenticated stays 403)' );
 
 reset_state(); $GLOBALS['S']['completed'] = false; $r = run( $req );
 dl_check( 404 === $r['status'] && denied_without_fetch( $r ), 'incomplete course: 404, no PDF' );
@@ -99,6 +105,7 @@ dl_check( false !== strpos( $url, 'action=ghca_acd_certificate_download' ) && fa
 $handlers = file_get_contents( __DIR__ . '/../includes/class-ajax-handlers.php' );
 dl_check( false !== strpos( $handlers, 'data-ghca-cert-download-url="<?php echo esc_url( GHCA_ACD_Certificate_Download::download_url(' ), 'drawer certificate button points Download at the plugin endpoint' );
 dl_check( false !== strpos( $handlers, 'GHCA_ACD_Certificate_Download::init();' ), 'endpoint is registered on init' );
+dl_check( false === stripos( file_get_contents( __DIR__ . '/../includes/class-certificate-download.php' ), 'learndash_get_certificate_link' ), 'no quiz certificate path remains in the endpoint' );
 
 echo 0 === $fails ? "\nALL PASS\n" : "\n$fails FAILED\n";
 exit( 0 === $fails ? 0 : 1 );
