@@ -341,11 +341,18 @@
     var titleEl = modal.querySelector('#ghca-acd-cert-modal-title');
     var downloadBtn = modal.querySelector('[data-ghca-cert-download]');
     var closeBtn = modal.querySelector('.ghca-acd__cert-modal-close');
+    var downloadError = modal.querySelector('[data-ghca-cert-download-error]');
     var defaultLoadingText = loading ? loading.textContent : '';
     var currentUrl = '';
     var currentDownloadUrl = '';
     var currentTitle = '';
     var release = null;
+
+    function setDownloadError(message) {
+      if (!downloadError) { return; }
+      downloadError.textContent = message || '';
+      downloadError.hidden = !message;
+    }
 
     function slugify(value) {
       return (value || 'certificate')
@@ -371,6 +378,7 @@
       currentUrl = '';
       currentDownloadUrl = '';
       currentTitle = '';
+      setDownloadError('');
       if (frame) {
         frame.onload = null;
         frame.onerror = null;
@@ -400,6 +408,7 @@
       currentUrl = url;
       currentDownloadUrl = safeCertificateUrl(trigger.getAttribute('data-ghca-cert-download-url') || '');
       currentTitle = trigger.getAttribute('data-ghca-cert-title') || '';
+      setDownloadError('');
 
       if (titleEl) {
         titleEl.textContent = currentTitle
@@ -438,13 +447,21 @@
       }
 
       var filename = slugify(currentTitle) + '.pdf';
+      var failure = 'Certificate could not be downloaded. Try opening it in a new tab.';
+      setDownloadError('');
 
       fetch(sourceUrl, { credentials: 'same-origin' })
         .then(function (res) {
           if (!res.ok) {
             throw new Error('download failed');
           }
-          return res.blob();
+          var contentType = res.headers && res.headers.get ? res.headers.get('Content-Type') : '';
+          return res.arrayBuffer().then(function (buffer) {
+            if (!ghcaCertificateResponseIsPdf(contentType, new Uint8Array(buffer.slice(0, 5)))) {
+              throw new Error('not a pdf');
+            }
+            return new Blob([buffer], { type: 'application/pdf' });
+          });
         })
         .then(function (blob) {
           var objectUrl = URL.createObjectURL(blob);
@@ -457,7 +474,7 @@
           URL.revokeObjectURL(objectUrl);
         })
         .catch(function () {
-          window.open(sourceUrl, '_blank', 'noopener');
+          setDownloadError(failure);
         });
     }
 
@@ -958,6 +975,27 @@
   // Accessible focus trap for drawers/modals: moves focus in, cycles Tab within
   // the dialog, and restores focus to the trigger on release.
   var FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])';
+
+  /**
+   * A certificate download is saved only when the server said application/pdf
+   * and the body really starts with "%PDF-". LearnDash can answer 200 text/html
+   * (an access message or a login page); that must never become a .pdf file.
+   */
+  function ghcaCertificateResponseIsPdf(contentType, firstBytes) {
+    if (!/^application\/pdf\s*(;|$)/i.test(String(contentType || '').trim())) {
+      return false;
+    }
+    var magic = '%PDF-';
+    if (!firstBytes || firstBytes.length < magic.length) {
+      return false;
+    }
+    for (var i = 0; i < magic.length; i++) {
+      if (firstBytes[i] !== magic.charCodeAt(i)) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   function ghcaFocusTrap(container, initialFocus) {
     if (!container) return function () {};

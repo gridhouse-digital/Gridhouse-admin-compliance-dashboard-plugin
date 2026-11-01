@@ -13,10 +13,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 require_once __DIR__ . '/class-employment-record.php';
+require_once __DIR__ . '/class-certificate-download.php';
 
 final class GHCA_ACD_AJAX {
 
   public static function init(): void {
+    GHCA_ACD_Certificate_Download::init();
     add_action( 'wp_ajax_ghca_acd_filter_table', array( __CLASS__, 'ajax_filter_table' ) );
     add_action( 'wp_footer', array( __CLASS__, 'render_certificate_modal' ) );
     add_action( 'wp_footer', array( __CLASS__, 'render_employee_drawer_modal' ) );
@@ -53,6 +55,7 @@ final class GHCA_ACD_AJAX {
           <iframe class="ghca-acd__cert-frame" title="<?php esc_attr_e( 'Certificate preview', 'ghca-acd' ); ?>" hidden></iframe>
         </div>
         <div class="ghca-acd__cert-modal-footer">
+          <p class="ghca-acd__cert-download-error" data-ghca-cert-download-error role="alert" hidden></p>
           <button type="button" class="ghca-acd__cert-btn ghca-acd__cert-btn--download" data-ghca-cert-download><?php esc_html_e( 'Download', 'ghca-acd' ); ?></button>
           <button type="button" class="ghca-acd__cert-btn ghca-acd__cert-btn--close" data-ghca-cert-close><?php esc_html_e( 'Close', 'ghca-acd' ); ?></button>
         </div>
@@ -387,7 +390,7 @@ final class GHCA_ACD_AJAX {
               <article class="ghca-acd__drawer-course ghca-acd__drawer-course--completed" data-course-status="completed">
                 <span class="ghca-acd__drawer-course-icon" aria-hidden="true"><?php echo self::drawer_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
                 <div class="ghca-acd__drawer-course-main"><h5 class="ghca-acd__drawer-course-name"><?php echo esc_html( $course_title ); ?></h5><div class="ghca-acd__drawer-course-meta"><?php if ( $row['hours'] > 0 ) : ?><span><?php echo self::drawer_icon( 'schedule' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php echo esc_html( sprintf( _n( '%s hr', '%s hrs', $row['hours'], 'ghca-acd' ), rtrim( rtrim( number_format( $row['hours'], 2, '.', '' ), '0' ), '.' ) ) ); ?></span><?php endif; ?><?php if ( ! empty( $course['completed_ts'] ) ) : ?><span class="ghca-acd__drawer-course-date"><?php echo esc_html( wp_date( get_option( 'date_format', 'M j, Y' ), (int) $course['completed_ts'] ) ); ?></span><?php endif; ?></div></div>
-                <div class="ghca-acd__drawer-course-footer"><?php if ( ! empty( $course['certificate_url'] ) ) : ?><button type="button" class="ghca-acd__drawer-review-link ghca-acd__cert-trigger" data-ghca-cert-url="<?php echo esc_attr( (string) $course['certificate_url'] ); ?>" data-ghca-cert-title="<?php echo esc_attr( $course_title ); ?>"><?php echo self::drawer_icon( 'workspace_premium' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php esc_html_e( 'Certificate', 'ghca-acd' ); ?></button><?php else : ?><span class="ghca-acd__drawer-course-muted"><?php esc_html_e( 'No certificate', 'ghca-acd' ); ?></span><?php endif; ?></div>
+                <div class="ghca-acd__drawer-course-footer"><?php if ( ! empty( $course['certificate_url'] ) ) : ?><button type="button" class="ghca-acd__drawer-review-link ghca-acd__cert-trigger" data-ghca-cert-url="<?php echo esc_attr( (string) $course['certificate_url'] ); ?>" data-ghca-cert-download-url="<?php echo esc_url( GHCA_ACD_Certificate_Download::download_url( $user_id, (int) ( $course['id'] ?? 0 ) ) ); ?>" data-ghca-cert-title="<?php echo esc_attr( $course_title ); ?>"><?php echo self::drawer_icon( 'workspace_premium' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php esc_html_e( 'Certificate', 'ghca-acd' ); ?></button><?php else : ?><span class="ghca-acd__drawer-course-muted"><?php esc_html_e( 'No certificate', 'ghca-acd' ); ?></span><?php endif; ?></div>
               </article>
             <?php endforeach; ?>
           </div>

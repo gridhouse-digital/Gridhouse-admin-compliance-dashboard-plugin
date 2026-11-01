@@ -7116,3 +7116,12 @@ body.ghca-acd-page,
 .ghca-acd__drawer--employee .ghca-agency-saved { padding: 12px; background: #f5f7fa; border-radius: 8px; }
 .ghca-acd__drawer--employee .ghca-acd__agency-training details { margin-top: 20px; }
 .ghca-acd__drawer--employee .ghca-acd__agency-training summary { cursor: pointer; font-weight: 600; }
+
+/* Certificate download refused (response was not a PDF) */
+.ghca-acd__cert-download-error {
+  flex: 1 1 100%;
+  margin: 0;
+  color: #b42318;
+  font-size: 13px;
+}
+.ghca-acd__cert-download-error[hidden] { display: none; }
