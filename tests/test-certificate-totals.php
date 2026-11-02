@@ -50,6 +50,24 @@ $live = array( array( 'courses' => array_merge( array( course( true, true, $cert
 $t = GHCA_ACD_Data_Provider::summarize_certificates( $live );
 tc_check( 1 === $t['issued'] && 75 === $t['assigned'], 'live shape: 75 assigned, 1 issued' );
 
+// --- Recently completed (regression: was always 0 because the condition required not-completed) ---
+function rc_course( bool $completed, bool $recent, string $title = 'C', int $ts = 0, string $url = '' ): array { return array( 'title' => $title, 'completed' => $completed, 'completed_recently' => $recent, 'last_activity_ts' => $ts, 'has_certificate' => true, 'certificate_url' => $url ); }
+$emps = array(
+	array( 'name' => 'Ann', 'courses' => array( rc_course( true, true, 'Abuse', 300, $cert ), rc_course( true, false, 'Old', 100, $cert ), rc_course( false, false, 'Open' ) ) ),
+	array( 'name' => 'Bo', 'courses' => array( rc_course( true, true, 'Rights', 200, $cert ), rc_course( true, true, 'Plans', 400, $cert ) ) ),
+	array( 'name' => 'Cy', 'courses' => array( rc_course( false, true, 'Never completed', 500 ) ) ),
+);
+$r = GHCA_ACD_Data_Provider::summarize_recent_completions( $emps );
+tc_check( 3 === $r['count'], 'recently completed counts completed courses finished in the window (3), not zero' );
+tc_check( array( 'Abuse', 'Rights', 'Plans' ) === array_column( $r['items'], 'course' ) && array( 'Ann', 'Bo', 'Bo' ) === array_column( $r['items'], 'name' ), 'each recent completion is listed with employee and course' );
+tc_check( 0 === GHCA_ACD_Data_Provider::summarize_recent_completions( array( array( 'name' => 'Dee', 'courses' => array( rc_course( true, false ), rc_course( false, false ) ) ) ) )['count'], 'completed long ago and unfinished courses are not recent' );
+tc_check( 0 === GHCA_ACD_Data_Provider::summarize_recent_completions( array( array( 'name' => 'Cy', 'courses' => array( rc_course( false, true ) ) ) ) )['count'], 'a course that is not completed is never counted, even with a stray recent flag' );
+$both = GHCA_ACD_Data_Provider::summarize_certificates( $emps );
+tc_check( 4 === $both['issued'], 'issued counts only completed courses with a certificate link, unaffected by the recent flag (4)' );
+$provider_src = file_get_contents( __DIR__ . '/../includes/class-data-provider.php' );
+tc_check( false !== strpos( $provider_src, "\$recent         = self::summarize_recent_completions( \$employees );" ) && false !== strpos( $provider_src, "'recently_completed'           => \$recent_completed," ), 'the aggregate fills recently_completed from the tested helper' );
+tc_check( 0 === preg_match( '/if \\( empty\\( \\$course\\[\'completed\'\\] \\) && ! empty\\( \\$course\\[\'completed_recently\'\\] \\)/', $provider_src ), 'the always-false "not completed and recently completed" condition is gone' );
+
 // --- Tracked-employee rule -----------------------------------------------------------------
 user( 1, array( 'administrator' ) );
 user( 2, array( 'compliance_lead', 'nurse' ) );

@@ -187,6 +187,29 @@ final class GHCA_ACD_Data_Provider {
   }
 
   /**
+   * Courses completed within the recent window (course[completed_recently], set only for
+   * completed courses), one entry per employee+course pair.
+   *
+   * @param array<int,array<string,mixed>> $employees
+   * @return array{count:int,items:array<int,array<string,mixed>>}
+   */
+  public static function summarize_recent_completions( array $employees ): array {
+    $items = array();
+    foreach ( $employees as $employee ) {
+      foreach ( (array) ( $employee['courses'] ?? array() ) as $course ) {
+        if ( ! empty( $course['completed'] ) && ! empty( $course['completed_recently'] ) ) {
+          $items[] = array(
+            'name'   => $employee['name'] ?? '',
+            'course' => $course['title'] ?? '',
+            'ts'     => (int) ( $course['last_activity_ts'] ?? 0 ),
+          );
+        }
+      }
+    }
+    return array( 'count' => count( $items ), 'items' => $items );
+  }
+
+  /**
    * Certificate figures, computed per employee+course pair.
    *  - issued:   completed course that has a certificate link (a real issued certificate)
    *  - assigned: courses assigned that have a certificate configured, completed or not
@@ -293,21 +316,14 @@ final class GHCA_ACD_Data_Provider {
         ++$in_progress;
       }
 
-      foreach ( $employee['courses'] as $course ) {
-        if ( empty( $course['completed'] ) && ! empty( $course['completed_recently'] ) ) {
-          ++$recent_completed;
-          $recent_items[] = array(
-            'name'   => $employee['name'],
-            'course' => $course['title'],
-            'ts'     => (int) ( $course['last_activity_ts'] ?? 0 ),
-          );
-        }
-      }
-
       if ( ! empty( $employee['due_timestamp'] ) && $employee['due_timestamp'] < $next_due_ts && 'completed' !== $employee['status_slug'] ) {
         $next_due_ts = (int) $employee['due_timestamp'];
       }
     }
+
+    $recent         = self::summarize_recent_completions( $employees );
+    $recent_completed = $recent['count'];
+    $recent_items     = $recent['items'];
 
     $cert_totals    = self::summarize_certificates( $employees );
     $certificates   = $cert_totals['issued'];

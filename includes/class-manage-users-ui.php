@@ -163,6 +163,7 @@ final class GHCA_ACD_Manage_Users_UI {
               <div class="ghca-acd-form-group">
                 <label for="ghca-acd-role"><?php esc_html_e( 'Role', 'ghca-acd' ); ?> *</label>
                 <select id="ghca-acd-role" name="role" required>
+                  <option value="" selected disabled><?php esc_html_e( 'Select role', 'ghca-acd' ); ?></option>
                   <?php foreach ( $editable_roles as $role_slug => $role_details ) : ?>
                     <option value="<?php echo esc_attr( $role_slug ); ?>">
                       <?php echo esc_html( translate_user_role( $role_details['name'] ) ); ?>

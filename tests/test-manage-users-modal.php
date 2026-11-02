@@ -44,5 +44,12 @@ mu_check( false !== strpos( $actions, 'grid-column: 1 / -1' ) && false !== strpo
 mu_check( 1 === preg_match( '/@media \(max-width: 640px\) \{\s*\.ghca-acd-modal \{ --ghca-modal-pad: 16px; padding: 8px; \}\s*\.ghca-acd-modal__content \{ max-height: calc\(100vh - 16px\); max-height: calc\(100dvh - 16px\); \}\s*#ghca-acd-user-form \{ grid-template-columns: 1fr; \}/', $css ), 'below 640px: one column, overlay padding 8px, max-height calc(100dvh - 16px)' );
 mu_check( false !== strpos( $js, "document.body.style.overflow = 'hidden'" ) && false !== strpos( $js, "modal.style.display = 'flex'" ), 'JS still opens the modal as a flex overlay and locks page scroll (unchanged)' );
 
+// Role dropdown must never default to a privileged role (e.g. Administrator listed first).
+mu_check( 1 === preg_match( '/<select id="ghca-acd-role" name="role" required>\s*<option value="" selected disabled>/', $php ), 'the Role dropdown starts on a required "Select role" placeholder (empty value, selected, disabled)' );
+mu_check( 1 === preg_match_all( '/<option[^>]*\bselected\b/', substr( $php, (int) strpos( $php, 'id="ghca-acd-role"' ), 900 ) ), 'no real role option is pre-selected' );
+mu_check( false !== strpos( $js, "form.elements['role'].value = btn.getAttribute('data-role') || 'subscriber'" ) && false !== strpos( $js, 'form.reset();' ), 'Edit still sets the saved role; closing the modal resets the form back to the placeholder' );
+$ajax = file_get_contents( $root . '/includes/class-ajax-handlers.php' );
+mu_check( false !== strpos( $ajax, 'if ( ! array_key_exists( $role, $manageable_roles ) )' ), 'the server still rejects an empty or unknown role' );
+
 echo 0 === $fails ? "\nALL PASS\n" : "\n$fails FAILED\n";
 exit( 0 === $fails ? 0 : 1 );
