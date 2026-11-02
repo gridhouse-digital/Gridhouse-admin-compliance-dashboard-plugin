@@ -162,7 +162,8 @@ final class GHCA_ACD_Manage_Users_UI {
 
               <div class="ghca-acd-form-group">
                 <label for="ghca-acd-role"><?php esc_html_e( 'Role', 'ghca-acd' ); ?> *</label>
-                <select id="ghca-acd-role" name="role" required style="width:100%; padding:8px 12px; border:1px solid #cbd5e1; border-radius:4px;">
+                <select id="ghca-acd-role" name="role" required>
+                  <option value="" selected disabled><?php esc_html_e( 'Select role', 'ghca-acd' ); ?></option>
                   <?php foreach ( $editable_roles as $role_slug => $role_details ) : ?>
                     <option value="<?php echo esc_attr( $role_slug ); ?>">
                       <?php echo esc_html( translate_user_role( $role_details['name'] ) ); ?>
@@ -171,7 +172,7 @@ final class GHCA_ACD_Manage_Users_UI {
                 </select>
               </div>
               
-              <div class="ghca-acd-form-group">
+              <div class="ghca-acd-form-group ghca-acd-form-group--full">
                 <label><?php esc_html_e( 'LearnDash Groups', 'ghca-acd' ); ?></label>
                 <div class="ghca-acd-checkbox-list">
                   <?php foreach ( $group_options as $gid => $gname ) : ?>
@@ -194,54 +195,6 @@ final class GHCA_ACD_Manage_Users_UI {
         </div>
       </div>
     </div>
-    <style>
-      .ghca-acd-modal {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        z-index: 99999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .ghca-acd-modal__overlay {
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.5);
-      }
-      .ghca-acd-modal__content {
-        position: relative;
-        background: #fff;
-        border-radius: 8px;
-        width: 100%;
-        max-width: 500px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      }
-      .ghca-acd-modal__header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px 24px;
-        border-bottom: 1px solid #e2e8f0;
-      }
-      .ghca-acd-modal__header h3 { margin: 0; font-size: 18px; }
-      .ghca-acd-modal__close {
-        background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;
-      }
-      .ghca-acd-modal__body { padding: 24px; }
-      .ghca-acd-form-group { margin-bottom: 16px; }
-      .ghca-acd-form-group label { display: block; margin-bottom: 8px; font-weight: 500; }
-      .ghca-acd-form-group input[type="text"],
-      .ghca-acd-form-group select,
-      .ghca-acd-form-group input[type="email"] {
-        width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 4px;
-      }
-      .ghca-acd-checkbox-list {
-        max-height: 150px; overflow-y: auto; border: 1px solid #cbd5e1; padding: 12px; border-radius: 4px;
-      }
-      .ghca-acd-checkbox-list label { display: block; font-weight: normal; margin-bottom: 8px; }
-      .ghca-acd-checkbox-list label:last-child { margin-bottom: 0; }
-      .ghca-acd-form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
-    </style>
     <?php
     return (string) ob_get_clean();
   }
