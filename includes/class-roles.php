@@ -50,8 +50,6 @@ final class GHCA_ACD_Roles {
         add_role( $slug, $label, array( 'read' => true ) );
       }
     }
-    self::migrate_legacy_builtin_roles();
-
     foreach ( array( 'administrator', 'group_leader', 'editor', 'ld_instructor' ) as $role_slug ) {
       $role = get_role( $role_slug );
       if ( $role ) {
@@ -60,8 +58,7 @@ final class GHCA_ACD_Roles {
     }
   }
 
-  const OPTION_OWNED_ROLES   = 'ghca_acd_owned_roles';
-  const OPTION_ROLE_MIGRATED = 'ghca_acd_builtin_role_slug_migration';
+  const OPTION_OWNED_ROLES = 'ghca_acd_owned_roles';
 
   /** @return array<int,string> Slugs of roles this plugin itself created. */
   public static function owned_roles(): array {
@@ -85,35 +82,6 @@ final class GHCA_ACD_Roles {
   /** Built-in employee roles that are genuinely the plugin's (what Settings lists and the pickers offer). */
   public static function active_builtin_employee_roles(): array {
     return array_filter( self::builtin_employee_roles(), static function ( $label, $slug ) { return self::builtin_role_is_plugin_owned( (string) $slug ); }, ARRAY_FILTER_USE_BOTH );
-  }
-
-  /**
-   * rc.7 builds briefly created these roles un-namespaced. Move employees to the
-   * namespaced role only when the legacy role is plain read-only (identical
-   * privileges, so nothing is escalated); a legacy role with any other capability
-   * is someone else's and is left completely untouched.
-   */
-  public static function migrate_legacy_builtin_roles(): void {
-    if ( get_option( self::OPTION_ROLE_MIGRATED ) ) {
-      return;
-    }
-    foreach ( array( 'clinical_supervisor', 'administrative_support_desk', 'director_of_operations' ) as $legacy ) {
-      $role = get_role( $legacy );
-      $new  = 'ghca_' . $legacy;
-      if ( ! $role || ! self::builtin_role_is_plugin_owned( $new ) ) {
-        continue;
-      }
-      $caps = array_keys( array_filter( (array) $role->capabilities ) );
-      if ( array( 'read' ) !== $caps ) {
-        continue;
-      }
-      foreach ( get_users( array( 'role' => $legacy, 'fields' => 'all' ) ) as $user ) {
-        $user->add_role( $new );
-        $user->remove_role( $legacy );
-      }
-      remove_role( $legacy );
-    }
-    update_option( self::OPTION_ROLE_MIGRATED, 1, false );
   }
 
   const OPTION_CUSTOM_ROLES  = 'ghca_acd_custom_roles';

@@ -1,5 +1,5 @@
 <?php
-/** Synthetic tests: namespaced built-in roles never adopt a pre-existing role; safe legacy migration. No WordPress. */
+/** Synthetic tests: namespaced built-in roles never adopt a pre-existing role. No WordPress. */
 define( 'ABSPATH', __DIR__ . '/' );
 $GLOBALS['opts'] = array(); $GLOBALS['reg'] = array(); $GLOBALS['users'] = array();
 class T_Role { public $capabilities; function __construct( $c ) { $this->capabilities = $c; } function add_cap( $c ) { $this->capabilities[ $c ] = true; } function remove_cap( $c ) { unset( $this->capabilities[ $c ] ); } }
@@ -32,17 +32,19 @@ ok( ! isset( GHCA_ACD_Roles::active_builtin_employee_roles()['ghca_clinical_supe
 ok( isset( GHCA_ACD_Roles::active_builtin_employee_roles()['ghca_director_of_operations'] ) && 'read' === array_key_first( $GLOBALS['reg']['ghca_director_of_operations']->capabilities ), 'non-conflicting built-ins are created read-only and listed' );
 $picker = GHCA_ACD_Roles::selectable_employee_roles( array( 'subscriber' => array(), 'ghca_clinical_supervisor' => array(), 'ghca_director_of_operations' => array() ), array( 'ghca_clinical_supervisor' ) );
 ok( ! isset( $picker['ghca_clinical_supervisor'] ) && isset( $picker['ghca_director_of_operations'] ), 'picker never offers the conflicting role, even if "kept"' );
-ok( isset( $GLOBALS['reg']['clinical_supervisor'] ) && array( 'clinical_supervisor' ) === $GLOBALS['users']['u1']->roles, 'legacy role with elevated caps is left untouched, users not migrated' );
+ok( isset( $GLOBALS['reg']['clinical_supervisor'] ) && array( 'clinical_supervisor' ) === $GLOBALS['users']['u1']->roles, 'legacy-slug role with elevated caps is left untouched, users not moved' );
 
-// Clean site that ran rc.7 earlier: plain read-only legacy role + holders are migrated.
-$GLOBALS['opts'] = array(); $GLOBALS['reg'] = array(); 
-$GLOBALS['reg']['director_of_operations'] = new T_Role( array( 'read' => true ) );
-$GLOBALS['users'] = array( 'a' => new T_User( array( 'director_of_operations', 'nurse' ) ), 'b' => new T_User( array( 'subscriber' ) ) );
+// An independently created read-only role with a legacy-style slug is never touched: no user moves, no deletion.
+$GLOBALS['opts'] = array(); $GLOBALS['reg'] = array();
+$GLOBALS['reg']['clinical_supervisor'] = new T_Role( array( 'read' => true ) );
+$GLOBALS['users'] = array( 'a' => new T_User( array( 'clinical_supervisor', 'nurse' ) ), 'b' => new T_User( array( 'subscriber' ) ) );
 GHCA_ACD_Roles::register_roles();
-ok( GHCA_ACD_Roles::builtin_role_is_plugin_owned( 'ghca_director_of_operations' ), 'namespaced role created and owned' );
-ok( array( 'nurse', 'ghca_director_of_operations' ) === $GLOBALS['users']['a']->roles && array( 'subscriber' ) === $GLOBALS['users']['b']->roles, 'holder migrated to namespaced role, other roles kept' );
-ok( ! isset( $GLOBALS['reg']['director_of_operations'] ), 'plain legacy role removed after migration' );
-ok( 1 === get_option( GHCA_ACD_Roles::OPTION_ROLE_MIGRATED ), 'migration runs once' );
+GHCA_ACD_Roles::register_roles(); // repeated loads / activation
+ok( isset( $GLOBALS['reg']['clinical_supervisor'] ) && array( 'read' => true ) === $GLOBALS['reg']['clinical_supervisor']->capabilities, 'independent read-only role is not deleted or altered' );
+ok( array( 'clinical_supervisor', 'nurse' ) === $GLOBALS['users']['a']->roles && array( 'subscriber' ) === $GLOBALS['users']['b']->roles, 'its users keep their roles (nothing migrated)' );
+ok( GHCA_ACD_Roles::builtin_role_is_plugin_owned( 'ghca_clinical_supervisor' ) && ! in_array( 'clinical_supervisor', GHCA_ACD_Roles::owned_roles(), true ), 'namespaced built-in is created and owned; the independent role is not claimed' );
+$src = file_get_contents( __DIR__ . '/../includes/class-roles.php' );
+ok( false === strpos( $src, 'migrate_legacy' ) && false === strpos( $src, 'remove_role' ), 'no automatic legacy migration or role deletion remains in the plugin' );
 
 // Settings/AJAX wiring.
 $ajax = file_get_contents( __DIR__ . '/../includes/class-ajax-handlers.php' );
