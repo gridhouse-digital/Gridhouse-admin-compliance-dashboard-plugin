@@ -37,12 +37,62 @@ final class GHCA_ACD_Roles {
       );
     }
 
+    // Employee roles (not dashboard/management roles): built-ins plus admin-added customs.
+    foreach ( self::builtin_employee_roles() + self::custom_roles() as $slug => $label ) {
+      if ( ! get_role( $slug ) ) {
+        add_role( $slug, $label, array( 'read' => true ) );
+      }
+    }
+
     foreach ( array( 'administrator', 'group_leader', 'editor', 'ld_instructor' ) as $role_slug ) {
       $role = get_role( $role_slug );
       if ( $role ) {
         $role->add_cap( self::CAP );
       }
     }
+  }
+
+  const OPTION_CUSTOM_ROLES  = 'ghca_acd_custom_roles';
+  const OPTION_RETIRED_ROLES = 'ghca_acd_retired_roles';
+
+  /** Built-in employee roles added by the plugin; always available, never removable from settings. */
+  public static function builtin_employee_roles(): array {
+    return array(
+      'clinical_supervisor'          => __( 'Clinical Supervisor', 'ghca-acd' ),
+      'administrative_support_desk'  => __( 'Administrative Support Desk', 'ghca-acd' ),
+      'director_of_operations'       => __( 'Director of Operations', 'ghca-acd' ),
+    );
+  }
+
+  /** Admin-added roles (slug => label). Slugs are namespaced so they can never collide with core or other plugins' roles. */
+  public static function custom_roles(): array {
+    return GHCA_ACD_Data_Provider::sanitize_label_list( get_option( self::OPTION_CUSTOM_ROLES, array() ), self::builtin_employee_roles(), 'ghca_custom_' );
+  }
+
+  /** @return array<int,string> Slugs of custom roles an admin removed (still registered so holders keep them). */
+  public static function retired_roles(): array {
+    $stored = get_option( self::OPTION_RETIRED_ROLES, array() );
+    return is_array( $stored ) ? array_values( array_filter( array_map( 'strval', $stored ), static function ( $slug ) { return 1 === preg_match( '/^[a-z0-9_]{1,64}$/', $slug ); } ) ) : array();
+  }
+
+  public static function role_is_retired( string $slug ): bool {
+    return in_array( $slug, self::retired_roles(), true ) && ! isset( self::custom_roles()[ $slug ] );
+  }
+
+  /**
+   * Roles to offer in the Add/Edit form: removed custom roles are hidden unless an
+   * employee in $keep still holds one (so editing that employee shows it).
+   *
+   * @param array<string,array<string,mixed>> $roles
+   * @param array<int,string>                 $keep
+   */
+  public static function selectable_employee_roles( array $roles, array $keep = array() ): array {
+    foreach ( array_keys( $roles ) as $slug ) {
+      if ( self::role_is_retired( (string) $slug ) && ! in_array( (string) $slug, $keep, true ) ) {
+        unset( $roles[ $slug ] );
+      }
+    }
+    return $roles;
   }
 
   /** @param array<int,string> $roles */

@@ -43,6 +43,7 @@ class GHCA_ACD_Roles {
   public static function user_can_manage_users() { return $GLOBALS['permission_ok']; }
   public static function user_can_edit_records() { return $GLOBALS['permission_ok']; }
   public static function user_has_full_dashboard_access() { return false; }
+  public static function role_is_retired( $slug ) { return false; }
   public static function get_manageable_employee_roles() { return array( 'subscriber' => array() ); }
   public static function role_update_is_needed( ...$args ) { return false; }
   public static function delegated_target_is_allowed( ...$args ) { return $GLOBALS['scope_ok']; }

@@ -48,6 +48,7 @@ final class GHCA_ACD_Settings {
     GHCA_Agency_Training::init();
     add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
     add_action( 'admin_menu', array( __CLASS__, 'register_page' ) );
+    add_action( 'admin_post_ghca_acd_custom_option', array( __CLASS__, 'handle_custom_option_post' ) );
     // Both hooks per option: WordPress fires add_option_{name} (not
     // update_option_{name}) the first time a not-yet-persisted option is saved.
     $bust_options = array(
@@ -73,6 +74,125 @@ final class GHCA_ACD_Settings {
     }
     add_filter( 'ghca_admin_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
     add_filter( 'ghca_employee_support_email', array( 'GHCA_Dashboard_Branding', 'get_support_email' ) );
+  }
+
+  const CUSTOM_OPTION_NONCE = 'ghca_acd_custom_option';
+
+  /**
+   * Add or remove one custom Employment Type / Role. Callers must already have
+   * passed the nonce and manage_options checks. Built-ins are never touched.
+   *
+   * @return array{ok:bool,message:string}
+   */
+  public static function apply_custom_option_change( string $kind, string $op, string $input ): array {
+    $fail = static function ( string $message ): array { return array( 'ok' => false, 'message' => $message ); };
+    if ( ! in_array( $kind, array( 'employment_type', 'role' ), true ) || ! in_array( $op, array( 'add', 'remove' ), true ) ) {
+      return $fail( __( 'Invalid request.', 'ghca-acd' ) );
+    }
+    $is_role  = 'role' === $kind;
+    $option   = $is_role ? GHCA_ACD_Roles::OPTION_CUSTOM_ROLES : GHCA_ACD_Data_Provider::OPTION_CUSTOM_EMPLOYMENT_TYPES;
+    $builtin  = $is_role ? GHCA_ACD_Roles::builtin_employee_roles() : GHCA_ACD_Data_Provider::builtin_employment_types();
+    $prefix   = $is_role ? 'ghca_custom_' : '';
+    $current  = $is_role ? GHCA_ACD_Roles::custom_roles() : GHCA_ACD_Data_Provider::custom_employment_types();
+
+    if ( 'add' === $op ) {
+      $label = trim( sanitize_text_field( wp_unslash( $input ) ) );
+      if ( '' === $label ) {
+        return $fail( __( 'Enter a name.', 'ghca-acd' ) );
+      }
+      $merged = GHCA_ACD_Data_Provider::sanitize_label_list( array_merge( $current, array( $label ) ), $builtin, $prefix );
+      // Keep existing slugs stable; only the new entry may be appended.
+      $next = $current + array_diff_key( $merged, $current );
+      if ( count( $next ) === count( $current ) ) {
+        return $fail( __( 'That name is empty, too long (60 characters max) or already exists.', 'ghca-acd' ) );
+      }
+      if ( $is_role ) {
+        $new_slug = (string) array_key_last( $next );
+        if ( get_role( $new_slug ) && ! in_array( $new_slug, GHCA_ACD_Roles::retired_roles(), true ) ) {
+          return $fail( __( 'A role with that name already exists.', 'ghca-acd' ) );
+        }
+        if ( ! get_role( $new_slug ) ) {
+          add_role( $new_slug, $next[ $new_slug ], array( 'read' => true ) );
+        }
+        update_option( GHCA_ACD_Roles::OPTION_RETIRED_ROLES, array_values( array_diff( GHCA_ACD_Roles::retired_roles(), array( $new_slug ) ) ), false );
+      }
+      update_option( $option, $next, false );
+      return array( 'ok' => true, 'message' => __( 'Option added.', 'ghca-acd' ) );
+    }
+
+    $slug = sanitize_key( wp_unslash( $input ) );
+    if ( isset( $builtin[ $slug ] ) || ! isset( $current[ $slug ] ) ) {
+      return $fail( __( 'Only custom options can be removed.', 'ghca-acd' ) );
+    }
+    unset( $current[ $slug ] );
+    update_option( $option, $current, false );
+    if ( $is_role ) {
+      // The WP role stays registered so employees who hold it keep it; it is only hidden from the pickers.
+      update_option( GHCA_ACD_Roles::OPTION_RETIRED_ROLES, array_values( array_unique( array_merge( GHCA_ACD_Roles::retired_roles(), array( $slug ) ) ) ), false );
+    }
+    return array( 'ok' => true, 'message' => __( 'Option removed. Employees who already have it keep their stored value.', 'ghca-acd' ) );
+  }
+
+  public static function handle_custom_option_post(): void {
+    if ( ! current_user_can( 'manage_options' ) ) {
+      wp_die( esc_html__( 'You do not have permission to do this.', 'ghca-acd' ), 403 );
+    }
+    check_admin_referer( self::CUSTOM_OPTION_NONCE );
+    $result = self::apply_custom_option_change(
+      isset( $_POST['kind'] ) ? sanitize_key( wp_unslash( $_POST['kind'] ) ) : '',
+      isset( $_POST['op'] ) ? sanitize_key( wp_unslash( $_POST['op'] ) ) : '',
+      isset( $_POST['value'] ) && is_string( $_POST['value'] ) ? $_POST['value'] : ''
+    );
+    wp_safe_redirect( add_query_arg( array( 'page' => 'ghca-acd-settings', 'ghca_custom_option' => $result['ok'] ? 'ok' : 'error', 'ghca_custom_msg' => rawurlencode( $result['message'] ) ), admin_url( 'admin.php' ) ) . '#ghca-custom-options' );
+    exit;
+  }
+
+  private static function render_custom_options_section(): void {
+    $lists = array(
+      'employment_type' => array( __( 'Employment Types', 'ghca-acd' ), GHCA_ACD_Data_Provider::builtin_employment_types(), GHCA_ACD_Data_Provider::custom_employment_types() ),
+      'role'            => array( __( 'Roles', 'ghca-acd' ), GHCA_ACD_Roles::builtin_employee_roles(), GHCA_ACD_Roles::custom_roles() ),
+    );
+    $action = esc_url( admin_url( 'admin-post.php' ) );
+    ?>
+    <details class="ghca-settings-section" id="ghca-custom-options"><summary><?php esc_html_e( 'Employment Types & Roles', 'ghca-acd' ); ?></summary>
+      <?php
+      if ( isset( $_GET['ghca_custom_option'], $_GET['ghca_custom_msg'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $ok = 'ok' === sanitize_key( wp_unslash( $_GET['ghca_custom_option'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        echo '<div class="notice ' . ( $ok ? 'notice-success' : 'notice-error' ) . ' inline"><p>' . esc_html( sanitize_text_field( rawurldecode( wp_unslash( $_GET['ghca_custom_msg'] ) ) ) ) . '</p></div>'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+      }
+      ?>
+      <p><?php esc_html_e( 'Built-in options are always available. Add your own below; they appear in the Add/Edit Employee form alongside the built-ins. Removing a custom option never changes employees who already have it.', 'ghca-acd' ); ?></p>
+      <?php foreach ( $lists as $kind => $list ) : ?>
+        <h3><?php echo esc_html( $list[0] ); ?></h3>
+        <ul>
+          <?php foreach ( $list[1] as $label ) : ?>
+            <li><?php echo esc_html( $label ); ?> <em>(<?php esc_html_e( 'built-in', 'ghca-acd' ); ?>)</em></li>
+          <?php endforeach; ?>
+          <?php foreach ( $list[2] as $slug => $label ) : ?>
+            <li>
+              <form method="post" action="<?php echo $action; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>" style="display:inline">
+                <?php wp_nonce_field( self::CUSTOM_OPTION_NONCE ); ?>
+                <input type="hidden" name="action" value="ghca_acd_custom_option" />
+                <input type="hidden" name="kind" value="<?php echo esc_attr( $kind ); ?>" />
+                <input type="hidden" name="op" value="remove" />
+                <input type="hidden" name="value" value="<?php echo esc_attr( $slug ); ?>" />
+                <?php echo esc_html( $label ); ?>
+                <button type="submit" class="button-link button-link-delete"><?php esc_html_e( 'Remove', 'ghca-acd' ); ?></button>
+              </form>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+        <form method="post" action="<?php echo $action; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>">
+          <?php wp_nonce_field( self::CUSTOM_OPTION_NONCE ); ?>
+          <input type="hidden" name="action" value="ghca_acd_custom_option" />
+          <input type="hidden" name="kind" value="<?php echo esc_attr( $kind ); ?>" />
+          <input type="hidden" name="op" value="add" />
+          <input type="text" name="value" maxlength="60" class="regular-text" required aria-label="<?php echo esc_attr( sprintf( /* translators: %s: list name */ __( 'New option for %s', 'ghca-acd' ), $list[0] ) ); ?>" />
+          <button type="submit" class="button"><?php esc_html_e( 'Add', 'ghca-acd' ); ?></button>
+        </form>
+      <?php endforeach; ?>
+    </details>
+    <?php
   }
 
   public static function bust_dashboard_cache(): void {
@@ -954,6 +1074,7 @@ final class GHCA_ACD_Settings {
         </details>
         <?php submit_button(); ?>
       </form>
+      <?php self::render_custom_options_section(); ?>
       <p><?php esc_html_e( 'Dashboard URL:', 'ghca-acd' ); ?> <code><?php echo esc_html( GHCA_ACD_Nav::get_dashboard_url() ); ?></code></p>
       <?php GHCA_Packet_Course_Selection::render(); ?>
     </div>

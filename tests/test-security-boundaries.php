@@ -1,6 +1,12 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 
+if ( ! function_exists( 'get_option' ) ) {
+	function get_option( $name, $default = false ) { return $default; }
+}
+if ( ! function_exists( 'sanitize_text_field' ) ) {
+	function sanitize_text_field( $value ) { return trim( (string) $value ); }
+}
 if ( ! function_exists( 'apply_filters' ) ) {
 	function apply_filters( $hook, $value ) {
 		if ( 'ghca_acd_employee_roles' === $hook ) {

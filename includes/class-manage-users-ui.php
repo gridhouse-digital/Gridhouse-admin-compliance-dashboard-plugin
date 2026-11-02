@@ -26,6 +26,26 @@ final class GHCA_ACD_Manage_Users_UI {
     $all_roles = wp_roles()->roles;
     $editable_roles = GHCA_ACD_Roles::get_manageable_employee_roles();
 
+    // Merged Employment Types / Roles. A removed custom value stays selectable
+    // when a listed employee still holds it, so editing never blanks it.
+    $held_types = array();
+    $held_roles = array();
+    foreach ( $users as $held_id ) {
+      $held_type = GHCA_ACD_Data_Provider::employment_type( (int) $held_id );
+      if ( '' !== $held_type ) {
+        $held_types[ $held_type ] = true;
+      }
+      $held_user = get_userdata( (int) $held_id );
+      foreach ( $held_user ? (array) $held_user->roles : array() as $held_role ) {
+        $held_roles[ (string) $held_role ] = true;
+      }
+    }
+    $type_options = GHCA_ACD_Data_Provider::employment_types();
+    foreach ( array_keys( $held_types ) as $held_type ) {
+      $type_options = GHCA_ACD_Data_Provider::employment_type_options( (string) $held_type ) + $type_options;
+    }
+    $editable_roles = GHCA_ACD_Roles::selectable_employee_roles( $editable_roles, array_keys( $held_roles ) );
+
     ob_start();
     ?>
     <div class="ghca-acd ghca-acd--manage-users">
@@ -154,7 +174,7 @@ final class GHCA_ACD_Manage_Users_UI {
                 <label for="ghca-acd-employment-type"><?php esc_html_e( 'Employment Type', 'ghca-acd' ); ?></label>
                 <select id="ghca-acd-employment-type" name="employment_type">
                   <option value=""><?php esc_html_e( 'Not set', 'ghca-acd' ); ?></option>
-                  <?php foreach ( GHCA_ACD_Data_Provider::employment_types() as $value => $label ) : ?>
+                  <?php foreach ( $type_options as $value => $label ) : ?>
                     <option value="<?php echo esc_attr( $value ); ?>"><?php echo esc_html( $label ); ?></option>
                   <?php endforeach; ?>
                 </select>
