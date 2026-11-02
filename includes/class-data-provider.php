@@ -161,6 +161,82 @@ final class GHCA_ACD_Data_Provider {
     return array_values( array_unique( $ids ) );
   }
 
+  /**
+   * Should this user appear in the employee list and totals?
+   *
+   * Rule (documented in README): tracked = holds at least one role that is not a
+   * dashboard/management role (GHCA_ACD_Roles::roles_are_tracked_employee), so a
+   * site administrator is excluded but a compliance lead who is also a nurse is not.
+   * Optional test-account exclusion, off by default: enable with
+   * add_filter( 'ghca_acd_exclude_test_accounts', '__return_true' ) and flag users with
+   * the usermeta key ghca_acd_test_account = 1. Final override:
+   * apply_filters( 'ghca_acd_is_tracked_employee', $tracked, $user_id, $roles ).
+   */
+  public static function is_tracked_employee( $user_id ): bool {
+    $user_id = (int) $user_id;
+    $user    = get_userdata( $user_id );
+    if ( ! $user ) {
+      return false;
+    }
+    $roles   = (array) ( $user->roles ?? array() );
+    $tracked = GHCA_ACD_Roles::roles_are_tracked_employee( $roles );
+    if ( $tracked && apply_filters( 'ghca_acd_exclude_test_accounts', false ) && (int) get_user_meta( $user_id, 'ghca_acd_test_account', true ) ) {
+      $tracked = false;
+    }
+    return (bool) apply_filters( 'ghca_acd_is_tracked_employee', $tracked, $user_id, $roles );
+  }
+
+  /**
+   * Courses completed within the recent window (course[completed_recently], set only for
+   * completed courses), one entry per employee+course pair.
+   *
+   * @param array<int,array<string,mixed>> $employees
+   * @return array{count:int,items:array<int,array<string,mixed>>}
+   */
+  public static function summarize_recent_completions( array $employees ): array {
+    $items = array();
+    foreach ( $employees as $employee ) {
+      foreach ( (array) ( $employee['courses'] ?? array() ) as $course ) {
+        if ( ! empty( $course['completed'] ) && ! empty( $course['completed_recently'] ) ) {
+          $items[] = array(
+            'name'   => $employee['name'] ?? '',
+            'course' => $course['title'] ?? '',
+            'ts'     => (int) ( $course['last_activity_ts'] ?? 0 ),
+          );
+        }
+      }
+    }
+    return array( 'count' => count( $items ), 'items' => $items );
+  }
+
+  /**
+   * Certificate figures, computed per employee+course pair.
+   *  - issued:   completed course that has a certificate link (a real issued certificate)
+   *  - assigned: courses assigned that have a certificate configured, completed or not
+   *  - missing/eligible: completed, certificate configured, but no link yet
+   *
+   * @param array<int,array<string,mixed>> $employees
+   * @return array{issued:int,assigned:int,missing:int,eligible:int}
+   */
+  public static function summarize_certificates( array $employees ): array {
+    $issued = $assigned = $missing = 0;
+    foreach ( $employees as $employee ) {
+      foreach ( (array) ( $employee['courses'] ?? array() ) as $course ) {
+        $completed = ! empty( $course['completed'] );
+        if ( ! empty( $course['has_certificate'] ) ) {
+          ++$assigned;
+          if ( $completed && empty( $course['certificate_url'] ) ) {
+            ++$missing;
+          }
+        }
+        if ( $completed && ! empty( $course['certificate_url'] ) ) {
+          ++$issued;
+        }
+      }
+    }
+    return array( 'issued' => $issued, 'assigned' => $assigned, 'missing' => $missing, 'eligible' => $missing );
+  }
+
   /** @return array<int> */
   private static function get_suspended_user_ids(): array {
     if ( ! function_exists( 'bb_moderation_get_suspended_user_ids' ) ) {
@@ -240,32 +316,20 @@ final class GHCA_ACD_Data_Provider {
         ++$in_progress;
       }
 
-      if ( ! empty( $employee['certificate_url'] ) ) {
-        ++$certificates;
-      }
-
-      foreach ( $employee['courses'] as $course ) {
-        if ( ! empty( $course['has_certificate'] ) ) {
-          ++$cert_available;
-          if ( ! empty( $course['completed'] ) && empty( $course['certificate_url'] ) ) {
-            ++$cert_missing;
-            ++$eligible;
-          }
-        }
-        if ( ! empty( $course['completed'] ) && ! empty( $course['completed_recently'] ) ) {
-          ++$recent_completed;
-          $recent_items[] = array(
-            'name'   => $employee['name'],
-            'course' => $course['title'],
-            'ts'     => (int) ( $course['last_activity_ts'] ?? 0 ),
-          );
-        }
-      }
-
       if ( ! empty( $employee['due_timestamp'] ) && $employee['due_timestamp'] < $next_due_ts && 'completed' !== $employee['status_slug'] ) {
         $next_due_ts = (int) $employee['due_timestamp'];
       }
     }
+
+    $recent         = self::summarize_recent_completions( $employees );
+    $recent_completed = $recent['count'];
+    $recent_items     = $recent['items'];
+
+    $cert_totals    = self::summarize_certificates( $employees );
+    $certificates   = $cert_totals['issued'];
+    $cert_available = $cert_totals['assigned'];
+    $cert_missing   = $cert_totals['missing'];
+    $eligible       = $cert_totals['eligible'];
 
     // Yellow (expiring soon) employees are still compliant for now.
     $rate = $total > 0 ? (int) round( ( ( $completed + $expiring ) / $total ) * 100 ) : 0;
@@ -295,7 +359,8 @@ final class GHCA_ACD_Data_Provider {
       'certificates_issued'          => $certificates,
       'certificates_issued_label'    => sprintf( _n( '%d certificate', '%d certificates', $certificates, 'ghca-acd' ), $certificates ),
       'upcoming_due_date_label'      => PHP_INT_MAX === $next_due_ts ? self::format_due_date( get_option( GHCA_Admin_Compliance_Dashboard::OPTION_DUE_DATE, '2026-07-31' ) ) : wp_date( 'F j, Y', $next_due_ts ),
-      'certificates_available'       => $cert_available,
+      'certificates_assigned'        => $cert_available,
+      'certificates_available'       => $cert_available, // legacy key: assigned, NOT issued
       'certificates_missing'         => $cert_missing,
       'recently_completed'           => $recent_completed,
       'eligible_for_certificate'     => $eligible,
@@ -326,6 +391,13 @@ final class GHCA_ACD_Data_Provider {
     // user meta, so every get_userdata()/get_user_meta() in the loop below
     // reads from memory instead of issuing its own query per user.
     cache_users( $user_ids );
+
+    // Management-only accounts (e.g. a site administrator) and optional test accounts are
+    // not employees: keep them out of the list and every total. See is_tracked_employee().
+    $user_ids = array_values( array_filter( $user_ids, array( __CLASS__, 'is_tracked_employee' ) ) );
+    if ( empty( $user_ids ) ) {
+      return array();
+    }
 
     // Same idea for FluentCRM: resolve every employee's subscriber id in one
     // query instead of one per row inside build_employee_actions_html().

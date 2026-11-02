@@ -62,12 +62,39 @@ final class GHCA_ACD_Roles {
       return true;
     }
 
-    $allowed = apply_filters(
+    return (bool) array_intersect( self::dashboard_roles(), (array) wp_get_current_user()->roles );
+  }
+
+  /**
+   * Roles that run or oversee the dashboard rather than being trained through it.
+   * Same list (and filter) that grants dashboard access.
+   *
+   * @return array<int,string>
+   */
+  public static function dashboard_roles(): array {
+    return array_values( array_map( 'strval', (array) apply_filters(
       'ghca_admin_dashboard_roles',
       array( 'administrator', 'group_leader', 'editor', 'ld_instructor', 'hr_manager', 'compliance_lead', 'training_manager' )
-    );
+    ) ) );
+  }
 
-    return (bool) array_intersect( $allowed, (array) wp_get_current_user()->roles );
+  /**
+   * Is a user with these roles an employee the dashboard tracks?
+   *
+   * Rule: a user is tracked when they hold at least one role that is NOT a
+   * dashboard/management role. Management-only accounts (an administrator, a
+   * compliance lead who is not also staff, ...) are excluded from the employee list
+   * and from every total. A combined-role user (e.g. compliance_lead + nurse) holds
+   * a non-management role, so they stay in. Users with no role are never tracked.
+   *
+   * @param array<int,string> $roles
+   */
+  public static function roles_are_tracked_employee( array $roles ): bool {
+    $roles = array_values( array_filter( array_map( 'strval', $roles ), 'strlen' ) );
+    if ( ! $roles ) {
+      return false;
+    }
+    return (bool) array_diff( $roles, self::dashboard_roles() );
   }
 
   private static $setting_cache = array();

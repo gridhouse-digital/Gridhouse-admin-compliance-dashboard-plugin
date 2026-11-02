@@ -316,7 +316,7 @@ final class GHCA_ACD_Shortcodes {
         'label' => __( 'Certificates Issued', 'ghca-acd' ),
         'value' => $data['certificates_issued'] ?? 0,
         'icon'  => 'award',
-        'sub'   => __( 'All time', 'ghca-acd' ),
+        'sub'   => __( 'Completed courses with a certificate', 'ghca-acd' ),
       ),
       array(
         'label' => __( 'Completion Rate', 'ghca-acd' ),
@@ -758,8 +758,9 @@ final class GHCA_ACD_Shortcodes {
 
     $cert_stats = array(
       array(
-        'value' => (int) ( $data['certificates_available'] ?? 0 ),
+        'value' => (int) ( $data['certificates_issued'] ?? 0 ),
         'label' => __( 'Issued', 'ghca-acd' ),
+        'sub'   => sprintf( /* translators: %d: certificate courses assigned */ __( 'of %d certificate courses assigned', 'ghca-acd' ), (int) ( $data['certificates_assigned'] ?? 0 ) ),
         'tone'  => 'success',
       ),
       array(
@@ -796,6 +797,7 @@ final class GHCA_ACD_Shortcodes {
             <div class="ghca-acd__cert-stat ghca-acd__cert-stat--<?php echo esc_attr( $stat['tone'] ); ?>">
               <div class="ghca-acd__cert-stat-value"><?php echo esc_html( (string) $stat['value'] ); ?></div>
               <div class="ghca-acd__cert-stat-label"><?php echo esc_html( $stat['label'] ); ?></div>
+              <?php if ( ! empty( $stat['sub'] ) ) : ?><div class="ghca-acd__cert-stat-sub"><?php echo esc_html( $stat['sub'] ); ?></div><?php endif; ?>
             </div>
           <?php endforeach; ?>
         </div>
