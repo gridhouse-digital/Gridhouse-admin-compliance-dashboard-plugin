@@ -33,7 +33,7 @@ final class GHCA_ACD_Manage_Users_UI {
     foreach ( $users as $held_id ) {
       $held_type = GHCA_ACD_Data_Provider::employment_type( (int) $held_id );
       if ( '' !== $held_type ) {
-        $held_types[ $held_type ] = true;
+        $held_types[ $held_type ] = GHCA_ACD_Data_Provider::employment_type_label( (int) $held_id );
       }
       $held_user = get_userdata( (int) $held_id );
       foreach ( $held_user ? (array) $held_user->roles : array() as $held_role ) {
@@ -41,8 +41,8 @@ final class GHCA_ACD_Manage_Users_UI {
       }
     }
     $type_options = GHCA_ACD_Data_Provider::employment_types();
-    foreach ( array_keys( $held_types ) as $held_type ) {
-      $type_options = GHCA_ACD_Data_Provider::employment_type_options( (string) $held_type ) + $type_options;
+    foreach ( $held_types as $held_type => $held_label ) {
+      $type_options = GHCA_ACD_Data_Provider::employment_type_options( (string) $held_type, (string) $held_label ) + $type_options;
     }
     $editable_roles = GHCA_ACD_Roles::selectable_employee_roles( $editable_roles, array_keys( $held_roles ) );
 

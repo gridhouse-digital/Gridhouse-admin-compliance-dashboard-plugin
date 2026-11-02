@@ -57,6 +57,16 @@ ok( isset( GHCA_ACD_Data_Provider::employment_type_options( 'seasonal' )['season
 $GLOBALS['meta'][6]['ghca_acd_employment_type'] = array( 'type' => 'old_thing' );
 ok( 'Old Thing' === GHCA_ACD_Data_Provider::employment_type_label( 6 ), 'label falls back to humanised slug' );
 
+// Casing: 'Synth Float RC7' must never become 'Synth Float Rc7' after removal.
+ok( Opt_Handler::apply_custom_option_change( 'employment_type', 'add', 'Synth Float RC7' )['ok'], 'add mixed-case type' );
+$GLOBALS['meta'][7]['ghca_acd_employment_type'] = array( 'type' => 'synth_float_rc7' ); // legacy record: no stored label
+$GLOBALS['meta'][8]['ghca_acd_employment_type'] = array( 'type' => 'synth_float_rc7', 'label' => 'Synth Float RC7' );
+ok( Opt_Handler::apply_custom_option_change( 'employment_type', 'remove', 'synth_float_rc7' )['ok'], 'remove mixed-case type' );
+ok( 'Synth Float RC7' === GHCA_ACD_Data_Provider::employment_type_label( 7 ), 'display keeps casing without stored label' );
+ok( 'Synth Float RC7' === GHCA_ACD_Data_Provider::employment_type_label( 8 ), 'display keeps casing with stored label' );
+ok( 'Synth Float RC7' === GHCA_ACD_Data_Provider::employment_type_options( 'synth_float_rc7' )['synth_float_rc7'], 'edit select keeps casing (options lookup)' );
+ok( 'Synth Float RC7' === GHCA_ACD_Data_Provider::employment_type_options( 'synth_float_rc7', GHCA_ACD_Data_Provider::employment_type_label( 7 ) )['synth_float_rc7'], 'edit select keeps casing (label passed)' );
+
 // Roles: custom add registers a namespaced WP role, remove retires it but keeps it registered.
 ok( Opt_Handler::apply_custom_option_change( 'role', 'add', 'Night Nurse' )['ok'], 'add custom role' );
 ok( isset( GHCA_ACD_Roles::custom_roles()['ghca_custom_night_nurse'] ) && get_role( 'ghca_custom_night_nurse' ), 'custom role stored + registered' );

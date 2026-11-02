@@ -16,6 +16,8 @@ final class GHCA_ACD_Data_Provider {
   const OPTION_ACCOUNT_STATE_VERSION = 'ghca_acd_account_state_version';
 
   const OPTION_CUSTOM_EMPLOYMENT_TYPES = 'ghca_acd_custom_employment_types';
+  /** slug => original label of custom types an admin removed, so holders keep the exact casing. */
+  const OPTION_REMOVED_EMPLOYMENT_TYPE_LABELS = 'ghca_acd_removed_employment_type_labels';
 
   /** Built-in Employment Types. Defaults live in code and cannot be removed from settings. */
   public static function builtin_employment_types(): array {
@@ -89,14 +91,21 @@ final class GHCA_ACD_Data_Provider {
     }
     $record = get_user_meta( $user_id, 'ghca_acd_employment_type', true );
     $saved = is_array( $record ) && is_string( $record['label'] ?? null ) ? trim( $record['label'] ) : '';
-    return '' !== $saved ? $saved : ucwords( str_replace( '_', ' ', $type ) );
+    return '' !== $saved ? $saved : self::removed_employment_type_label( $type );
+  }
+
+  /** Original label for a removed custom type; humanised slug only as a last resort (casing can't be recovered from a slug). */
+  public static function removed_employment_type_label( string $slug ): string {
+    $kept = get_option( self::OPTION_REMOVED_EMPLOYMENT_TYPE_LABELS, array() );
+    $label = is_array( $kept ) && is_string( $kept[ $slug ] ?? null ) ? trim( sanitize_text_field( $kept[ $slug ] ) ) : '';
+    return '' !== $label ? $label : ucwords( str_replace( '_', ' ', $slug ) );
   }
 
   /** Dropdown options for a form: merged list plus the employee's current stored value if it was removed. */
-  public static function employment_type_options( string $current = '' ): array {
+  public static function employment_type_options( string $current = '', string $current_label = '' ): array {
     $types = self::employment_types();
     if ( '' !== $current && ! isset( $types[ $current ] ) ) {
-      $types[ $current ] = ucwords( str_replace( '_', ' ', $current ) );
+      $types[ $current ] = '' !== trim( $current_label ) ? trim( $current_label ) : self::removed_employment_type_label( $current );
     }
     return $types;
   }

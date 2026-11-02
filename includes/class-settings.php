@@ -124,8 +124,16 @@ final class GHCA_ACD_Settings {
     if ( isset( $builtin[ $slug ] ) || ! isset( $current[ $slug ] ) ) {
       return $fail( __( 'Only custom options can be removed.', 'ghca-acd' ) );
     }
+    $removed_label = $current[ $slug ];
     unset( $current[ $slug ] );
     update_option( $option, $current, false );
+    if ( ! $is_role ) {
+      // Keep the exact label so holders still see it with its original casing.
+      $kept = get_option( GHCA_ACD_Data_Provider::OPTION_REMOVED_EMPLOYMENT_TYPE_LABELS, array() );
+      $kept = is_array( $kept ) ? $kept : array();
+      $kept[ $slug ] = $removed_label;
+      update_option( GHCA_ACD_Data_Provider::OPTION_REMOVED_EMPLOYMENT_TYPE_LABELS, $kept, false );
+    }
     if ( $is_role ) {
       // The WP role stays registered so employees who hold it keep it; it is only hidden from the pickers.
       update_option( GHCA_ACD_Roles::OPTION_RETIRED_ROLES, array_values( array_unique( array_merge( GHCA_ACD_Roles::retired_roles(), array( $slug ) ) ) ), false );

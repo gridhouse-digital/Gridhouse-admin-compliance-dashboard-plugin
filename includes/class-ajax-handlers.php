@@ -777,7 +777,7 @@ final class GHCA_ACD_AJAX {
             <label class="ghca-acd__edit-label" for="ghca-edit-employment-type"><?php esc_html_e( 'Employment Type', 'ghca-acd' ); ?></label>
             <select class="ghca-acd__edit-input" id="ghca-edit-employment-type" name="employment_type">
               <option value=""><?php esc_html_e( 'Not set', 'ghca-acd' ); ?></option>
-              <?php foreach ( GHCA_ACD_Data_Provider::employment_type_options( GHCA_ACD_Data_Provider::employment_type( $user_id ) ) as $value => $label ) : ?>
+              <?php foreach ( GHCA_ACD_Data_Provider::employment_type_options( GHCA_ACD_Data_Provider::employment_type( $user_id ), GHCA_ACD_Data_Provider::employment_type_label( $user_id ) ) as $value => $label ) : ?>
                 <option value="<?php echo esc_attr( $value ); ?>" <?php selected( GHCA_ACD_Data_Provider::employment_type( $user_id ), $value ); ?>><?php echo esc_html( $label ); ?></option>
               <?php endforeach; ?>
             </select>
