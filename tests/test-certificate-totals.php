@@ -117,7 +117,7 @@ tc_check( false !== strpos( $provider, "'certificates_assigned'        => \$cert
 tc_check( 1 === preg_match( "/'value' => \(int\) \( \\\$data\['certificates_issued'\] \?\? 0 \),\s*'label' => __\( 'Issued'/", $shortcodes ), 'the Certificates & Records panel "Issued" reads certificates_issued' );
 tc_check( 1 === preg_match( "/'label' => __\( 'Certificates Issued'.*?'value' => \\\$data\['certificates_issued'\]/s", $shortcodes ), 'the overview "Certificates Issued" card reads the same key' );
 tc_check( false === strpos( $shortcodes, "'value' => (int) ( \$data['certificates_available']" ), 'the panel no longer shows the assigned figure as Issued' );
-tc_check( false !== strpos( $shortcodes, 'certificate courses assigned' ) && false === strpos( $shortcodes, "'sub'   => __( 'All time'" ), 'assigned is labelled honestly; the misleading "All time" subtitle is gone' );
+tc_check( false === strpos( $shortcodes, 'certificate courses assigned' ) && false === strpos( $shortcodes, "'sub'   => __( 'All time'" ), 'the Issued card has no assigned-courses subtext and the misleading "All time" subtitle is gone' );
 tc_check( 1 === preg_match( "/return 'ghca_acd_agg_' \. GHCA_Admin_Compliance_Dashboard::VERSION/", $provider ), 'the cached aggregate key includes the plugin version, so the rc.6 bump drops stale cached totals' );
 
 echo 0 === $fails ? "\nALL PASS\n" : "\n$fails FAILED\n";

@@ -97,5 +97,5 @@ ok( false === strpos( $src, 'admin_post_nopriv_ghca_acd_custom_option' ), 'no un
 
 // Issued card text.
 $sc = file_get_contents( __DIR__ . '/../includes/class-shortcodes.php' );
-ok( false !== strpos( $sc, "'of %d certificate courses assigned'" ) && 1 === preg_match( "/'label' => __\( 'Issued', 'ghca-acd' \),\s*'sub'\s*=> sprintf\(.*?'of %d certificate courses assigned'.*?certificates_assigned/s", $sc ), 'Issued card subtext is exactly "of X certificate courses assigned"' );
+ok( 1 === preg_match( '/\'value\' => \(int\) \( \$data\[\'certificates_issued\'\] \?\? 0 \),\s*\'label\' => __\( \'Issued\', \'ghca-acd\' \),\s*\'tone\'\s*=> \'success\'/', $sc ) && false === strpos( $sc, 'certificate courses assigned' ), 'Issued card shows only the label and number (no subtext)' );
 echo "PASS: $n custom option checks\n";
