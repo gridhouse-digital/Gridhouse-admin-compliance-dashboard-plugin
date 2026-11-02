@@ -63,7 +63,9 @@ final class GHCA_ACD_Data_Provider {
       if ( '' === $label || strlen( $label ) > 60 ) {
         continue;
       }
-      $slug = is_string( $key ) && preg_match( '/^[a-z0-9_]{1,64}$/', $key ) ? $key : $slug_prefix . trim( preg_replace( '/[^a-z0-9]+/', '_', strtolower( $label ) ), '_' );
+      // Validate the derived part BEFORE the prefix is applied, so a label with no ASCII letters/digits can't become a prefix-only slug.
+      $derived = trim( preg_replace( '/[^a-z0-9]+/', '_', strtolower( $label ) ), '_' );
+      $slug    = is_string( $key ) && preg_match( '/^[a-z0-9_]{1,64}$/', $key ) ? $key : ( '' === $derived ? '' : $slug_prefix . $derived );
       if ( '' === trim( $slug, '_' ) || strlen( $slug ) > 64 || isset( $reserved[ $slug ] ) || isset( $out[ $slug ] ) || in_array( strtolower( $label ), $seen_labels, true ) ) {
         continue;
       }

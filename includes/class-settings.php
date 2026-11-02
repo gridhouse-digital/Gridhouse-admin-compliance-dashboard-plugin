@@ -162,7 +162,7 @@ final class GHCA_ACD_Settings {
     );
     $action = esc_url( admin_url( 'admin-post.php' ) );
     ?>
-    <details class="ghca-settings-section" id="ghca-custom-options"><summary><?php esc_html_e( 'Employment Types & Roles', 'ghca-acd' ); ?></summary>
+    <details class="ghca-settings-section" id="ghca-custom-options"<?php echo isset( $_GET['ghca_custom_option'] ) ? ' open' : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>><summary><?php esc_html_e( 'Employment Types & Roles', 'ghca-acd' ); ?></summary>
       <?php
       if ( isset( $_GET['ghca_custom_option'], $_GET['ghca_custom_msg'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $ok = 'ok' === sanitize_key( wp_unslash( $_GET['ghca_custom_option'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended

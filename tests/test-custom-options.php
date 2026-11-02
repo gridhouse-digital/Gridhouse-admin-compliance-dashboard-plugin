@@ -67,6 +67,15 @@ ok( 'Synth Float RC7' === GHCA_ACD_Data_Provider::employment_type_label( 8 ), 'd
 ok( 'Synth Float RC7' === GHCA_ACD_Data_Provider::employment_type_options( 'synth_float_rc7' )['synth_float_rc7'], 'edit select keeps casing (options lookup)' );
 ok( 'Synth Float RC7' === GHCA_ACD_Data_Provider::employment_type_options( 'synth_float_rc7', GHCA_ACD_Data_Provider::employment_type_label( 7 ) )['synth_float_rc7'], 'edit select keeps casing (label passed)' );
 
+// Symbol-only / non-ASCII labels must not produce a prefix-only slug (CodeRabbit).
+foreach ( array( '***', '日本語', '—' ) as $bad_label ) {
+  $before_roles = count( $GLOBALS['wp_roles_reg'] );
+  ok( ! Opt_Handler::apply_custom_option_change( 'role', 'add', $bad_label )['ok'], "role label '$bad_label' rejected" );
+  ok( ! isset( $GLOBALS['wp_roles_reg']['ghca_custom_'] ) && $before_roles === count( $GLOBALS['wp_roles_reg'] ), 'no prefix-only role registered' );
+}
+ok( ! Opt_Handler::apply_custom_option_change( 'employment_type', 'add', '***' )['ok'], 'symbol-only employment type rejected' );
+ok( false !== strpos( file_get_contents( __DIR__ . '/../includes/class-settings.php' ), "id=\"ghca-custom-options\"<?php echo isset( \$_GET['ghca_custom_option'] ) ? ' open'" ), 'custom options section opens after a redirect so the notice is visible' );
+
 // Roles: custom add registers a namespaced WP role, remove retires it but keeps it registered.
 ok( Opt_Handler::apply_custom_option_change( 'role', 'add', 'Night Nurse' )['ok'], 'add custom role' );
 ok( isset( GHCA_ACD_Roles::custom_roles()['ghca_custom_night_nurse'] ) && get_role( 'ghca_custom_night_nurse' ), 'custom role stored + registered' );
