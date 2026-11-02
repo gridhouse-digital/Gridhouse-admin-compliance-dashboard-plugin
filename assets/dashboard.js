@@ -1181,6 +1181,25 @@
     var spinner = submitBtn ? submitBtn.querySelector('.ghca-acd-spinner') : null;
     var titleEl = document.getElementById('ghca-acd-user-modal-title');
 
+    // The shared pickers list active values only. A removed custom Employment Type / role
+    // is added just for the employee who still holds it, and dropped again afterwards.
+    function clearTempOptions() {
+      Array.prototype.forEach.call(form.querySelectorAll('option[data-ghca-temp]'), function (opt) {
+        opt.parentNode.removeChild(opt);
+      });
+    }
+
+    function ensureOption(select, value, label) {
+      if (!select || !value || !label) return;
+      var exists = Array.prototype.some.call(select.options, function (opt) { return opt.value === value; });
+      if (exists) return;
+      var opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      opt.setAttribute('data-ghca-temp', '1');
+      select.appendChild(opt);
+    }
+
     function openModal() {
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
@@ -1191,6 +1210,7 @@
       document.body.style.overflow = '';
       form.reset();
       document.getElementById('ghca-acd-user-id').value = '';
+      clearTempOptions();
     }
 
     if (closeBtn) closeBtn.addEventListener('click', closeModal);
@@ -1198,6 +1218,7 @@
     if (addBtn) {
       addBtn.addEventListener('click', function () {
         titleEl.textContent = 'Add Employee';
+        clearTempOptions();
         openModal();
       });
     }
@@ -1210,7 +1231,10 @@
         form.elements['last_name'].value = btn.getAttribute('data-last_name');
         form.elements['email'].value = btn.getAttribute('data-email');
         form.elements['phone'].value = btn.getAttribute('data-phone') || '';
+        clearTempOptions();
+        ensureOption(form.elements['employment_type'], btn.getAttribute('data-employment_type'), btn.getAttribute('data-employment_type_label'));
         form.elements['employment_type'].value = btn.getAttribute('data-employment_type') || '';
+        ensureOption(form.elements['role'], btn.getAttribute('data-role'), btn.getAttribute('data-role_label'));
         if (form.elements['role']) {
           form.elements['role'].value = btn.getAttribute('data-role') || 'subscriber';
         }

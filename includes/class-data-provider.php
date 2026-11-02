@@ -15,22 +15,101 @@ final class GHCA_ACD_Data_Provider {
 
   const OPTION_ACCOUNT_STATE_VERSION = 'ghca_acd_account_state_version';
 
-  public static function employment_types(): array {
+  const OPTION_CUSTOM_EMPLOYMENT_TYPES = 'ghca_acd_custom_employment_types';
+  /** slug => original label of custom types an admin removed, so holders keep the exact casing. */
+  const OPTION_REMOVED_EMPLOYMENT_TYPE_LABELS = 'ghca_acd_removed_employment_type_labels';
+
+  /** Built-in Employment Types. Defaults live in code and cannot be removed from settings. */
+  public static function builtin_employment_types(): array {
     return array(
       'full_time' => __( 'Full-Time', 'ghca-acd' ),
       'part_time' => __( 'Part-Time', 'ghca-acd' ),
+      'per_diem' => __( 'Per Diem', 'ghca-acd' ),
       'contractor' => __( 'Contractor', 'ghca-acd' ),
     );
+  }
+
+  /** Admin-added Employment Types (slug => label), re-sanitized on every read. */
+  public static function custom_employment_types(): array {
+    $stored = get_option( self::OPTION_CUSTOM_EMPLOYMENT_TYPES, array() );
+    return self::sanitize_label_list( $stored, self::builtin_employment_types() );
+  }
+
+  /** Built-in + custom, deduped by slug and by case-insensitive label. */
+  public static function employment_types(): array {
+    return self::builtin_employment_types() + self::custom_employment_types();
+  }
+
+  /**
+   * Normalise a list of admin-entered labels into slug => label. Accepts a plain
+   * list of labels or a slug => label map. Drops blanks, over-long labels and
+   * anything that collides (slug or label, case-insensitive) with $reserved.
+   *
+   * @param mixed                $raw
+   * @param array<string,string> $reserved  Built-in slug => label.
+   * @return array<string,string>
+   */
+  public static function sanitize_label_list( $raw, array $reserved, string $slug_prefix = '' ): array {
+    if ( ! is_array( $raw ) ) {
+      return array();
+    }
+    $seen_labels = array_map( 'strtolower', array_map( 'strval', array_values( $reserved ) ) );
+    $out = array();
+    foreach ( $raw as $key => $label ) {
+      if ( ! is_string( $label ) ) {
+        continue;
+      }
+      $label = trim( preg_replace( '/\s+/', ' ', sanitize_text_field( $label ) ) );
+      if ( '' === $label || strlen( $label ) > 60 ) {
+        continue;
+      }
+      // Validate the derived part BEFORE the prefix is applied, so a label with no ASCII letters/digits can't become a prefix-only slug.
+      $derived = trim( preg_replace( '/[^a-z0-9]+/', '_', strtolower( $label ) ), '_' );
+      $slug    = is_string( $key ) && preg_match( '/^[a-z0-9_]{1,64}$/', $key ) ? $key : ( '' === $derived ? '' : $slug_prefix . $derived );
+      if ( '' === trim( $slug, '_' ) || strlen( $slug ) > 64 || isset( $reserved[ $slug ] ) || isset( $out[ $slug ] ) || in_array( strtolower( $label ), $seen_labels, true ) ) {
+        continue;
+      }
+      $seen_labels[] = strtolower( $label );
+      $out[ $slug ] = $label;
+    }
+    return $out;
   }
 
   public static function employment_type( int $user_id ): string {
     $record = get_user_meta( $user_id, 'ghca_acd_employment_type', true );
     $type = is_array( $record ) ? ( $record['type'] ?? '' ) : '';
-    return is_string( $type ) && isset( self::employment_types()[ $type ] ) ? $type : '';
+    // A value removed from the custom list is still the employee's stored value.
+    return is_string( $type ) && 1 === preg_match( '/^[a-z0-9_]{1,64}$/', $type ) ? $type : '';
   }
 
   public static function employment_type_label( int $user_id ): string {
-    return self::employment_types()[ self::employment_type( $user_id ) ] ?? __( 'Not set', 'ghca-acd' );
+    $type = self::employment_type( $user_id );
+    if ( '' === $type ) {
+      return __( 'Not set', 'ghca-acd' );
+    }
+    $types = self::employment_types();
+    if ( isset( $types[ $type ] ) ) {
+      return $types[ $type ];
+    }
+    $record = get_user_meta( $user_id, 'ghca_acd_employment_type', true );
+    $saved = is_array( $record ) && is_string( $record['label'] ?? null ) ? trim( $record['label'] ) : '';
+    return '' !== $saved ? $saved : self::removed_employment_type_label( $type );
+  }
+
+  /** Original label for a removed custom type; humanised slug only as a last resort (casing can't be recovered from a slug). */
+  public static function removed_employment_type_label( string $slug ): string {
+    $kept = get_option( self::OPTION_REMOVED_EMPLOYMENT_TYPE_LABELS, array() );
+    $label = is_array( $kept ) && is_string( $kept[ $slug ] ?? null ) ? trim( sanitize_text_field( $kept[ $slug ] ) ) : '';
+    return '' !== $label ? $label : ucwords( str_replace( '_', ' ', $slug ) );
+  }
+
+  /** Dropdown options for a form: merged list plus the employee's current stored value if it was removed. */
+  public static function employment_type_options( string $current = '', string $current_label = '' ): array {
+    $types = self::employment_types();
+    if ( '' !== $current && ! isset( $types[ $current ] ) ) {
+      $types[ $current ] = '' !== trim( $current_label ) ? trim( $current_label ) : self::removed_employment_type_label( $current );
+    }
+    return $types;
   }
 
   /** @var array<string,mixed>|null */

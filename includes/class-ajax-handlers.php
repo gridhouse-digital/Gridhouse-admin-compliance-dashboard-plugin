@@ -777,7 +777,7 @@ final class GHCA_ACD_AJAX {
             <label class="ghca-acd__edit-label" for="ghca-edit-employment-type"><?php esc_html_e( 'Employment Type', 'ghca-acd' ); ?></label>
             <select class="ghca-acd__edit-input" id="ghca-edit-employment-type" name="employment_type">
               <option value=""><?php esc_html_e( 'Not set', 'ghca-acd' ); ?></option>
-              <?php foreach ( GHCA_ACD_Data_Provider::employment_types() as $value => $label ) : ?>
+              <?php foreach ( GHCA_ACD_Data_Provider::employment_type_options( GHCA_ACD_Data_Provider::employment_type( $user_id ), GHCA_ACD_Data_Provider::employment_type_label( $user_id ) ) as $value => $label ) : ?>
                 <option value="<?php echo esc_attr( $value ); ?>" <?php selected( GHCA_ACD_Data_Provider::employment_type( $user_id ), $value ); ?>><?php echo esc_html( $label ); ?></option>
               <?php endforeach; ?>
             </select>
@@ -1383,6 +1383,15 @@ final class GHCA_ACD_AJAX {
     if ( ! array_key_exists( $role, $manageable_roles ) ) {
       wp_send_json_error( __( 'You do not have permission to assign this role.', 'ghca-acd' ) );
     }
+    if ( array_key_exists( $role, GHCA_ACD_Roles::builtin_employee_roles() ) && ! GHCA_ACD_Roles::builtin_role_is_plugin_owned( $role ) ) {
+      wp_send_json_error( __( 'This role is not available.', 'ghca-acd' ) );
+    }
+    if ( GHCA_ACD_Roles::role_is_retired( $role ) ) {
+      $current_user_roles = $user_id > 0 && get_userdata( $user_id ) ? (array) get_userdata( $user_id )->roles : array();
+      if ( ! in_array( $role, $current_user_roles, true ) ) {
+        wp_send_json_error( __( 'This role has been removed from the available roles.', 'ghca-acd' ) );
+      }
+    }
     $userdata['role'] = $role;
 
     if ( $user_id > 0 ) {
@@ -1450,7 +1459,9 @@ final class GHCA_ACD_AJAX {
       return null;
     }
     $type = $_POST['employment_type'];
-    if ( ! is_string( $type ) || ( '' !== $type && ! isset( GHCA_ACD_Data_Provider::employment_types()[ $type ] ) ) ) {
+    // Known (built-in/custom) values, or the employee's already-stored value (e.g. a custom type since removed).
+    $known = is_string( $type ) && ( isset( GHCA_ACD_Data_Provider::employment_types()[ $type ] ) || ( isset( $_POST['user_id'] ) && is_scalar( $_POST['user_id'] ) && (int) $_POST['user_id'] > 0 && '' !== $type && GHCA_ACD_Data_Provider::employment_type( (int) $_POST['user_id'] ) === $type ) );
+    if ( ! is_string( $type ) || ( '' !== $type && ! $known ) ) {
       return new WP_Error( 'invalid_employment_type', __( 'Invalid Employment Type.', 'ghca-acd' ) );
     }
     return $type;
@@ -1464,6 +1475,7 @@ final class GHCA_ACD_AJAX {
     // Keep the value and last-change attribution together; this is not an archive history.
     $saved = update_user_meta( $user_id, 'ghca_acd_employment_type', array(
       'type' => $type,
+      'label' => GHCA_ACD_Data_Provider::employment_types()[ $type ] ?? '',
       'updated_by' => get_current_user_id(),
       'updated_at' => time(),
     ) );
