@@ -7128,3 +7128,94 @@ body.ghca-acd-page,
 
 /* Certificates panel: assigned figure shown under "Issued" */
 .ghca-acd__cert-stat-sub { margin-top: 2px; font-size: 12px; color: var(--ent-text-muted, #64748b); }
+
+/* ==========================================================================
+   Manage Users: Add / Edit Employee modal (GRI-95 follow-up)
+   Moved out of an inline <style> in class-manage-users-ui.php. The overlay no longer
+   centres an unbounded box: the content is capped to the viewport, the header stays put,
+   the body scrolls, and Cancel / Save are sticky so they can't be pushed off short screens.
+   ========================================================================== */
+.ghca-acd-modal {
+  --ghca-modal-pad: 24px;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.ghca-acd-modal__overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+.ghca-acd-modal__content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 760px;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.ghca-acd-modal__header {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px var(--ghca-modal-pad);
+  border-bottom: 1px solid #e2e8f0;
+}
+.ghca-acd-modal__header h3 { margin: 0; font-size: 18px; }
+.ghca-acd-modal__close {
+  background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;
+}
+.ghca-acd-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--ghca-modal-pad);
+}
+#ghca-acd-user-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.ghca-acd-form-group { margin-bottom: 0; min-width: 0; }
+.ghca-acd-form-group--full { grid-column: 1 / -1; }
+.ghca-acd-form-group label { display: block; margin-bottom: 8px; font-weight: 500; }
+.ghca-acd-form-group input[type="text"],
+.ghca-acd-form-group select,
+.ghca-acd-form-group input[type="email"] {
+  width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 4px;
+}
+.ghca-acd-checkbox-list {
+  max-height: 150px; overflow-y: auto; border: 1px solid #cbd5e1; padding: 12px; border-radius: 4px;
+}
+.ghca-acd-checkbox-list label { display: block; font-weight: normal; margin-bottom: 8px; }
+.ghca-acd-checkbox-list label:last-child { margin-bottom: 0; }
+.ghca-acd-form-actions {
+  grid-column: 1 / -1;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: 8px calc(var(--ghca-modal-pad) * -1) calc(var(--ghca-modal-pad) * -1);
+  padding: 16px var(--ghca-modal-pad);
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+}
+@media (max-width: 640px) {
+  .ghca-acd-modal { --ghca-modal-pad: 16px; padding: 8px; }
+  .ghca-acd-modal__content { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
+  #ghca-acd-user-form { grid-template-columns: 1fr; }
+}
