@@ -20,6 +20,9 @@ mu_check( false !== strpos( $main, "'admin_compliance_manage_users'" ) && false 
 foreach ( array( 'id="ghca-acd-user-modal"', 'id="ghca-acd-user-modal-title"', 'class="ghca-acd-modal__close"', 'class="ghca-acd-modal__body"', 'id="ghca-acd-user-form"', 'id="ghca-acd-user-id"', 'id="ghca-acd-first-name"', 'id="ghca-acd-last-name"', 'id="ghca-acd-email"', 'id="ghca-acd-phone"', 'id="ghca-acd-employment-type"', 'id="ghca-acd-role"', 'class="ghca-acd-checkbox-list"', 'ghca-acd-modal__cancel', 'id="ghca-acd-user-submit"', 'ghca-acd-btn-text' ) as $hook ) {
 	mu_check( false !== strpos( $php, $hook ), "JS/markup hook kept: $hook" );
 }
+mu_check( false === strpos( $php, '$held_types' ) && false === strpos( $php, '$held_roles' ), 'pickers are not built from values held by any listed employee' );
+mu_check( false !== strpos( $php, 'data-employment_type_label=' ) && false !== strpos( $php, 'data-role_label=' ), 'each Edit button carries only its own removed type/role label' );
+mu_check( false !== strpos( $js, "data-ghca-temp" ) && false !== strpos( $js, 'clearTempOptions();' ), 'JS adds a holder\'s removed option temporarily and clears it' );
 mu_check( 1 === preg_match( '/class="ghca-acd-form-group ghca-acd-form-group--full">\s*<label><\?php esc_html_e\( \'LearnDash Groups\'/', $php ), 'the LearnDash Groups field uses the --full modifier (no :has())' );
 $block = substr( $css, (int) strpos( $css, 'Manage Users: Add / Edit Employee modal' ) );
 mu_check( '' !== $block && false === strpos( $block, ':has(' ), 'the modal rules do not rely on :has()' );

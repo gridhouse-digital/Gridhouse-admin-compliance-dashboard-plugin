@@ -158,7 +158,7 @@ final class GHCA_ACD_Settings {
   private static function render_custom_options_section(): void {
     $lists = array(
       'employment_type' => array( __( 'Employment Types', 'ghca-acd' ), GHCA_ACD_Data_Provider::builtin_employment_types(), GHCA_ACD_Data_Provider::custom_employment_types() ),
-      'role'            => array( __( 'Roles', 'ghca-acd' ), GHCA_ACD_Roles::builtin_employee_roles(), GHCA_ACD_Roles::custom_roles() ),
+      'role'            => array( __( 'Roles', 'ghca-acd' ), GHCA_ACD_Roles::active_builtin_employee_roles(), GHCA_ACD_Roles::custom_roles() ),
     );
     $action = esc_url( admin_url( 'admin-post.php' ) );
     ?>

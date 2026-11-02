@@ -26,25 +26,12 @@ final class GHCA_ACD_Manage_Users_UI {
     $all_roles = wp_roles()->roles;
     $editable_roles = GHCA_ACD_Roles::get_manageable_employee_roles();
 
-    // Merged Employment Types / Roles. A removed custom value stays selectable
-    // when a listed employee still holds it, so editing never blanks it.
-    $held_types = array();
-    $held_roles = array();
-    foreach ( $users as $held_id ) {
-      $held_type = GHCA_ACD_Data_Provider::employment_type( (int) $held_id );
-      if ( '' !== $held_type ) {
-        $held_types[ $held_type ] = GHCA_ACD_Data_Provider::employment_type_label( (int) $held_id );
-      }
-      $held_user = get_userdata( (int) $held_id );
-      foreach ( $held_user ? (array) $held_user->roles : array() as $held_role ) {
-        $held_roles[ (string) $held_role ] = true;
-      }
-    }
+    // Add/Edit pickers list ACTIVE values only (built-in + current custom). A removed
+    // custom Employment Type / role is offered solely when editing the employee who
+    // still holds it, via that row's data-*_label attributes (see initManageUsers).
     $type_options = GHCA_ACD_Data_Provider::employment_types();
-    foreach ( $held_types as $held_type => $held_label ) {
-      $type_options = GHCA_ACD_Data_Provider::employment_type_options( (string) $held_type, (string) $held_label ) + $type_options;
-    }
-    $editable_roles = GHCA_ACD_Roles::selectable_employee_roles( $editable_roles, array_keys( $held_roles ) );
+    $manageable_roles = $editable_roles;
+    $editable_roles = GHCA_ACD_Roles::selectable_employee_roles( $editable_roles );
 
     ob_start();
     ?>
@@ -102,6 +89,10 @@ final class GHCA_ACD_Manage_Users_UI {
                   // Get user's primary role
                   $user_role_slug = ! empty( $user->roles ) ? $user->roles[0] : '';
                   $user_role_name = $user_role_slug && isset( $all_roles[ $user_role_slug ] ) ? $all_roles[ $user_role_slug ]['name'] : $user_role_slug;
+                  // Only this employee's own removed values are exposed to their Edit button.
+                  $row_type       = GHCA_ACD_Data_Provider::employment_type( (int) $user_id );
+                  $row_type_label = '' !== $row_type && ! isset( $type_options[ $row_type ] ) ? GHCA_ACD_Data_Provider::employment_type_label( (int) $user_id ) : '';
+                  $row_role_label = '' !== $user_role_slug && isset( $manageable_roles[ $user_role_slug ] ) && ! isset( $editable_roles[ $user_role_slug ] ) ? translate_user_role( $user_role_name ) : '';
                   $can_edit_user = current_user_can( 'manage_options' ) || GHCA_ACD_Roles::delegated_target_is_allowed(
                     get_current_user_id(),
                     (int) $user_id,
@@ -124,8 +115,10 @@ final class GHCA_ACD_Manage_Users_UI {
                         data-last_name="<?php echo esc_attr( $user->last_name ); ?>"
                         data-email="<?php echo esc_attr( $user->user_email ); ?>"
                         data-phone="<?php echo esc_attr( (string) $phone ); ?>"
-                        data-employment_type="<?php echo esc_attr( GHCA_ACD_Data_Provider::employment_type( (int) $user_id ) ); ?>"
+                        data-employment_type="<?php echo esc_attr( $row_type ); ?>"
+                        <?php if ( $row_type_label ) : ?>data-employment_type_label="<?php echo esc_attr( $row_type_label ); ?>"<?php endif; ?>
                         data-role="<?php echo esc_attr( $user_role_slug ); ?>"
+                        <?php if ( $row_role_label ) : ?>data-role_label="<?php echo esc_attr( $row_role_label ); ?>"<?php endif; ?>
                         data-groups="<?php echo esc_attr( wp_json_encode( $user_groups ) ); ?>">
                           <?php esc_html_e( 'Edit', 'ghca-acd' ); ?>
                         </button>

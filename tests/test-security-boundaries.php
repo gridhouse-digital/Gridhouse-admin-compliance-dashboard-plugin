@@ -1,8 +1,14 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 
+if ( ! function_exists( 'update_option' ) ) {
+	function update_option( $name, $value, $autoload = null ) { $GLOBALS['__opts'][ $name ] = $value; return true; }
+}
+if ( ! function_exists( 'get_users' ) ) {
+	function get_users( $args ) { return array(); }
+}
 if ( ! function_exists( 'get_option' ) ) {
-	function get_option( $name, $default = false ) { return $default; }
+	function get_option( $name, $default = false ) { return $GLOBALS['__opts'][ $name ] ?? $default; }
 }
 if ( ! function_exists( 'sanitize_text_field' ) ) {
 	function sanitize_text_field( $value ) { return trim( (string) $value ); }

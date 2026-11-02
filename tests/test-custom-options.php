@@ -45,7 +45,7 @@ ok( ! isset( GHCA_ACD_Data_Provider::custom_employment_types()['bad'] ), 'tamper
 
 // Built-ins cannot be removed.
 ok( ! Opt_Handler::apply_custom_option_change( 'employment_type', 'remove', 'per_diem' )['ok'] && isset( GHCA_ACD_Data_Provider::employment_types()['per_diem'] ), 'built-in type not removable' );
-ok( ! Opt_Handler::apply_custom_option_change( 'role', 'remove', 'clinical_supervisor' )['ok'], 'built-in role not removable' );
+ok( ! Opt_Handler::apply_custom_option_change( 'role', 'remove', 'ghca_clinical_supervisor' )['ok'], 'built-in role not removable' );
 ok( ! Opt_Handler::apply_custom_option_change( 'bogus', 'add', 'x' )['ok'] && ! Opt_Handler::apply_custom_option_change( 'role', 'drop', 'x' )['ok'], 'unknown kind/op rejected' );
 
 // Removed custom type: employee keeps value, label still resolves, edit form still lists it.
@@ -74,10 +74,11 @@ ok( ! Opt_Handler::apply_custom_option_change( 'role', 'add', 'clinical supervis
 ok( ! GHCA_ACD_Roles::role_is_retired( 'ghca_custom_night_nurse' ), 'active role not retired' );
 ok( Opt_Handler::apply_custom_option_change( 'role', 'remove', 'ghca_custom_night_nurse' )['ok'], 'custom role removed' );
 ok( GHCA_ACD_Roles::role_is_retired( 'ghca_custom_night_nurse' ) && get_role( 'ghca_custom_night_nurse' ), 'removed role retired but still registered for holders' );
-$all = array( 'subscriber' => array(), 'ghca_custom_night_nurse' => array(), 'clinical_supervisor' => array() );
+$GLOBALS['opts'][ GHCA_ACD_Roles::OPTION_OWNED_ROLES ] = array_keys( GHCA_ACD_Roles::builtin_employee_roles() ); add_role( 'ghca_clinical_supervisor', 'Clinical Supervisor', array( 'read' => true ) );
+$all = array( 'subscriber' => array(), 'ghca_custom_night_nurse' => array(), 'ghca_clinical_supervisor' => array() );
 ok( ! isset( GHCA_ACD_Roles::selectable_employee_roles( $all, array() )['ghca_custom_night_nurse'] ), 'retired role hidden for new employees' );
 ok( isset( GHCA_ACD_Roles::selectable_employee_roles( $all, array( 'ghca_custom_night_nurse' ) )['ghca_custom_night_nurse'] ), 'retired role shown when an employee holds it' );
-ok( isset( GHCA_ACD_Roles::selectable_employee_roles( $all, array() )['clinical_supervisor'] ), 'built-in role never hidden' );
+ok( isset( GHCA_ACD_Roles::selectable_employee_roles( $all, array() )['ghca_clinical_supervisor'] ), 'built-in role never hidden' );
 ok( Opt_Handler::apply_custom_option_change( 'role', 'add', 'Night Nurse' )['ok'] && ! GHCA_ACD_Roles::role_is_retired( 'ghca_custom_night_nurse' ), 're-adding un-retires' );
 
 // Security wiring (source-level): nonce + capability before any write.

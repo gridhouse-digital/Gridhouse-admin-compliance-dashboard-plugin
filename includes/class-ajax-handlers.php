@@ -1383,6 +1383,9 @@ final class GHCA_ACD_AJAX {
     if ( ! array_key_exists( $role, $manageable_roles ) ) {
       wp_send_json_error( __( 'You do not have permission to assign this role.', 'ghca-acd' ) );
     }
+    if ( array_key_exists( $role, GHCA_ACD_Roles::builtin_employee_roles() ) && ! GHCA_ACD_Roles::builtin_role_is_plugin_owned( $role ) ) {
+      wp_send_json_error( __( 'This role is not available.', 'ghca-acd' ) );
+    }
     if ( GHCA_ACD_Roles::role_is_retired( $role ) ) {
       $current_user_roles = $user_id > 0 && get_userdata( $user_id ) ? (array) get_userdata( $user_id )->roles : array();
       if ( ! in_array( $role, $current_user_roles, true ) ) {

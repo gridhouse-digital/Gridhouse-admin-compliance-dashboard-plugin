@@ -37,12 +37,20 @@ final class GHCA_ACD_Roles {
       );
     }
 
-    // Employee roles (not dashboard/management roles): built-ins plus admin-added customs.
-    foreach ( self::builtin_employee_roles() + self::custom_roles() as $slug => $label ) {
+    // Employee roles (not dashboard/management roles). Built-ins are namespaced and only
+    // ever created here; an existing role with the same slug is never adopted.
+    foreach ( self::builtin_employee_roles() as $slug => $label ) {
+      if ( ! get_role( $slug ) ) {
+        add_role( $slug, $label, array( 'read' => true ) );
+        self::mark_role_owned( $slug );
+      }
+    }
+    foreach ( self::custom_roles() as $slug => $label ) {
       if ( ! get_role( $slug ) ) {
         add_role( $slug, $label, array( 'read' => true ) );
       }
     }
+    self::migrate_legacy_builtin_roles();
 
     foreach ( array( 'administrator', 'group_leader', 'editor', 'ld_instructor' ) as $role_slug ) {
       $role = get_role( $role_slug );
@@ -52,15 +60,71 @@ final class GHCA_ACD_Roles {
     }
   }
 
+  const OPTION_OWNED_ROLES   = 'ghca_acd_owned_roles';
+  const OPTION_ROLE_MIGRATED = 'ghca_acd_builtin_role_slug_migration';
+
+  /** @return array<int,string> Slugs of roles this plugin itself created. */
+  public static function owned_roles(): array {
+    $stored = get_option( self::OPTION_OWNED_ROLES, array() );
+    return is_array( $stored ) ? array_values( array_filter( array_map( 'strval', $stored ), static function ( $slug ) { return 1 === preg_match( '/^[a-z0-9_]{1,64}$/', $slug ); } ) ) : array();
+  }
+
+  private static function mark_role_owned( string $slug ): void {
+    $owned = self::owned_roles();
+    if ( ! in_array( $slug, $owned, true ) ) {
+      $owned[] = $slug;
+      update_option( self::OPTION_OWNED_ROLES, $owned, false );
+    }
+  }
+
+  /** True only for a built-in role this plugin created itself (never a pre-existing role that shares the slug). */
+  public static function builtin_role_is_plugin_owned( string $slug ): bool {
+    return isset( self::builtin_employee_roles()[ $slug ] ) && in_array( $slug, self::owned_roles(), true ) && (bool) get_role( $slug );
+  }
+
+  /** Built-in employee roles that are genuinely the plugin's (what Settings lists and the pickers offer). */
+  public static function active_builtin_employee_roles(): array {
+    return array_filter( self::builtin_employee_roles(), static function ( $label, $slug ) { return self::builtin_role_is_plugin_owned( (string) $slug ); }, ARRAY_FILTER_USE_BOTH );
+  }
+
+  /**
+   * rc.7 builds briefly created these roles un-namespaced. Move employees to the
+   * namespaced role only when the legacy role is plain read-only (identical
+   * privileges, so nothing is escalated); a legacy role with any other capability
+   * is someone else's and is left completely untouched.
+   */
+  public static function migrate_legacy_builtin_roles(): void {
+    if ( get_option( self::OPTION_ROLE_MIGRATED ) ) {
+      return;
+    }
+    foreach ( array( 'clinical_supervisor', 'administrative_support_desk', 'director_of_operations' ) as $legacy ) {
+      $role = get_role( $legacy );
+      $new  = 'ghca_' . $legacy;
+      if ( ! $role || ! self::builtin_role_is_plugin_owned( $new ) ) {
+        continue;
+      }
+      $caps = array_keys( array_filter( (array) $role->capabilities ) );
+      if ( array( 'read' ) !== $caps ) {
+        continue;
+      }
+      foreach ( get_users( array( 'role' => $legacy, 'fields' => 'all' ) ) as $user ) {
+        $user->add_role( $new );
+        $user->remove_role( $legacy );
+      }
+      remove_role( $legacy );
+    }
+    update_option( self::OPTION_ROLE_MIGRATED, 1, false );
+  }
+
   const OPTION_CUSTOM_ROLES  = 'ghca_acd_custom_roles';
   const OPTION_RETIRED_ROLES = 'ghca_acd_retired_roles';
 
   /** Built-in employee roles added by the plugin; always available, never removable from settings. */
   public static function builtin_employee_roles(): array {
     return array(
-      'clinical_supervisor'          => __( 'Clinical Supervisor', 'ghca-acd' ),
-      'administrative_support_desk'  => __( 'Administrative Support Desk', 'ghca-acd' ),
-      'director_of_operations'       => __( 'Director of Operations', 'ghca-acd' ),
+      'ghca_clinical_supervisor'         => __( 'Clinical Supervisor', 'ghca-acd' ),
+      'ghca_administrative_support_desk' => __( 'Administrative Support Desk', 'ghca-acd' ),
+      'ghca_director_of_operations'      => __( 'Director of Operations', 'ghca-acd' ),
     );
   }
 
@@ -88,6 +152,11 @@ final class GHCA_ACD_Roles {
    */
   public static function selectable_employee_roles( array $roles, array $keep = array() ): array {
     foreach ( array_keys( $roles ) as $slug ) {
+      // A role squatting on a reserved built-in slug that the plugin did not create is never offered.
+      if ( isset( self::builtin_employee_roles()[ $slug ] ) && ! self::builtin_role_is_plugin_owned( (string) $slug ) ) {
+        unset( $roles[ $slug ] );
+        continue;
+      }
       if ( self::role_is_retired( (string) $slug ) && ! in_array( (string) $slug, $keep, true ) ) {
         unset( $roles[ $slug ] );
       }
