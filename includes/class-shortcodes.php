@@ -760,7 +760,6 @@ final class GHCA_ACD_Shortcodes {
       array(
         'value' => (int) ( $data['certificates_issued'] ?? 0 ),
         'label' => __( 'Issued', 'ghca-acd' ),
-        'sub'   => sprintf( /* translators: %d: certificate courses assigned */ __( 'of %d certificate courses assigned', 'ghca-acd' ), (int) ( $data['certificates_assigned'] ?? 0 ) ),
         'tone'  => 'success',
       ),
       array(
