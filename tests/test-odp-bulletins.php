@@ -240,7 +240,7 @@ $populated = GHCA_ACD_Redesign::health_from_aggregate( array(
 	'compliance_rate' => 40,
 ) );
 check( 40 === $populated['rate'] && 2 === $populated['slices'][4]['count'] && 'Other' === $populated['slices'][4]['label'], 'Unclassified employees stay visible as Other' );
-check( false !== strpos( $populated['caption'], 'expiring soon' ), 'The percent caption names completed and expiring soon' );
+check( 'Compliant' === $populated['caption'], 'The donut centre label is exactly Compliant' );
 $kpis = GHCA_ACD_Redesign::kpis_from_aggregate( array(
 	'total_employees' => 4,
 	'completed_employees' => 1,
@@ -282,6 +282,8 @@ check( false !== strpos( $overview, 'class="gh-ovp gh-ovp--3"' ) && false !== st
 check( false === strpos( $overview, 'Issued, all time' ) && false !== strpos( $overview, 'Issued for active employees in this view' ), 'Certificates are labeled as the active view' );
 check( false === strpos( $overview, 'Training now' ) && false !== strpos( $overview, 'have not started' ), 'In progress does not say training now' );
 check( false !== strpos( $overview, 'existing compliance rate' ), 'The donut states the existing rate' );
+check( false !== strpos( $overview, '<div class="gh-donut-c"><strong>40%</strong><span>Compliant</span></div>' ), 'The donut centre reads the percent and Compliant only' );
+check( false !== strpos( $overview, 'gh-health-note">The percent is the existing compliance rate: completed plus expiring soon.' ), 'The rate explanation stays below the donut' );
 $css_unscoped = array();
 $css_depth    = 0;
 $css_frames   = 0;

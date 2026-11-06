@@ -36,14 +36,7 @@ final class GHCA_ACD_Redesign {
 		if ( $other > 0 ) {
 			$slices[] = array( 'key' => 'other', 'label' => __( 'Other', 'ghca-acd' ), 'count' => $other, 'tone' => 'neutral' );
 		}
-		$expiring = (int) ( $aggregate['expiring_soon_employees'] ?? 0 );
-		if ( $total < 1 ) {
-			$caption = __( 'No employees in scope', 'ghca-acd' );
-		} elseif ( $expiring > 0 ) {
-			$caption = __( 'completed and expiring soon', 'ghca-acd' );
-		} else {
-			$caption = __( 'compliant', 'ghca-acd' );
-		}
+		$caption = $total < 1 ? __( 'No employees in scope', 'ghca-acd' ) : __( 'Compliant', 'ghca-acd' );
 		return array(
 			'total'   => $total,
 			'rate'    => (int) ( $aggregate['compliance_rate'] ?? 0 ),
