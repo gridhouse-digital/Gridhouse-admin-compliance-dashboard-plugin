@@ -43,6 +43,9 @@ final class GHCA_ACD_Shortcodes {
   }
 
   public static function render_full_dashboard( $atts = array() ): string {
+    if ( class_exists( 'GHCA_ACD_Settings' ) && GHCA_ACD_Settings::ui_redesign_enabled() && class_exists( 'GHCA_ACD_Redesign' ) ) {
+      return GHCA_ACD_Redesign::render_full_dashboard( $atts );
+    }
     $html = self::render_login_gate( $atts )
       . self::render_flash_notices( $atts )
       . GHCA_ACD_Scoping::render_scope_banner( $atts )

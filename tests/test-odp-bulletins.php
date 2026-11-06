@@ -1,0 +1,267 @@
+<?php
+/**
+ * Synthetic ODP bulletin contract tests. No network, no WordPress, no employee records.
+ * Run: php tests/test-odp-bulletins.php
+ */
+if ( ! defined( 'ABSPATH' ) ) {
+	define( 'ABSPATH', __DIR__ . '/' );
+}
+
+$failed = 0;
+$passed = 0;
+function check( $ok, $label ) {
+	if ( ! $ok ) {
+		fwrite( STDERR, "FAIL: $label\n" );
+		$GLOBALS['failed']++;
+		return;
+	}
+	$GLOBALS['passed']++;
+}
+function __( $text, $domain = '' ) { return $text; }
+function esc_html__( $text, $domain = '' ) { return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ); }
+function esc_attr__( $text, $domain = '' ) { return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ); }
+function esc_html( $text ) { return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ); }
+function esc_attr( $text ) { return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ); }
+function esc_url( $url, $protocols = null ) {
+	$url = (string) $url;
+	if ( preg_match( '/^\s*javascript:/i', $url ) || preg_match( '/^\s*data:/i', $url ) ) {
+		return '';
+	}
+	return htmlspecialchars( $url, ENT_QUOTES, 'UTF-8' );
+}
+
+require __DIR__ . '/../includes/odp/class-odp-contract.php';
+require __DIR__ . '/../includes/odp/class-odp-feed.php';
+require __DIR__ . '/../includes/odp/class-odp-access.php';
+require __DIR__ . '/../includes/odp/class-odp-ui.php';
+require __DIR__ . '/../includes/class-redesign.php';
+
+$now = strtotime( '2026-11-06T12:00:00Z' );
+
+function bulletin( $overrides = array() ) {
+	$item = array(
+		'id'           => 'synthetic-notice',
+		'headline'     => 'Synthetic headline',
+		'preview'      => 'Synthetic preview only',
+		'body'         => "First paragraph of the synthetic body.\n\nSecond paragraph with Tom & Jerry.",
+		'published_at' => '2026-11-01T15:00:00Z',
+		'expires_at'   => '2026-12-01T15:00:00Z',
+		'audience'     => 'both',
+		'source_url'   => 'https://example.test/source',
+	);
+	return array_merge( $item, $overrides );
+}
+function feed( $rows, $schema = 1, $updated = '2026-11-06T12:00:00Z' ) {
+	return array(
+		'schema_version' => $schema,
+		'updated_at'     => $updated,
+		'bulletins'      => $rows,
+	);
+}
+function transport_of( $status, $body ) {
+	return static function () use ( $status, $body ) {
+		return array( 'status' => $status, 'body' => $body );
+	};
+}
+
+$valid = GHCA_ODP_Contract::validate( feed( array( bulletin() ) ) );
+check( ! empty( $valid['ok'] ) && 1 === count( $valid['feed']['bulletins'] ), 'Valid published bulletin is kept' );
+check( GHCA_ODP_Contract::FEED_URL === 'https://gridhouse-odp-bulletins.gridhouse-digital10.workers.dev', 'Feed URL is the public worker' );
+check( ! GHCA_ODP_Contract::is_allowlisted( 'https://evil.example/feed' ), 'Other hosts are not allowlisted' );
+
+$empty = GHCA_ODP_Contract::validate( feed( array() ) );
+check( ! empty( $empty['ok'] ) && array() === $empty['feed']['bulletins'], 'Empty bulletin list is a valid feed' );
+
+$unknown = GHCA_ODP_Contract::validate( feed( array(), 2 ) );
+check( empty( $unknown['ok'] ) && 'unknown_schema' === $unknown['code'], 'Unknown schema is rejected' );
+$string_schema = GHCA_ODP_Contract::validate( array( 'schema_version' => '1', 'updated_at' => '2026-11-06T12:00:00Z', 'bulletins' => array() ) );
+check( empty( $string_schema['ok'] ) && 'unknown_schema' === $string_schema['code'], 'String schema version is not version 1' );
+check( empty( GHCA_ODP_Contract::validate( array( 'bulletins' => array() ) )['ok'] ), 'Missing envelope is malformed' );
+check( empty( GHCA_ODP_Contract::validate( '[]' )['ok'] ), 'Non-object payload is malformed' );
+
+$draft = GHCA_ODP_Contract::validate( feed( array(
+	bulletin(),
+	bulletin( array( 'id' => 'synthetic-draft', 'status' => 'draft', 'headline' => 'Draft must not ship' ) ),
+) ) );
+check( ! empty( $draft['ok'] ) && 1 === count( $draft['feed']['bulletins'] ) && 'synthetic-notice' === $draft['feed']['bulletins'][0]['id'], 'Draft rows are dropped' );
+
+$html_row = GHCA_ODP_Contract::validate( feed( array( bulletin( array( 'headline' => 'Hello <script>' ) ) ) ) );
+check( empty( $html_row['ok'] ), 'Angle brackets reject the feed' );
+check( empty( GHCA_ODP_Contract::validate( feed( array( bulletin(), bulletin() ) ) )['ok'] ), 'Duplicate ids reject the feed' );
+check( empty( GHCA_ODP_Contract::validate( feed( array( bulletin( array( 'source_url' => 'javascript:alert(1)' ) ) ) ) )['ok'] ), 'javascript source URLs reject the feed' );
+check( empty( GHCA_ODP_Contract::validate( feed( array( bulletin( array( 'source_url' => 'https://user:secret@example.test/a' ) ) ) ) )['ok'] ), 'Credential URLs reject the feed' );
+check( ! empty( GHCA_ODP_Contract::validate( feed( array( bulletin( array( 'source_url' => null ) ) ) ) )['ok'] ), 'Missing source is allowed' );
+
+$future = GHCA_ODP_Contract::validate( feed( array( bulletin( array( 'id' => 'synthetic-future', 'published_at' => '2026-12-01T00:00:00Z', 'expires_at' => null ) ) ) ) );
+check( ! empty( $future['ok'] ) && 'scheduled' === GHCA_ODP_Contract::classify( $future['feed'], 'synthetic-future', $now ), 'Future rows stay scheduled' );
+check( array() === GHCA_ODP_Contract::select( $future['feed'], $now, 'admin' ), 'Future rows are hidden from the list' );
+
+$expired = GHCA_ODP_Contract::validate( feed( array( bulletin( array( 'id' => 'synthetic-expired', 'expires_at' => '2026-11-02T00:00:00Z' ) ) ) ) );
+check( 'expired' === GHCA_ODP_Contract::classify( $expired['feed'], 'synthetic-expired', $now ), 'Expired rows are classified' );
+check( array() === GHCA_ODP_Contract::select( $expired['feed'], $now, 'employee' ), 'Expired rows are hidden from the list' );
+check( 'unknown' === GHCA_ODP_Contract::classify( $valid['feed'], 'missing-id', $now ), 'Unknown ids stay unknown' );
+
+$mixed = GHCA_ODP_Contract::validate( feed( array(
+	bulletin( array( 'id' => 'for-employees', 'audience' => 'employee', 'headline' => 'Employee only synthetic' ) ),
+	bulletin( array( 'id' => 'for-leads', 'audience' => 'agency_lead', 'headline' => 'Agency only synthetic' ) ),
+	bulletin( array( 'id' => 'for-both', 'audience' => 'both', 'headline' => 'Shared synthetic' ) ),
+) ) );
+$admin_items = GHCA_ODP_Contract::select( $mixed['feed'], $now, 'admin' );
+$employee_items = GHCA_ODP_Contract::select( $mixed['feed'], $now, 'employee' );
+$admin_ids = array_column( $admin_items, 'id' );
+$employee_ids = array_column( $employee_items, 'id' );
+check( array( 'for-leads', 'for-both' ) === $admin_ids || ( in_array( 'for-leads', $admin_ids, true ) && in_array( 'for-both', $admin_ids, true ) && ! in_array( 'for-employees', $admin_ids, true ) ), 'Admin list omits employee-only bulletins' );
+check( in_array( 'for-employees', $employee_ids, true ) && in_array( 'for-both', $employee_ids, true ) && ! in_array( 'for-leads', $employee_ids, true ), 'Employee list omits agency-only bulletins' );
+
+$parts = GHCA_ODP_Contract::paragraphs( "First paragraph of the synthetic body.\n\nSecond paragraph with Tom & Jerry." );
+check( 2 === count( $parts ) && false !== strpos( $parts[1], 'Tom & Jerry' ), 'Body splits on blank lines and stays plain text' );
+$body_html = GHCA_ODP_UI::body_html( "First paragraph of the synthetic body.\n\nSecond paragraph with Tom & Jerry." );
+check( false !== strpos( $body_html, 'Tom &amp; Jerry' ) && false === strpos( $body_html, '<script' ), 'Body HTML escapes ampersands and adds no script' );
+check( '' === GHCA_ODP_UI::source_link( 'javascript:alert(1)' ), 'Renderer drops unsafe source URLs' );
+check( false !== strpos( GHCA_ODP_UI::source_link( 'https://example.test/source' ), 'Read source' ), 'HTTPS source becomes an explicit link' );
+$payload = GHCA_ODP_UI::payload_script( array( 'payload' => array( 'bulletins' => array( 'x' => array( 'body' => '</script><script>alert(1)</script>' ) ) ) ) );
+check( false === strpos( $payload, '</script><script>' ), 'JSON payload cannot close the script tag' );
+
+$good_body = json_encode( feed( array( bulletin() ) ) );
+$fresh = GHCA_ODP_Feed::read( $now, null, transport_of( 200, $good_body ), GHCA_ODP_Contract::FEED_URL );
+check( 'fresh' === $fresh['state'] && ! $fresh['stale'] && is_array( $fresh['cache_write'] ), 'A good response is fresh and stored' );
+$cached_read = GHCA_ODP_Feed::read( $now + 10, $fresh['cache_write'], transport_of( 500, 'nope' ), GHCA_ODP_Contract::FEED_URL );
+check( 'fresh' === $cached_read['state'] && null === $cached_read['cache_write'], 'A fresh cache is served inside 30 minutes without rewrite' );
+
+$stale_cache = $fresh['cache_write'];
+$stale_cache['fetched_at'] = $now - 1801;
+$kept = GHCA_ODP_Feed::read( $now, $stale_cache, transport_of( 200, json_encode( feed( array( bulletin( array( 'headline' => 'Replacement' ) ) ), 2 ) ) ), GHCA_ODP_Contract::FEED_URL );
+check( 'cached' === $kept['state'] && $kept['stale'] && 'unknown_schema' === $kept['error'] && 'Synthetic headline' === $kept['feed']['bulletins'][0]['headline'] && null === $kept['cache_write'], 'Unknown schema keeps the last good feed' );
+$http_error = GHCA_ODP_Feed::read( $now, $stale_cache, transport_of( 500, 'upstream' ), GHCA_ODP_Contract::FEED_URL );
+check( 'cached' === $http_error['state'] && 'http_500' === $http_error['error'] && null === $http_error['cache_write'], 'HTTP errors keep the last good feed' );
+$offline = GHCA_ODP_Feed::read( $now, $stale_cache, static function () { throw new RuntimeException( 'down' ); }, GHCA_ODP_Contract::FEED_URL );
+check( 'offline' === $offline['state'] && $offline['stale'] && 'Synthetic headline' === $offline['feed']['bulletins'][0]['headline'], 'Network failure is offline and keeps the last good feed' );
+$down = GHCA_ODP_Feed::read( $now, null, static function () { throw new RuntimeException( 'down' ); }, GHCA_ODP_Contract::FEED_URL );
+check( 'unavailable' === $down['state'] && null === $down['feed'], 'Network failure with no cache is unavailable' );
+$malformed = GHCA_ODP_Feed::read( $now, $stale_cache, transport_of( 200, '{not-json' ), GHCA_ODP_Contract::FEED_URL );
+check( 'cached' === $malformed['state'] && 'malformed' === $malformed['error'], 'Malformed JSON does not replace the cache' );
+$huge = GHCA_ODP_Feed::read( $now, null, transport_of( 200, str_repeat( 'a', GHCA_ODP_Feed::MAX_BYTES + 1 ) ), GHCA_ODP_Contract::FEED_URL );
+check( 'unavailable' === $huge['state'] && 'too_large' === $huge['error'], 'Oversized responses are not stored' );
+
+$called = false;
+$blocked = GHCA_ODP_Feed::read( $now, null, static function () use ( &$called ) { $called = true; throw new RuntimeException( 'no' ); }, 'https://sheets.googleapis.com/v4/spreadsheets/private' );
+check( ! $called && 'unavailable' === $blocked['state'] && 'url_not_allowlisted' === $blocked['error'], 'Non-allowlisted URLs are not requested' );
+
+$cleared = GHCA_ODP_Feed::read( $now, $stale_cache, transport_of( 200, json_encode( feed( array() ) ) ), GHCA_ODP_Contract::FEED_URL );
+check( 'empty' === $cleared['state'] && array() === $cleared['feed']['bulletins'] && is_array( $cleared['cache_write'] ), 'A valid empty feed replaces the previous cache' );
+
+$admin_view = GHCA_ODP_Feed::present( array( 'state' => 'fresh', 'stale' => false, 'error' => null, 'fetched_at' => $now, 'feed' => $mixed['feed'], 'cache_write' => null ), $now, 'admin' );
+$employee_view = GHCA_ODP_Feed::present( array( 'state' => 'fresh', 'stale' => false, 'error' => null, 'fetched_at' => $now, 'feed' => $mixed['feed'], 'cache_write' => null ), $now, 'employee' );
+check( array( 'agency_lead', 'both' ) === $admin_view['audience_filter'] && false === strpos( json_encode( $admin_view['bulletins'] ), 'Employee only synthetic' ), 'Admin presentation cannot leak the employee-only bulletin' );
+check( array( 'employee', 'both' ) === $employee_view['audience_filter'] && false === strpos( json_encode( $employee_view['bulletins'] ), 'Agency only synthetic' ), 'Employee presentation cannot leak the agency-only bulletin' );
+
+$auth = GHCA_ODP_Access::authorize_list( false, true, 'admin' );
+check( 401 === $auth['status'], 'Logged-out list is unauthorized' );
+check( 403 === GHCA_ODP_Access::authorize_list( true, false, 'admin' )['status'], 'Employee capability cannot request the admin list' );
+check( 200 === GHCA_ODP_Access::authorize_list( true, false, 'employee' )['status'], 'A logged-in employee can request the employee list' );
+check( 400 === GHCA_ODP_Access::authorize_list( true, true, 'public' )['status'], 'Unknown context is rejected' );
+check( 401 === GHCA_ODP_Access::authorize_item( false )['status'] && 200 === GHCA_ODP_Access::authorize_item( true )['status'], 'Single bulletin requires login only' );
+check( 'library' === GHCA_ODP_Routes::match( '/odp-bulletins/' )['screen'], 'Library route matches' );
+check( 'good-id' === GHCA_ODP_Routes::match( '/odp-bulletins/good-id' )['id'], 'Stable id route matches' );
+check( '' === GHCA_ODP_Routes::match( '/odp-bulletins/Not_Valid' )['screen'], 'Unsafe ids do not match' );
+check( '' === GHCA_ODP_Routes::match( '/odp-bulletins/../../wp-admin' )['screen'], 'Traversal does not match' );
+check( '' === GHCA_ODP_Routes::match( '/employee-dashboard/odp-bulletins' )['screen'], 'Employee dashboard paths are not claimed' );
+check( GHCA_ODP_Routes::owns_routes( 'ghca-acd' ) && ! GHCA_ODP_Routes::owns_routes( 'employee-plugin' ), 'Route owner stays with this plugin unless filtered' );
+check( isset( GHCA_ODP_Routes::rules()['^odp-bulletins/?$'] ), 'Rewrite rules cover the library' );
+
+$library = GHCA_ODP_UI::library( array(
+	'state' => 'fresh',
+	'context' => 'admin',
+	'kicker' => 'Agency bulletins',
+	'action' => 'https://example.test/odp-bulletins/',
+	'query' => '',
+	'items' => array( array(
+		'id' => 'synthetic-notice',
+		'headline' => 'Synthetic headline',
+		'preview' => 'Synthetic preview only',
+		'published_at' => '2026-11-01T15:00:00Z',
+		'date_label' => 'Nov 1, 2026',
+		'audience_label' => 'Employees and agency leads',
+		'url' => 'https://example.test/odp-bulletins/synthetic-notice/',
+	) ),
+	'total' => 1,
+	'from' => 1,
+	'to' => 1,
+	'prev_url' => '',
+	'next_url' => '',
+	'payload' => array( 'bulletins' => array() ),
+) );
+check( false !== strpos( $library, 'Synthetic preview only' ) && false === strpos( $library, 'First paragraph' ), 'Library shows preview, not the full body' );
+check( false === strpos( $library, 'NEW, proposed' ) && false === strpos( $library, 'Sample bulletin' ), 'Library has no sample banner' );
+$single = GHCA_ODP_UI::single( array(
+	'result' => 'current',
+	'library_url' => 'https://example.test/odp-bulletins/',
+	'kicker' => 'ODP Bulletin',
+	'audience_note' => '',
+	'item' => array(
+		'headline' => 'Synthetic headline',
+		'body' => "First paragraph of the synthetic body.\n\nSecond paragraph with Tom & Jerry.",
+		'published_at' => '2026-11-01T15:00:00Z',
+		'date_label' => 'Nov 1, 2026',
+		'audience_label' => 'Employees and agency leads',
+		'url' => 'https://example.test/odp-bulletins/synthetic-notice/',
+		'source_url' => 'https://example.test/source',
+	),
+) );
+check( false !== strpos( $single, 'First paragraph of the synthetic body.' ) && false !== strpos( $single, GHCA_ODP_Contract::DISCLAIMER ) && false !== strpos( $single, 'Read source' ), 'Full page uses the body, disclaimer, and source link' );
+$gone = GHCA_ODP_UI::single( array( 'result' => 'expired', 'library_url' => 'https://example.test/odp-bulletins/', 'kicker' => 'ODP Bulletin', 'item' => null, 'audience_note' => '' ) );
+check( false !== strpos( $gone, 'no longer available' ) && false === strpos( $gone, 'First paragraph' ), 'Expired id does not render the body' );
+$empty_library = GHCA_ODP_UI::library( array( 'state' => 'empty', 'context' => 'employee', 'kicker' => 'Employee bulletins', 'action' => '/odp-bulletins/', 'query' => '', 'items' => array(), 'total' => 0, 'from' => 0, 'to' => 0, 'prev_url' => '', 'next_url' => '', 'payload' => array() ) );
+check( false !== strpos( $empty_library, 'No ODP bulletins right now.' ) && false === strpos( $empty_library, 'Sample' ), 'Genuine empty state has no sample content' );
+
+$health = GHCA_ACD_Redesign::health_from_aggregate( array( 'total_employees' => 0, 'compliance_rate' => 0 ) );
+check( '—' === $health['center'] && false === strpos( $health['center'], '30' ), 'Empty scope is not a fake compliance percent' );
+$populated = GHCA_ACD_Redesign::health_from_aggregate( array(
+	'total_employees' => 10,
+	'completed_employees' => 3,
+	'expiring_soon_employees' => 1,
+	'in_progress_employees' => 2,
+	'overdue_employees' => 2,
+	'compliance_rate' => 40,
+) );
+check( 40 === $populated['rate'] && 2 === $populated['slices'][4]['count'] && 'Other' === $populated['slices'][4]['label'], 'Unclassified employees stay visible as Other' );
+$kpis = GHCA_ACD_Redesign::kpis_from_aggregate( array(
+	'total_employees' => 4,
+	'completed_employees' => 1,
+	'expiring_soon_employees' => 1,
+	'in_progress_employees' => 1,
+	'overdue_employees' => 1,
+	'compliance_rate' => 50,
+	'certificates_issued' => 7,
+), 6 );
+check( '6' === $kpis[1]['value'] && '50%' === $kpis[5]['value'] && false !== strpos( $kpis[5]['sub'], '2 of 4 employees' ), 'KPIs use the existing rate and tracked course count' );
+$sorted = GHCA_ACD_Redesign::sort_groups( array(
+	array( 'label' => 'Low', 'risk' => 'low', 'rate' => 100, 'overdue' => 0, 'employees' => 1 ),
+	array( 'label' => 'High', 'risk' => 'high', 'rate' => 10, 'overdue' => 2, 'employees' => 2 ),
+) );
+check( 'High' === $sorted[0]['label'] && '2 overdue' === GHCA_ACD_Redesign::group_chip( $sorted[0] )['label'], 'Groups sort by existing risk and show the overdue count' );
+check( 'On track' === GHCA_ACD_Redesign::group_chip( array( 'overdue' => 0, 'rate' => 90 ) )['label'], 'Low-risk groups without overdue read On track' );
+$overview = GHCA_ACD_Redesign::render_from_model( array(
+	'theme' => 'gridhouse',
+	'scope' => 'Scope: all 1 groups',
+	'as_of' => 'As of today, 1:00 PM',
+	'active' => '4 active employees',
+	'actions' => array( array( 'label' => 'View reports', 'url' => 'https://example.test/dashboard#ghca-tab-reports', 'variant' => 'primary', 'tab' => 'ghca-tab-reports' ) ),
+	'tabs' => array( array( 'id' => 'ghca-tab-overview', 'label' => 'Overview', 'badge' => null, 'active' => true ) ),
+	'kpis' => $kpis,
+	'health' => $populated,
+	'groups' => array( array( 'label' => '<script>alert(1)</script>', 'risk' => 'high', 'rate' => 10, 'overdue' => 1, 'employees' => 2 ) ),
+	'certificates' => array( 'issued' => 7, 'recent' => 1, 'missing' => 1 ),
+	'bulletin_html' => '',
+	'announcements_html' => '',
+	'panels' => array(),
+) );
+check( false !== strpos( $overview, '&lt;script&gt;alert(1)&lt;/script&gt;' ) && false === strpos( $overview, '<script>alert(1)</script>' ), 'Group labels are escaped' );
+check( false === strpos( $overview, 'NEW, proposed' ) && false === strpos( $overview, 'Pending issuance' ), 'Overview does not invent sample banners or unsupported certificate states' );
+check( false !== strpos( $overview, 'Course completions · last 30 days' ), 'Recent completions stay labeled as completions' );
+
+$page = GHCA_ODP_Contract::paginate( $admin_items, 'shared', 1, 9 );
+check( 1 === $page['total'] && 'for-both' === $page['items'][0]['id'], 'Search matches the shared synthetic bulletin' );
+
+echo "PASS: {$passed} ODP bulletin and overview checks\n";
+exit( $failed > 0 ? 1 : 0 );
