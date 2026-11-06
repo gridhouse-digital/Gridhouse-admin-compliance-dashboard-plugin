@@ -187,6 +187,11 @@ final class GHCA_Admin_Compliance_Dashboard {
     if ( class_exists( 'GHCA_ACD_Settings' ) && GHCA_ACD_Settings::ui_redesign_enabled() ) {
       wp_enqueue_style( 'ghca-redesign', plugin_dir_url( __FILE__ ) . 'assets/gh-redesign.css', array( 'ghca-admin-dashboard' ), self::VERSION . '-' . (string) filemtime( plugin_dir_path( __FILE__ ) . 'assets/gh-redesign.css' ) );
       wp_enqueue_script( 'ghca-bulletins', plugin_dir_url( __FILE__ ) . 'assets/gh-bulletins.js', array(), self::VERSION . '-' . (string) filemtime( plugin_dir_path( __FILE__ ) . 'assets/gh-bulletins.js' ), true );
+      wp_localize_script( 'ghca-bulletins', 'ghcaOdp', array(
+        'restRoot' => rest_url( 'ghca-odp/v1/' ),
+        'nonce'    => wp_create_nonce( 'wp_rest' ),
+        'context'  => GHCA_ODP_Access::context_for( GHCA_ACD_Roles::user_can_view() ),
+      ) );
     }
   }
 

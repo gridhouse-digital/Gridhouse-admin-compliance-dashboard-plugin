@@ -32,8 +32,11 @@ final class GHCA_ODP_UI {
 		if ( 'scheduled' === $result ) {
 			return __( 'This bulletin is not available yet.', 'ghca-acd' );
 		}
-		if ( 'unavailable' === $result ) {
-			return __( 'ODP bulletins are unavailable right now, so this id cannot be confirmed.', 'ghca-acd' );
+		if ( 'unavailable' === $result || 'unconfirmed' === $result ) {
+			return __( 'This id cannot be confirmed until the bulletin feed refreshes. The saved copy does not contain it.', 'ghca-acd' );
+		}
+		if ( 'not_in_view' === $result ) {
+			return __( 'This bulletin is not included in this view.', 'ghca-acd' );
 		}
 		return __( 'No bulletin with this id is in the current feed.', 'ghca-acd' );
 	}
@@ -121,7 +124,15 @@ final class GHCA_ODP_UI {
 		$html  .= '<p><a href="' . esc_url( (string) $model['library_url'] ) . '">' . esc_html__( 'All bulletins', 'ghca-acd' ) . '</a></p></header>';
 		if ( 'current' !== $result ) {
 			$html .= '<h1>' . esc_html__( 'ODP Bulletin', 'ghca-acd' ) . '</h1>';
-			$html .= '<p class="gh-odp-empty" role="status">' . esc_html( self::result_message( $result ) ) . '</p>';
+			$message = self::result_message( $result );
+			if ( 'not_in_view' === $result && ! empty( $model['audience_label'] ) ) {
+				$message = sprintf(
+					/* translators: %s: audience label such as Agency leads */
+					__( 'This bulletin is labeled for %s and is not included in this view. The label is not a permission, and the text is not shown here.', 'ghca-acd' ),
+					(string) $model['audience_label']
+				);
+			}
+			$html .= '<p class="gh-odp-empty" role="status">' . esc_html( $message ) . '</p>';
 			return $html;
 		}
 		$item  = $model['item'];
@@ -184,10 +195,17 @@ final class GHCA_ODP_UI {
 		$html = '<!DOCTYPE html><html lang="' . esc_attr( (string) ( $model['lang'] ?? 'en' ) ) . '"><head><meta charset="utf-8">';
 		$html .= '<meta name="viewport" content="width=device-width, initial-scale=1">';
 		$html .= '<meta name="robots" content="noindex">';
+		if ( ! empty( $model['rest_nonce'] ) ) {
+			$html .= '<meta name="gh-odp-rest-nonce" content="' . esc_attr( (string) $model['rest_nonce'] ) . '">';
+		}
+		if ( ! empty( $model['rest_root'] ) ) {
+			$html .= '<meta name="gh-odp-rest-root" content="' . esc_attr( (string) $model['rest_root'] ) . '">';
+		}
 		$html .= '<title>' . esc_html( (string) $model['title'] ) . '</title>';
 		$html .= '<link rel="stylesheet" href="' . esc_url( (string) $model['css'] ) . '">';
 		$html .= '</head><body class="gh-ui-body"><a class="gh-skip" href="#gh-odp-main">' . esc_html__( 'Skip to content', 'ghca-acd' ) . '</a>';
-		$html .= '<div class="gh-ui gh-ui--' . esc_attr( (string) $model['context'] ) . '" data-gh-theme="' . esc_attr( (string) $model['theme'] ) . '">';
+		$style = (string) ( $model['brand_style'] ?? '' );
+		$html .= '<div class="gh-ui gh-ui--' . esc_attr( (string) $model['context'] ) . '" data-gh-theme="' . esc_attr( (string) $model['theme'] ) . '"' . ( '' !== $style ? ' style="' . esc_attr( $style ) . '"' : '' ) . '">';
 		$html .= '<header class="gh-ui-bar"><a href="' . esc_url( (string) $model['home_url'] ) . '">' . esc_html( (string) $model['home_label'] ) . '</a>';
 		$html .= '<span>' . esc_html( (string) $model['context_label'] ) . '</span></header>';
 		$html .= '<main id="gh-odp-main">' . $body . '</main>';

@@ -18,7 +18,7 @@ final class GHCA_ODP_Feed {
 	 * @param callable $transport function (string $url, int $timeout): array{status:int,body:string}
 	 * @return array{state:string,stale:bool,error:?string,fetched_at:?int,feed:?array,cache_write:?array}
 	 */
-	public static function read( int $now, ?array $cache, callable $transport, string $url, int $ttl = self::TTL ): array {
+	public static function read( int $now, ?array $cache, callable $transport, string $url, int $ttl = self::TTL, bool $refresh = true ): array {
 		if ( ! GHCA_ODP_Contract::is_allowlisted( $url ) ) {
 			return self::unavailable( 'url_not_allowlisted' );
 		}
@@ -26,6 +26,9 @@ final class GHCA_ODP_Feed {
 		$cached = self::usable_cache( $cache );
 		if ( null !== $cached && $ttl > 0 && ( $now - $cached['fetched_at'] ) >= 0 && ( $now - $cached['fetched_at'] ) < $ttl ) {
 			return self::success( $cached['feed'], $cached['fetched_at'], $now, false, null );
+		}
+		if ( ! $refresh && null !== $cached ) {
+			return self::preserve( $cached, 'cached', 'refresh_deferred' );
 		}
 
 		try {

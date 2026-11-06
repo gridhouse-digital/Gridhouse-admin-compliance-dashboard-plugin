@@ -6,7 +6,7 @@ Opt-in overview and the ODP bulletin reader. Training math, audit records, capab
 
 - Scoped tokens in `assets/gh-redesign.css` and a reusable copy in `design-references/tokens.css`.
 - Settings checkbox `ghca_acd_ui_redesign`, default off. The previous overview remains the default.
-- When on, the admin overview uses the existing aggregate: employee counts, compliance rate `(completed + expiring soon) / employees`, tracked course count, certificate issued/missing figures, 30-day course completions, and group rows from `GHCA_ACD_Scoping::build_group_summary_rows()`.
+- When on, the admin overview uses the existing aggregate. The donut percent is that same rate (completed plus expiring soon). Certificate figures are labeled for active employees in the view. Group rows still come from `GHCA_ACD_Scoping::build_group_summary_rows()`.
 - Header actions are the existing Sync, Export, Manage users, and View reports targets.
 - Other tabs still render the current tables, audit UI, and external-training review. They are not redesigned.
 - Bulletin ticker, drawer, library, and full page. See `docs/odp-bulletins.md`.

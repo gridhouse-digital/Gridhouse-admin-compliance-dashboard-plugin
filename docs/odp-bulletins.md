@@ -10,48 +10,49 @@ Schema 1 item fields, after the worker has already dropped drafts, future rows, 
 
 `id`, `headline`, `preview`, `body`, `published_at`, `expires_at`, `audience`, `source_url`
 
-`audience` is `employee`, `agency_lead`, or `both`. It is a label for which list shows the summary. It is not a permission. Logged-in page rules still apply.
+`audience` is `employee`, `agency_lead`, or `both`. It chooses which logged-in view lists the summary. It is not a secrecy boundary and it does not grant access. The viewer’s context comes from capabilities already on the account: `GHCA_ACD_Roles::user_can_view()` is the agency view (`agency_lead` and `both`). Any other logged-in account is the employee view (`employee` and `both`). A request cannot pick the other context.
 
 ## Consumer API
 
 In-process, for a later employee plugin in the same site:
 
-- `GHCA_ODP_Bulletins::snapshot( 'employee' )` or `'admin'`
-- `GHCA_ODP_Bulletins::lookup( $id )`
+- `GHCA_ODP_Bulletins::snapshot( $context )` with `employee` or `admin` chosen by the caller’s own capability check
+- `GHCA_ODP_Bulletins::lookup( $id, $context )`
 
-REST, cookie session, `Cache-Control: private, no-store`:
+REST responses send `Cache-Control: private, no-store`. Browser calls that use the login cookie must also send `X-WP-Nonce` (the `wp_rest` nonce). Without that nonce WordPress treats the cookie as logged out. The nonce is `ghcaOdp.nonce` on the redesigned dashboard and `<meta name="gh-odp-rest-nonce">` on bulletin pages. `ghcaOdp.context` is the trusted context. Do not send a different one.
 
-- `GET /wp-json/ghca-odp/v1/bulletins?context=employee`
-- `GET /wp-json/ghca-odp/v1/bulletins?context=admin` (requires the compliance dashboard capability)
-- `GET /wp-json/ghca-odp/v1/bulletins/{id}` (any logged-in user)
+- `GET /wp-json/ghca-odp/v1/bulletins?context=employee` only for accounts that are not dashboard viewers
+- `GET /wp-json/ghca-odp/v1/bulletins?context=admin` only for accounts that can view the compliance dashboard
+- `GET /wp-json/ghca-odp/v1/bulletins/{id}` uses the same trusted context. A current item for the other audience returns `not_in_view` and no text. An id missing from a stale saved feed returns `unconfirmed` (503), not a claim that it does not exist.
 
 List responses contain only that context’s audience filter. Do not store them in a shared cache. The server cache stores the full validated feed in the option `ghca_odp_feed_cache` and filters per request.
 
 The employee plugin should not register `/odp-bulletins`. This plugin owns those routes. Return something other than `ghca-acd` from `ghca_odp_route_owner` to opt out. There is no employee-plugin repository in this workspace. Existing hooks that stay as they are: page slug `employee-dashboard`, branding selector `.ghca-ecd`, and `ghca_employee_support_email`.
 
+## Cache
+
+- Fresh copy (under 30 minutes): no network call.
+- Stale copy: the page renders the saved feed immediately and schedules one cron refresh (`ghca_odp_refresh_feed`) via `spawn_cron()`, which does not wait on the worker. If cron is disabled, the saved feed stays until a cold read replaces it.
+- No saved copy: the request waits, up to 8 seconds, because there is nothing else to show. That first view is the cold-cache cost.
+- Invalid JSON, unknown `schema_version`, oversize bodies, and HTTP errors do not replace the last valid feed.
+- A valid empty feed does replace it. Empty and unavailable stay different. A stale unknown id is unconfirmed, not missing.
+
 ## Behavior
 
-- Fetch timeout 8 seconds, body cap 512 KB, logical cache 30 minutes.
-- Invalid JSON, unknown `schema_version`, oversize bodies, and HTTP errors do not replace the last valid feed.
-- A valid empty feed does replace it. That is a real empty state.
-- Network failure with a saved feed is `offline`. A bad payload with a saved feed is `cached`. No saved feed is `unavailable`.
+- Body cap 512 KB. Redirects are not followed. The URL must be the public worker allowlist.
 - Dates are checked again at render. Expired and not-yet-available ids do not show the body.
-- Direct links still show a current bulletin when its label is for the other list, with a visible note. Library and ticker stay filtered.
-- `source_url` is an explicit “Read source” link, http(s) only, and never followed automatically.
-- Body and preview are plain text. The same body string is used for the drawer and the full page.
-- Disclaimer on every bulletin view: “This is a plain-language summary from Gridhouse, not an official ODP publication.”
+- The other audience does not show the body on the full page or the single REST response.
+- `source_url` is an explicit “Read source” link, http(s) only.
+- Body and preview are plain text. The drawer and the full page use the same body.
+- Routes are the path `/odp-bulletins/` and `/odp-bulletins/{id}/` only. A query parameter on another URL does not open them.
+- Disclaimer: “This is a plain-language summary from Gridhouse, not an official ODP publication.”
 
-Agency announcements stay on their own CPT. Nothing here publishes them.
-
-## Routes
-
-Logged-in only. Dashboard capability selects the agency shell. Any other logged-in user gets the employee shell, which is not the employee dashboard plugin.
-
-- `/odp-bulletins/`
-- `/odp-bulletins/{id}/` with ids matching `[a-z0-9]+(?:-[a-z0-9]+)*`
-
-Unknown id: 404. Not available yet: 404. Expired: 410. Feed unavailable: 503. Those pages do not invent a sample bulletin.
+Agency announcements stay on their own CPT.
 
 ## Rollback
 
-Overview chrome is off until `ghca_acd_ui_redesign` is saved. Uncheck it under Gridhouse Compliance → Settings → Performance & warning windows. Bulletin routes are additive. Deactivating the plugin removes the rewrite flag and flushes rules. Deleting `ghca_odp_feed_cache` drops the last feed copy.
+Overview chrome is off until `ghca_acd_ui_redesign` is saved. Bulletin routes stay available either way. Deactivating the plugin removes the rewrite version and flushes rules. Deleting `ghca_odp_feed_cache` drops the last feed copy.
+
+## Not in this slice
+
+Employees, courses, certificates, reports, audit, external training, drawers other than the bulletin drawer, the employee dashboard plugin, and the settings boards beyond the overview checkbox.

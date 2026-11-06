@@ -19,7 +19,7 @@ final class GHCA_ODP_Access {
 		if ( 'admin' !== $context && 'employee' !== $context ) {
 			return array( 'ok' => false, 'status' => 400, 'code' => 'context' );
 		}
-		if ( 'admin' === $context && ! $can_view_dashboard ) {
+		if ( $context !== self::context_for( $can_view_dashboard ) ) {
 			return array( 'ok' => false, 'status' => 403, 'code' => 'forbidden' );
 		}
 		return array( 'ok' => true, 'status' => 200, 'code' => 'ok' );
@@ -65,5 +65,23 @@ final class GHCA_ODP_Routes {
 
 	public static function owns_routes( $owner ): bool {
 		return 'ghca-acd' === $owner;
+	}
+
+	/**
+	 * Path only. Query strings are ignored so a public query var cannot take over another URL.
+	 */
+	public static function path_from_request( string $request_uri, string $home_path = '/' ): string {
+		$path = parse_url( $request_uri, PHP_URL_PATH );
+		if ( ! is_string( $path ) || '' === $path ) {
+			$path = '/';
+		}
+		$home = '/' . trim( $home_path, '/' );
+		if ( '/' !== $home && ( $path === $home || 0 === strpos( $path, $home . '/' ) ) ) {
+			$path = substr( $path, strlen( $home ) );
+			if ( '' === $path ) {
+				$path = '/';
+			}
+		}
+		return $path;
 	}
 }

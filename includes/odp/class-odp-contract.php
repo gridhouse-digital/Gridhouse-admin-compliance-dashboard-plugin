@@ -261,6 +261,36 @@ final class GHCA_ODP_Contract {
 		return 'unknown';
 	}
 
+	/**
+	 * One id, for a trusted viewer context. Audience filtering drops the body.
+	 * A stale feed must not claim an unseen id is missing.
+	 *
+	 * @param array<string,mixed>|null $feed
+	 * @return array{result:string,bulletin:?array<string,mixed>,audience:?string}
+	 */
+	public static function resolve_item( ?array $feed, string $id, int $now, string $context, bool $stale ): array {
+		if ( ! is_array( $feed ) ) {
+			return array( 'result' => 'unavailable', 'bulletin' => null, 'audience' => null );
+		}
+		$result = self::classify( $feed, $id, $now );
+		$item   = self::find( $feed, $id );
+		if ( 'unknown' === $result ) {
+			return array(
+				'result'   => $stale ? 'unconfirmed' : 'unknown',
+				'bulletin' => null,
+				'audience' => null,
+			);
+		}
+		$audience = is_array( $item ) ? (string) $item['audience'] : null;
+		if ( 'current' !== $result ) {
+			return array( 'result' => $result, 'bulletin' => null, 'audience' => $audience );
+		}
+		if ( ! is_array( $item ) || ! self::for_context( $item, $context ) ) {
+			return array( 'result' => 'not_in_view', 'bulletin' => null, 'audience' => $audience );
+		}
+		return array( 'result' => 'current', 'bulletin' => $item, 'audience' => $audience );
+	}
+
 	/** @param array<string,mixed>|null $feed */
 	public static function find( ?array $feed, string $id ): ?array {
 		if ( ! is_array( $feed ) || empty( $feed['bulletins'] ) ) {

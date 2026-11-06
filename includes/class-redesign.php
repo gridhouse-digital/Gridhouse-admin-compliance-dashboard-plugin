@@ -35,11 +35,19 @@ final class GHCA_ACD_Redesign {
 		if ( $other > 0 ) {
 			$slices[] = array( 'key' => 'other', 'label' => __( 'Other', 'ghca-acd' ), 'count' => $other, 'tone' => 'neutral' );
 		}
+		$expiring = (int) ( $aggregate['expiring_soon_employees'] ?? 0 );
+		if ( $total < 1 ) {
+			$caption = __( 'No employees in scope', 'ghca-acd' );
+		} elseif ( $expiring > 0 ) {
+			$caption = __( 'completed and expiring soon', 'ghca-acd' );
+		} else {
+			$caption = __( 'compliant', 'ghca-acd' );
+		}
 		return array(
 			'total'   => $total,
 			'rate'    => (int) ( $aggregate['compliance_rate'] ?? 0 ),
 			'center'  => $total > 0 ? (int) ( $aggregate['compliance_rate'] ?? 0 ) . '%' : '—',
-			'caption' => $total > 0 ? __( 'compliant', 'ghca-acd' ) : __( 'No employees in scope', 'ghca-acd' ),
+			'caption' => $caption,
 			'slices'  => $slices,
 		);
 	}
@@ -55,10 +63,10 @@ final class GHCA_ACD_Redesign {
 		$rate      = (int) ( $aggregate['compliance_rate'] ?? 0 );
 		return array(
 			array( 'label' => __( 'Employees', 'ghca-acd' ), 'value' => (string) $total, 'sub' => __( 'Active in this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-employees' ),
-			array( 'label' => __( 'Required courses', 'ghca-acd' ), 'value' => (string) $tracked_courses, 'sub' => __( 'Tracked in this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-courses' ),
-			array( 'label' => __( 'In progress', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['in_progress_employees'] ?? 0 ), 'sub' => __( 'Training now', 'ghca-acd' ), 'tone' => '', 'tab' => '' ),
+			array( 'label' => __( 'Tracked courses', 'ghca-acd' ), 'value' => (string) $tracked_courses, 'sub' => __( 'In this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-courses' ),
+			array( 'label' => __( 'In progress', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['in_progress_employees'] ?? 0 ), 'sub' => __( 'Includes new hires who have not started', 'ghca-acd' ), 'tone' => '', 'tab' => '' ),
 			array( 'label' => __( 'Overdue', 'ghca-acd' ), 'value' => (string) $overdue, 'sub' => __( 'Employees · view list', 'ghca-acd' ), 'tone' => $overdue > 0 ? 'danger' : '', 'tab' => 'ghca-tab-overdue' ),
-			array( 'label' => __( 'Certificates', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['certificates_issued'] ?? 0 ), 'sub' => __( 'Issued, all time', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-certificates' ),
+			array( 'label' => __( 'Certificates', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['certificates_issued'] ?? 0 ), 'sub' => __( 'Issued for active employees in this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-certificates' ),
 			array(
 				'label' => __( 'Completion', 'ghca-acd' ),
 				'value' => $total > 0 ? $rate . '%' : '—',
@@ -237,7 +245,7 @@ final class GHCA_ACD_Redesign {
 		$slices = isset( $health['slices'] ) && is_array( $health['slices'] ) ? $health['slices'] : array();
 		$total  = (int) ( $health['total'] ?? 0 );
 		$html   = '<section class="gh-card" aria-labelledby="gh-ov-health-title"><header class="gh-card__head"><h2 id="gh-ov-health-title">' . esc_html__( 'Compliance health', 'ghca-acd' ) . '</h2>';
-		$html  .= '<p>' . esc_html__( 'Where every employee stands this cycle', 'ghca-acd' ) . '</p></header>';
+		$html  .= '<p>' . esc_html__( 'The percent is the existing compliance rate: completed plus expiring soon. The colors show those groups separately.', 'ghca-acd' ) . '</p></header>';
 		$html  .= '<div class="gh-health"><div class="gh-donut" style="' . esc_attr( self::donut_style( $slices, $total ) ) . '" aria-hidden="true"><span><strong>' . esc_html( (string) ( $health['center'] ?? '—' ) ) . '</strong><small>' . esc_html( (string) ( $health['caption'] ?? '' ) ) . '</small></span></div>';
 		$html  .= '<ul class="gh-legend">';
 		foreach ( $slices as $slice ) {
@@ -280,7 +288,7 @@ final class GHCA_ACD_Redesign {
 	/** @param array<string,int> $certs */
 	private static function certificates_html( array $certs ): string {
 		$rows = array(
-			__( 'Issued · all time', 'ghca-acd' ) => (int) ( $certs['issued'] ?? 0 ),
+			__( 'Issued for active employees in this view', 'ghca-acd' ) => (int) ( $certs['issued'] ?? 0 ),
 			__( 'Course completions · last 30 days', 'ghca-acd' ) => (int) ( $certs['recent'] ?? 0 ),
 			__( 'Completed, no certificate link', 'ghca-acd' ) => (int) ( $certs['missing'] ?? 0 ),
 		);

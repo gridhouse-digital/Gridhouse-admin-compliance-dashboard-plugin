@@ -33,6 +33,10 @@
     Array.prototype.slice.call(track.children).forEach(function (item) {
       var copy = item.cloneNode(true)
       copy.setAttribute('aria-hidden', 'true')
+      copy.setAttribute('inert', '')
+      Array.prototype.forEach.call(copy.querySelectorAll('a, button, input, textarea, select'), function (node) {
+        node.setAttribute('tabindex', '-1')
+      })
       track.appendChild(copy)
     })
     ticker.classList.add('is-animated')
@@ -49,8 +53,7 @@
     }
     var opener = event.target.closest ? event.target.closest('[data-gh-open-bulletin]') : null
     if (opener && drawer) {
-      event.preventDefault()
-      openDrawer(opener.getAttribute('data-gh-open-bulletin'), opener)
+      if (openDrawer(opener.getAttribute('data-gh-open-bulletin'), opener)) event.preventDefault()
       return
     }
     if (event.target.closest && event.target.closest('[data-gh-drawer-close]')) {
@@ -63,7 +66,7 @@
 
   function openDrawer(id, opener) {
     var item = bulletins()[id]
-    if (!item || !drawer) return
+    if (!item || !drawer) return false
     lastFocus = opener || document.activeElement
     var title = drawer.querySelector('[data-gh-drawer-title]')
     var meta = drawer.querySelector('[data-gh-drawer-meta]')
@@ -98,6 +101,7 @@
     if (window.ghcaAcdOverlay) window.ghcaAcdOverlay.open(drawer, lastFocus, closeDrawer)
     var closeBtn = drawer.querySelector('.gh-drawer__bar [data-gh-drawer-close]')
     if (closeBtn) closeBtn.focus()
+    return true
   }
 
   function closeDrawer() {

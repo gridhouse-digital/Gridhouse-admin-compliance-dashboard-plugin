@@ -149,6 +149,18 @@ check( ! $called && 'unavailable' === $blocked['state'] && 'url_not_allowlisted'
 
 $cleared = GHCA_ODP_Feed::read( $now, $stale_cache, transport_of( 200, json_encode( feed( array() ) ) ), GHCA_ODP_Contract::FEED_URL );
 check( 'empty' === $cleared['state'] && array() === $cleared['feed']['bulletins'] && is_array( $cleared['cache_write'] ), 'A valid empty feed replaces the previous cache' );
+$deferred_called = false;
+$deferred = GHCA_ODP_Feed::read( $now, $stale_cache, static function () use ( &$deferred_called ) { $deferred_called = true; throw new RuntimeException( 'no' ); }, GHCA_ODP_Contract::FEED_URL, GHCA_ODP_Feed::TTL, false );
+check( ! $deferred_called && 'cached' === $deferred['state'] && 'refresh_deferred' === $deferred['error'], 'A stale display does not wait on the network' );
+$cold_called = false;
+GHCA_ODP_Feed::read( $now, null, static function () use ( &$cold_called ) { $cold_called = true; return array( 'status' => 200, 'body' => json_encode( feed( array() ) ) ); }, GHCA_ODP_Contract::FEED_URL, GHCA_ODP_Feed::TTL, false );
+check( $cold_called, 'A cold cache still fetches because there is nothing to show' );
+$stale_unknown = GHCA_ODP_Contract::resolve_item( $valid['feed'], 'missing-id', $now, 'admin', true );
+check( 'unconfirmed' === $stale_unknown['result'] && null === $stale_unknown['bulletin'], 'A stale unknown id is not confirmed missing' );
+check( 'unknown' === GHCA_ODP_Contract::resolve_item( $valid['feed'], 'missing-id', $now, 'admin', false )['result'], 'A fresh unknown id stays unknown' );
+$hidden = GHCA_ODP_Contract::resolve_item( $mixed['feed'], 'for-leads', $now, 'employee', false );
+check( 'not_in_view' === $hidden['result'] && null === $hidden['bulletin'] && 'agency_lead' === $hidden['audience'], 'The other audience drops the body' );
+check( 'current' === GHCA_ODP_Contract::resolve_item( $mixed['feed'], 'for-leads', $now, 'admin', false )['result'], 'The matching audience keeps the body' );
 
 $admin_view = GHCA_ODP_Feed::present( array( 'state' => 'fresh', 'stale' => false, 'error' => null, 'fetched_at' => $now, 'feed' => $mixed['feed'], 'cache_write' => null ), $now, 'admin' );
 $employee_view = GHCA_ODP_Feed::present( array( 'state' => 'fresh', 'stale' => false, 'error' => null, 'fetched_at' => $now, 'feed' => $mixed['feed'], 'cache_write' => null ), $now, 'employee' );
@@ -159,6 +171,9 @@ $auth = GHCA_ODP_Access::authorize_list( false, true, 'admin' );
 check( 401 === $auth['status'], 'Logged-out list is unauthorized' );
 check( 403 === GHCA_ODP_Access::authorize_list( true, false, 'admin' )['status'], 'Employee capability cannot request the admin list' );
 check( 200 === GHCA_ODP_Access::authorize_list( true, false, 'employee' )['status'], 'A logged-in employee can request the employee list' );
+check( 403 === GHCA_ODP_Access::authorize_list( true, true, 'employee' )['status'], 'A dashboard account cannot switch into the employee context' );
+check( '' === GHCA_ODP_Routes::match( GHCA_ODP_Routes::path_from_request( '/?ghca_odp_screen=library', '/' ) )['screen'], 'A query var on another URL is not the bulletin screen' );
+check( 'synthetic-notice' === GHCA_ODP_Routes::match( GHCA_ODP_Routes::path_from_request( '/cms/odp-bulletins/synthetic-notice/?ghca_odp_screen=library', '/cms' ) )['id'], 'Subdirectory path still matches and the query is ignored' );
 check( 400 === GHCA_ODP_Access::authorize_list( true, true, 'public' )['status'], 'Unknown context is rejected' );
 check( 401 === GHCA_ODP_Access::authorize_item( false )['status'] && 200 === GHCA_ODP_Access::authorize_item( true )['status'], 'Single bulletin requires login only' );
 check( 'library' === GHCA_ODP_Routes::match( '/odp-bulletins/' )['screen'], 'Library route matches' );
@@ -225,6 +240,7 @@ $populated = GHCA_ACD_Redesign::health_from_aggregate( array(
 	'compliance_rate' => 40,
 ) );
 check( 40 === $populated['rate'] && 2 === $populated['slices'][4]['count'] && 'Other' === $populated['slices'][4]['label'], 'Unclassified employees stay visible as Other' );
+check( false !== strpos( $populated['caption'], 'expiring soon' ), 'The percent caption names completed and expiring soon' );
 $kpis = GHCA_ACD_Redesign::kpis_from_aggregate( array(
 	'total_employees' => 4,
 	'completed_employees' => 1,
@@ -259,6 +275,26 @@ $overview = GHCA_ACD_Redesign::render_from_model( array(
 check( false !== strpos( $overview, '&lt;script&gt;alert(1)&lt;/script&gt;' ) && false === strpos( $overview, '<script>alert(1)</script>' ), 'Group labels are escaped' );
 check( false === strpos( $overview, 'NEW, proposed' ) && false === strpos( $overview, 'Pending issuance' ), 'Overview does not invent sample banners or unsupported certificate states' );
 check( false !== strpos( $overview, 'Course completions · last 30 days' ), 'Recent completions stay labeled as completions' );
+check( false === strpos( $overview, 'Issued, all time' ) && false !== strpos( $overview, 'Issued for active employees in this view' ), 'Certificates are labeled as the active view' );
+check( false === strpos( $overview, 'Training now' ) && false !== strpos( $overview, 'have not started' ), 'In progress does not say training now' );
+check( false !== strpos( $overview, 'existing compliance rate' ), 'The donut states the existing rate' );
+$css_unscoped = array();
+foreach ( file( __DIR__ . '/../assets/gh-redesign.css' ) as $css_line ) {
+	$css_line = trim( $css_line );
+	if ( '' === $css_line || 0 === strpos( $css_line, '/*' ) || 0 === strpos( $css_line, '*' ) || 0 === strpos( $css_line, '@' ) ) {
+		continue;
+	}
+	if ( preg_match( '/^\.(?!ghca-acd--v2\b|gh-ui\b)/', $css_line ) || preg_match( '/^body(?!\.gh-ui-body\b)/', $css_line ) || preg_match( '/^(html|a|button|h1|h2|p|ul|li|div|input|form|section|header|main)\b/', $css_line ) ) {
+		$css_unscoped[] = $css_line;
+	}
+}
+check( array() === $css_unscoped, 'Redesign CSS lines stay under plugin roots' . ( $css_unscoped ? ': ' . $css_unscoped[0] : '' ) );
+$bulletin_js = file_get_contents( __DIR__ . '/../assets/gh-bulletins.js' );
+check( false !== strpos( $bulletin_js, "setAttribute('inert'" ) && false !== strpos( $bulletin_js, "setAttribute('tabindex', '-1')" ), 'Animated ticker copies are inert and removed from tab order' );
+$not_in_view = GHCA_ODP_UI::single( array( 'result' => 'not_in_view', 'library_url' => '/odp-bulletins/', 'kicker' => 'ODP Bulletin', 'item' => null, 'audience_label' => 'Agency leads', 'audience_note' => '' ) );
+check( false !== strpos( $not_in_view, 'Agency leads' ) && false === strpos( $not_in_view, 'First paragraph' ), 'Full page withholds the other audience body' );
+$unconfirmed_page = GHCA_ODP_UI::single( array( 'result' => 'unconfirmed', 'library_url' => '/odp-bulletins/', 'kicker' => 'ODP Bulletin', 'item' => null, 'audience_label' => '', 'audience_note' => '' ) );
+check( false !== strpos( $unconfirmed_page, 'cannot be confirmed' ) && false === strpos( $unconfirmed_page, 'not in the current feed' ), 'Stale unknown copy does not claim the id is missing' );
 
 $page = GHCA_ODP_Contract::paginate( $admin_items, 'shared', 1, 9 );
 check( 1 === $page['total'] && 'for-both' === $page['items'][0]['id'], 'Search matches the shared synthetic bulletin' );

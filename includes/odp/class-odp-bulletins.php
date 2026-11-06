@@ -12,9 +12,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class GHCA_ODP_Bulletins {
-	const CACHE_OPTION   = 'ghca_odp_feed_cache';
-	const REWRITE_OPTION = 'ghca_odp_rewrite_version';
-	const REST_NAMESPACE = 'ghca-odp/v1';
+	const CACHE_OPTION    = 'ghca_odp_feed_cache';
+	const REWRITE_OPTION  = 'ghca_odp_rewrite_version';
+	const REWRITE_VERSION = '2';
+	const REST_NAMESPACE  = 'ghca-odp/v1';
+	const REFRESH_HOOK    = 'ghca_odp_refresh_feed';
 
 	/** @var array{state:string,stale:bool,error:?string,fetched_at:?int,feed:?array,cache_write:?array}|null */
 	private static $read = null;
@@ -24,6 +26,7 @@ final class GHCA_ODP_Bulletins {
 		add_filter( 'query_vars', array( __CLASS__, 'query_vars' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'render_screen' ), 1 );
 		add_action( 'rest_api_init', array( __CLASS__, 'register_rest' ) );
+		add_action( self::REFRESH_HOOK, array( __CLASS__, 'refresh_feed' ) );
 	}
 
 	public static function register_routes(): void {
@@ -33,10 +36,21 @@ final class GHCA_ODP_Bulletins {
 		foreach ( GHCA_ODP_Routes::rules() as $regex => $query ) {
 			add_rewrite_rule( $regex, $query, 'top' );
 		}
-		if ( '1' !== (string) get_option( self::REWRITE_OPTION, '' ) ) {
-			flush_rewrite_rules( false );
-			update_option( self::REWRITE_OPTION, '1', false );
+		if ( self::REWRITE_VERSION !== (string) get_option( self::REWRITE_OPTION, '' ) ) {
+			add_action( 'shutdown', array( __CLASS__, 'flush_rewrites_once' ), 99 );
 		}
+	}
+
+	/**
+	 * Flush after init so rules registered later in the same request are included.
+	 * The version option makes this a one-time write.
+	 */
+	public static function flush_rewrites_once(): void {
+		if ( self::REWRITE_VERSION === (string) get_option( self::REWRITE_OPTION, '' ) ) {
+			return;
+		}
+		flush_rewrite_rules( false );
+		update_option( self::REWRITE_OPTION, self::REWRITE_VERSION, false );
 	}
 
 	/** @param array<int,string> $vars */
@@ -97,7 +111,10 @@ final class GHCA_ODP_Bulletins {
 	}
 
 	public static function rest_list( WP_REST_Request $request ): WP_REST_Response {
-		$context = (string) $request->get_param( 'context' );
+		$context = self::trusted_context();
+		if ( (string) $request->get_param( 'context' ) !== $context ) {
+			return self::private_response( array( 'code' => 'forbidden' ), 403 );
+		}
 		$view    = self::snapshot( $context );
 		$data    = array(
 			'api_version'     => GHCA_ODP_Contract::API_VERSION,
@@ -114,21 +131,28 @@ final class GHCA_ODP_Bulletins {
 
 	public static function rest_item( WP_REST_Request $request ): WP_REST_Response {
 		$id     = (string) $request->get_param( 'id' );
-		$lookup = self::lookup( $id );
-		$status = 200;
-		if ( 'unknown' === $lookup['result'] || 'scheduled' === $lookup['result'] ) {
-			$status = 404;
-		} elseif ( 'expired' === $lookup['result'] ) {
-			$status = 410;
-		} elseif ( 'unavailable' === $lookup['result'] ) {
-			$status = 503;
-		}
-		$data = array(
+		$lookup = self::lookup( $id, self::trusted_context() );
+		$data   = array(
 			'api_version' => GHCA_ODP_Contract::API_VERSION,
+			'context'     => self::trusted_context(),
 			'result'      => $lookup['result'],
-			'bulletin'    => 'current' === $lookup['result'] ? self::rest_bulletin( $lookup['bulletin'] ) : null,
+			'audience'    => $lookup['audience'],
+			'bulletin'    => 'current' === $lookup['result'] && is_array( $lookup['bulletin'] ) ? self::rest_bulletin( $lookup['bulletin'] ) : null,
 		);
-		return self::private_response( $data, $status );
+		return self::private_response( $data, self::http_status( $lookup['result'] ) );
+	}
+
+	public static function http_status( string $result ): int {
+		if ( 'unknown' === $result || 'scheduled' === $result ) {
+			return 404;
+		}
+		if ( 'expired' === $result ) {
+			return 410;
+		}
+		if ( 'unavailable' === $result || 'unconfirmed' === $result ) {
+			return 503;
+		}
+		return 200;
 	}
 
 	/** @param array<string,mixed> $data */
@@ -145,40 +169,83 @@ final class GHCA_ODP_Bulletins {
 	 * @return array{state:string,stale:bool,error:?string,fetched_at:?int,updated_at:?string,bulletins:array<int,array<string,mixed>>,audience_filter:array<int,string>}
 	 */
 	public static function snapshot( string $context ): array {
-		$read = self::read_feed();
+		$read = self::read_feed( true );
 		return GHCA_ODP_Feed::present( $read, time(), $context );
 	}
 
 	/**
-	 * @return array{result:string,bulletin:?array<string,mixed>}
+	 * @return array{result:string,bulletin:?array,audience:?string}
 	 */
-	public static function lookup( string $id ): array {
-		$read = self::read_feed();
-		if ( in_array( $read['state'], array( 'unavailable' ), true ) || ! is_array( $read['feed'] ) ) {
-			return array( 'result' => 'unavailable', 'bulletin' => null );
+	public static function lookup( string $id, ?string $context = null ): array {
+		$read = self::read_feed( true );
+		if ( null === $context ) {
+			$context = self::trusted_context();
 		}
-		$result = GHCA_ODP_Contract::classify( $read['feed'], $id, time() );
-		$item   = 'current' === $result ? GHCA_ODP_Contract::find( $read['feed'], $id ) : null;
-		return array( 'result' => $result, 'bulletin' => $item );
+		if ( 'unavailable' === $read['state'] || ! is_array( $read['feed'] ) ) {
+			return array( 'result' => 'unavailable', 'bulletin' => null, 'audience' => null );
+		}
+		$stale = ! empty( $read['stale'] ) || in_array( $read['state'], array( 'cached', 'offline' ), true );
+		return GHCA_ODP_Contract::resolve_item( $read['feed'], $id, time(), $context, $stale );
 	}
 
-	/** @return array{state:string,stale:bool,error:?string,fetched_at:?int,feed:?array,cache_write:?array} */
-	public static function read_feed(): array {
+	/**
+	 * Page renders defer a stale refresh so HTML is not blocked on the worker.
+	 * A cold cache still waits, up to the transport timeout, because there is nothing else to show.
+	 *
+	 * @return array{state:string,stale:bool,error:?string,fetched_at:?int,feed:?array,cache_write:?array}
+	 */
+	public static function read_feed( bool $defer_stale = false ): array {
 		if ( null !== self::$read ) {
 			return self::$read;
 		}
-		$cache = get_option( self::CACHE_OPTION, null );
-		$cache = is_array( $cache ) ? $cache : null;
-		$url   = apply_filters( 'ghca_odp_feed_url', GHCA_ODP_Contract::FEED_URL );
+		$cache   = get_option( self::CACHE_OPTION, null );
+		$cache   = is_array( $cache ) ? $cache : null;
+		$refresh = ! ( $defer_stale && self::cache_is_usable_stale( $cache ) );
+		$url     = apply_filters( 'ghca_odp_feed_url', GHCA_ODP_Contract::FEED_URL );
 		if ( ! is_string( $url ) || ! GHCA_ODP_Contract::is_allowlisted( $url ) ) {
 			$url = GHCA_ODP_Contract::FEED_URL;
 		}
-		$read = GHCA_ODP_Feed::read( time(), $cache, array( __CLASS__, 'transport' ), $url, GHCA_ODP_Feed::TTL );
+		$read = GHCA_ODP_Feed::read( time(), $cache, array( __CLASS__, 'transport' ), $url, GHCA_ODP_Feed::TTL, $refresh );
 		if ( is_array( $read['cache_write'] ) ) {
 			update_option( self::CACHE_OPTION, $read['cache_write'], false );
 		}
+		if ( ! $refresh ) {
+			self::schedule_refresh();
+		}
 		self::$read = $read;
 		return $read;
+	}
+
+	public static function refresh_feed(): void {
+		self::$read = null;
+		self::read_feed( false );
+	}
+
+	/** @param array<string,mixed>|null $cache */
+	private static function cache_is_usable_stale( ?array $cache ): bool {
+		if ( ! is_array( $cache ) || ! isset( $cache['fetched_at'], $cache['feed'] ) ) {
+			return false;
+		}
+		$validated = GHCA_ODP_Contract::validate( $cache['feed'] );
+		if ( empty( $validated['ok'] ) ) {
+			return false;
+		}
+		$age = time() - (int) $cache['fetched_at'];
+		return $age < 0 || $age >= GHCA_ODP_Feed::TTL;
+	}
+
+	private static function schedule_refresh(): void {
+		if ( ! function_exists( 'wp_schedule_single_event' ) || wp_next_scheduled( self::REFRESH_HOOK ) ) {
+			return;
+		}
+		wp_schedule_single_event( time(), self::REFRESH_HOOK );
+		if ( function_exists( 'spawn_cron' ) ) {
+			spawn_cron();
+		}
+	}
+
+	private static function trusted_context(): string {
+		return GHCA_ODP_Access::context_for( class_exists( 'GHCA_ACD_Roles' ) && GHCA_ACD_Roles::user_can_view() );
 	}
 
 	/** @return array{status:int,body:string} */
@@ -203,8 +270,10 @@ final class GHCA_ODP_Bulletins {
 	}
 
 	public static function render_screen(): void {
-		$screen = get_query_var( 'ghca_odp_screen' );
-		if ( 'library' !== $screen && 'single' !== $screen ) {
+		$home = function_exists( 'home_url' ) ? (string) parse_url( home_url( '/' ), PHP_URL_PATH ) : '/';
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+		$match = GHCA_ODP_Routes::match( GHCA_ODP_Routes::path_from_request( $uri, $home ) );
+		if ( '' === $match['screen'] ) {
 			return;
 		}
 		if ( ! self::route_owner() ) {
@@ -214,9 +283,9 @@ final class GHCA_ODP_Bulletins {
 			auth_redirect();
 		}
 		nocache_headers();
-		$context = GHCA_ODP_Access::context_for( class_exists( 'GHCA_ACD_Roles' ) && GHCA_ACD_Roles::user_can_view() );
-		if ( 'single' === $screen ) {
-			self::send_document( self::single_model( (string) get_query_var( 'ghca_odp_id' ), $context ) );
+		$context = self::trusted_context();
+		if ( 'single' === $match['screen'] ) {
+			self::send_document( self::single_model( $match['id'], $context ) );
 		}
 		$query = isset( $_GET['ghca_odp_q'] ) ? sanitize_text_field( wp_unslash( $_GET['ghca_odp_q'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- public read filter.
 		$page  = isset( $_GET['ghca_odp_page'] ) ? absint( wp_unslash( $_GET['ghca_odp_page'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- public read filter.
@@ -264,42 +333,24 @@ final class GHCA_ODP_Bulletins {
 				'bulletins'  => $payload_items,
 			),
 		) );
-		return self::shell( $context, __( 'ODP Bulletins', 'ghca-acd' ), $body, 200 );
+		$status = 'unavailable' === $view['state'] ? 503 : 200;
+		return self::shell( $context, __( 'ODP Bulletins', 'ghca-acd' ), $body, $status );
 	}
 
 	/** @return array<string,mixed> */
 	public static function single_model( string $id, string $context ): array {
-		$lookup = self::lookup( $id );
-		$status = 200;
-		if ( 'unknown' === $lookup['result'] || 'scheduled' === $lookup['result'] ) {
-			$status = 404;
-		} elseif ( 'expired' === $lookup['result'] ) {
-			$status = 410;
-		} elseif ( 'unavailable' === $lookup['result'] ) {
-			$status = 503;
-		}
-		$note = '';
-		$item = null;
-		if ( 'current' === $lookup['result'] && is_array( $lookup['bulletin'] ) ) {
-			$item = self::card( $lookup['bulletin'] );
-			if ( ! GHCA_ODP_Contract::for_context( $lookup['bulletin'], $context ) ) {
-				$note = sprintf(
-					/* translators: 1: audience label, 2: admin or employee */
-					__( 'This summary is labeled for %1$s. It is not included in the %2$s list. The label is not a permission.', 'ghca-acd' ),
-					$item['audience_label'],
-					'admin' === $context ? __( 'agency', 'ghca-acd' ) : __( 'employee', 'ghca-acd' )
-				);
-			}
-		}
-		$body = GHCA_ODP_UI::single( array(
-			'result'        => $lookup['result'],
-			'library_url'   => self::library_url(),
-			'kicker'        => __( 'ODP Bulletin', 'ghca-acd' ),
-			'item'          => $item,
-			'audience_note' => $note,
+		$lookup = self::lookup( $id, $context );
+		$item   = 'current' === $lookup['result'] && is_array( $lookup['bulletin'] ) ? self::card( $lookup['bulletin'] ) : null;
+		$body   = GHCA_ODP_UI::single( array(
+			'result'         => $lookup['result'],
+			'library_url'    => self::library_url(),
+			'kicker'         => __( 'ODP Bulletin', 'ghca-acd' ),
+			'item'           => $item,
+			'audience_label' => $lookup['audience'] ? GHCA_ODP_Contract::audience_label( (string) $lookup['audience'] ) : '',
+			'audience_note'  => '',
 		) );
 		$title = $item ? (string) $item['headline'] : __( 'ODP Bulletin', 'ghca-acd' );
-		return self::shell( $context, $title, $body, $status );
+		return self::shell( $context, $title, $body, self::http_status( $lookup['result'] ) );
 	}
 
 	/** @return array<string,mixed> */
@@ -362,6 +413,9 @@ final class GHCA_ODP_Bulletins {
 			'context_label' => $admin ? __( 'Agency view', 'ghca-acd' ) : __( 'Employee view', 'ghca-acd' ),
 			'library_url'   => self::library_url(),
 			'body_html'     => $body,
+			'brand_style'   => class_exists( 'GHCA_ACD_Redesign' ) ? GHCA_ACD_Redesign::custom_brand_style() : '',
+			'rest_nonce'    => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( 'wp_rest' ) : '',
+			'rest_root'     => function_exists( 'rest_url' ) ? rest_url( self::REST_NAMESPACE . '/' ) : '',
 		);
 	}
 
@@ -416,7 +470,7 @@ final class GHCA_ODP_Bulletins {
 			return __( 'Log in to read ODP bulletins.', 'ghca-acd' );
 		}
 		if ( 'forbidden' === $code ) {
-			return __( 'The agency bulletin list requires the compliance dashboard capability.', 'ghca-acd' );
+			return __( 'That bulletin context does not match this account.', 'ghca-acd' );
 		}
 		return __( 'Bulletin context must be admin or employee.', 'ghca-acd' );
 	}
