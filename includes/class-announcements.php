@@ -136,9 +136,71 @@ final class GHCA_ACD_Announcements {
     return (string) ob_get_clean();
   }
 
+  /** Announcements card for the redesigned overview (.gh-ann rows). */
+  public static function render_announcements_v2(): string {
+    if ( ! GHCA_ACD_Shortcodes::can_view_dashboard() ) {
+      return '';
+    }
+    $html  = '<div class="gh-card" aria-labelledby="gh-ann-h"><div class="gh-card-hd gh-card-hd--plain"><div><h2 class="gh-h3" id="gh-ann-h">' . esc_html__( 'Announcements', 'ghca-acd' ) . '</h2>';
+    $html .= '<span class="gh-small gh-muted">' . esc_html__( 'Notes for admins and staff', 'ghca-acd' ) . '</span></div>';
+    if ( self::can_manage_announcements() ) {
+      $html .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-announce-add><span class="gh-i gh-i--sm i-plus" aria-hidden="true"></span>' . esc_html__( 'Add note', 'ghca-acd' ) . '</button>';
+    }
+    $html .= '</div><div class="gh-ovp-bd" id="ghca-acd-announcement-list" data-ghca-announce-list data-ghca-announce-format="v2">';
+    $html .= self::render_announcement_list_html( 'v2' );
+    return $html . '</div></div>';
+  }
+
+  /** Format requested by an AJAX re-render: v2 for the redesigned card, legacy otherwise. */
+  private static function requested_format(): string {
+    $format = isset( $_POST['format'] ) ? sanitize_key( wp_unslash( $_POST['format'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- callers verify the nonce first.
+    return 'v2' === $format ? 'v2' : '';
+  }
+
+  private static function render_announcement_rows_v2( array $items ): string {
+    if ( empty( $items ) ) {
+      return '<p class="gh-ovp-empty">' . esc_html__( 'No announcements yet.', 'ghca-acd' ) . '</p>';
+    }
+    $type_meta = self::announcement_type_meta();
+    $icons     = array( 'alert' => 'alert', 'reminder' => 'bell', 'update' => 'megaphone', 'system' => 'refresh' );
+    $html      = '';
+    foreach ( $items as $item ) {
+      $type     = isset( $item['type'], $type_meta[ $item['type'] ] ) ? (string) $item['type'] : 'update';
+      $editable = ! empty( $item['editable'] ) && (int) ( $item['id'] ?? 0 ) > 0;
+      $html    .= '<div class="gh-ann"';
+      if ( $editable ) {
+        $html .= ' data-announce-id="' . esc_attr( (string) (int) $item['id'] ) . '" data-announce-title="' . esc_attr( (string) $item['label'] ) . '" data-announce-body="' . esc_attr( (string) ( $item['body'] ?? '' ) ) . '" data-announce-type="' . esc_attr( $type ) . '" data-announce-url="' . esc_attr( (string) ( $item['url'] ?? '' ) ) . '"';
+      }
+      $html .= '><span class="gh-ann-ico gh-ann-ico--' . esc_attr( $type ) . '"><span class="gh-i i-' . esc_attr( $icons[ $type ] ) . '" aria-hidden="true"></span></span>';
+      $html .= '<div class="gh-ann-main"><span class="gh-ann-t">' . esc_html( (string) $item['label'] ) . '</span>';
+      if ( ! empty( $item['body'] ) ) {
+        $html .= '<p class="gh-ann-m">' . esc_html( (string) $item['body'] ) . '</p>';
+      }
+      $html .= '<div class="gh-ann-meta"><span class="gh-badge gh-badge--neutral">' . esc_html( $type_meta[ $type ]['label'] ) . '</span>';
+      if ( ! empty( $item['meta'] ) ) {
+        $html .= '<span>' . esc_html( (string) $item['meta'] ) . '</span>';
+      }
+      if ( ! empty( $item['url'] ) ) {
+        $html .= '<a class="gh-ann-link" href="' . esc_url( (string) $item['url'] ) . '">' . esc_html__( 'Take action', 'ghca-acd' ) . '<span class="gh-i gh-i--sm i-arrow-right" aria-hidden="true"></span></a>';
+      }
+      $html .= '</div></div>';
+      if ( $editable ) {
+        $html .= '<span class="gh-ann-acts">';
+        $html .= '<button type="button" class="gh-btn gh-btn--ghost gh-btn--icon gh-btn--sm" data-ghca-announce-edit="' . esc_attr( (string) (int) $item['id'] ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: announcement title */ __( 'Edit %s', 'ghca-acd' ), (string) $item['label'] ) ) . '"><span class="gh-i i-edit" aria-hidden="true"></span></button>';
+        $html .= '<button type="button" class="gh-btn gh-btn--ghost gh-btn--icon gh-btn--sm" data-ghca-announce-delete="' . esc_attr( (string) (int) $item['id'] ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: announcement title */ __( 'Delete %s', 'ghca-acd' ), (string) $item['label'] ) ) . '"><span class="gh-i i-trash" aria-hidden="true"></span></button>';
+        $html .= '</span>';
+      }
+      $html .= '</div>';
+    }
+    return $html;
+  }
+
   /** Renders just the announcement rows (reused by the AJAX re-render handler). */
-  public static function render_announcement_list_html(): string {
+  public static function render_announcement_list_html( string $format = '' ): string {
     $items     = self::get_announcement_items();
+    if ( 'v2' === $format ) {
+      return self::render_announcement_rows_v2( $items );
+    }
     $type_meta = self::announcement_type_meta();
 
     ob_start();
@@ -295,7 +357,7 @@ final class GHCA_ACD_Announcements {
     // }
 
     wp_send_json_success( array(
-      'html'    => self::render_announcement_list_html(),
+      'html'    => self::render_announcement_list_html( self::requested_format() ),
       'message' => $announce_id > 0 ? __( 'Announcement updated.', 'ghca-acd' ) : __( 'Announcement published.', 'ghca-acd' ),
     ) );
   }
@@ -360,7 +422,7 @@ final class GHCA_ACD_Announcements {
     wp_delete_post( $announce_id, true );
 
     wp_send_json_success( array(
-      'html'    => self::render_announcement_list_html(),
+      'html'    => self::render_announcement_list_html( self::requested_format() ),
       'message' => __( 'Announcement deleted.', 'ghca-acd' ),
     ) );
   }
@@ -373,7 +435,7 @@ final class GHCA_ACD_Announcements {
       wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ghca-acd' ) ) );
     }
 
-    wp_send_json_success( array( 'html' => self::render_announcement_list_html() ) );
+    wp_send_json_success( array( 'html' => self::render_announcement_list_html( self::requested_format() ) ) );
   }
 
   /**
@@ -408,19 +470,29 @@ final class GHCA_ACD_Announcements {
         'body'     => trim( wp_strip_all_tags( (string) $post->post_content ) ),
         'type'     => self::sanitize_announcement_type( get_post_meta( $post->ID, 'ghca_announce_type', true ) ),
         'url'      => (string) get_post_meta( $post->ID, 'ghca_announce_url', true ),
+        'meta'     => self::post_meta_line( $post ),
         'editable' => $can_manage,
       );
     }
 
     foreach ( self::get_auto_announcement_items() as $auto ) {
       $items[] = array_merge(
-        array( 'id' => 0, 'body' => '', 'url' => '', 'editable' => false ),
+        array( 'id' => 0, 'body' => '', 'url' => '', 'meta' => __( 'Automatic', 'ghca-acd' ), 'editable' => false ),
         $auto
       );
     }
 
     /** @var array<int,array<string,mixed>> $items */
     return apply_filters( 'ghca_admin_announcements_items', $items );
+  }
+
+  private static function post_meta_line( $post ): string {
+    $parts  = array( (string) get_the_date( 'M j', $post ) );
+    $author = get_the_author_meta( 'display_name', (int) $post->post_author );
+    if ( is_string( $author ) && '' !== $author ) {
+      $parts[] = $author;
+    }
+    return implode( ' · ', array_filter( $parts ) );
   }
 
   /** Live, read-only announcement items derived from current compliance data. */

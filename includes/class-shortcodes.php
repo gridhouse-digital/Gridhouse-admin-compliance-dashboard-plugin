@@ -990,7 +990,7 @@ final class GHCA_ACD_Shortcodes {
   }
 
   /** @return array<int,array{label:string,url:string,icon?:string,subtitle?:string}> */
-  private static function get_quick_links(): array {
+  public static function get_quick_links(): array {
     $links = array(
       array(
         'label'    => __( 'Courses', 'ghca-acd' ),

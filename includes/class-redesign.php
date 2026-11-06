@@ -15,7 +15,8 @@ final class GHCA_ACD_Redesign {
 	}
 
 	public static function theme_slug(): string {
-		$theme = function_exists( 'apply_filters' ) ? apply_filters( 'ghca_acd_ui_theme', 'gridhouse' ) : 'gridhouse';
+		$saved = class_exists( 'GHCA_ACD_Settings' ) && function_exists( 'get_option' ) ? GHCA_ACD_Settings::ui_theme() : 'gridhouse';
+		$theme = function_exists( 'apply_filters' ) ? apply_filters( 'ghca_acd_ui_theme', $saved ) : $saved;
 		return in_array( $theme, self::themes(), true ) ? (string) $theme : 'gridhouse';
 	}
 
@@ -64,7 +65,7 @@ final class GHCA_ACD_Redesign {
 		return array(
 			array( 'label' => __( 'Employees', 'ghca-acd' ), 'value' => (string) $total, 'sub' => __( 'Active in this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-employees' ),
 			array( 'label' => __( 'Tracked courses', 'ghca-acd' ), 'value' => (string) $tracked_courses, 'sub' => __( 'In this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-courses' ),
-			array( 'label' => __( 'In progress', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['in_progress_employees'] ?? 0 ), 'sub' => __( 'Includes new hires who have not started', 'ghca-acd' ), 'tone' => '', 'tab' => '' ),
+			array( 'label' => __( 'In progress', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['in_progress_employees'] ?? 0 ), 'sub' => __( 'Includes new hires who have not started', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-employees' ),
 			array( 'label' => __( 'Overdue', 'ghca-acd' ), 'value' => (string) $overdue, 'sub' => __( 'Employees · view list', 'ghca-acd' ), 'tone' => $overdue > 0 ? 'danger' : '', 'tab' => 'ghca-tab-overdue' ),
 			array( 'label' => __( 'Certificates', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['certificates_issued'] ?? 0 ), 'sub' => __( 'Issued for active employees in this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-certificates' ),
 			array(
@@ -72,7 +73,7 @@ final class GHCA_ACD_Redesign {
 				'value' => $total > 0 ? $rate . '%' : '—',
 				'sub'   => $total > 0 ? sprintf( /* translators: 1: compliant employees, 2: employees in view */ __( '%1$d of %2$d employees', 'ghca-acd' ), $counted, $total ) : __( 'No employees in scope', 'ghca-acd' ),
 				'tone'  => '',
-				'tab'   => '',
+				'tab'   => 'ghca-tab-reports',
 			),
 		);
 	}
@@ -145,6 +146,7 @@ final class GHCA_ACD_Redesign {
 		$model     = array(
 			'theme'         => self::theme_slug(),
 			'brand_style'   => self::custom_brand_style(),
+			'chrome'        => self::chrome( 'admin', 'compliance' ),
 			'scope'         => $scope,
 			'scope_note'    => $scoped ? __( 'Group leader view — only your LearnDash groups are shown.', 'ghca-acd' ) : '',
 			'as_of'         => $as_of,
@@ -161,98 +163,220 @@ final class GHCA_ACD_Redesign {
 			),
 			'bulletin_html' => (string) ( $bulletins['ticker'] ?? '' ),
 			'drawer_html'   => (string) ( $bulletins['drawer'] ?? '' ) . (string) ( $bulletins['payload'] ?? '' ),
-			'announcements_html' => GHCA_ACD_Announcements::render_announcements( $atts ),
-			'quick_links_html'   => GHCA_ACD_Shortcodes::render_quick_links( $atts ),
-			'support_html'       => GHCA_ACD_Shortcodes::render_support( $atts ),
+			'announcements_html' => GHCA_ACD_Announcements::render_announcements_v2(),
+			'quick_links'        => self::quick_links(),
+			'support_email'      => class_exists( 'GHCA_Dashboard_Branding' ) ? GHCA_Dashboard_Branding::get_support_email() : '',
 			'panels'             => self::secondary_panels( $atts, $data ),
 		);
 		return $html . self::render_from_model( $model );
+	}
+
+	/**
+	 * App bar data shared by the overview and the bulletin screens.
+	 *
+	 * @return array<string,mixed>
+	 */
+	public static function chrome( string $context, string $current ): array {
+		$org = '';
+		if ( class_exists( 'GHCA_Dashboard_Branding' ) ) {
+			$org = GHCA_Dashboard_Branding::get_header_org_name();
+			if ( '' === $org ) {
+				$org = GHCA_Dashboard_Branding::get_org_name();
+			}
+		}
+		if ( '' === $org && function_exists( 'get_bloginfo' ) ) {
+			$org = (string) get_bloginfo( 'name' );
+		}
+		$admin = 'admin' === $context;
+		$dash  = class_exists( 'GHCA_ACD_Data_Provider' ) ? GHCA_ACD_Data_Provider::get_admin_dashboard_url() : home_url( '/' );
+		$nav   = array();
+		if ( $admin ) {
+			$on_dash = 'compliance' === $current;
+			$nav[]   = array( 'label' => __( 'Compliance', 'ghca-acd' ), 'icon' => 'shield', 'url' => $dash, 'current' => $on_dash ? 'page' : 'true', 'tab' => $on_dash ? 'ghca-tab-overview' : '' );
+			$nav[]   = array( 'label' => __( 'Courses', 'ghca-acd' ), 'icon' => 'grad', 'url' => $dash . '#ghca-tab-courses', 'current' => '', 'tab' => $on_dash ? 'ghca-tab-courses' : '' );
+			$nav[]   = array( 'label' => __( 'Reports', 'ghca-acd' ), 'icon' => 'chart', 'url' => $dash . '#ghca-tab-reports', 'current' => '', 'tab' => $on_dash ? 'ghca-tab-reports' : '' );
+			$users   = self::manage_users_url();
+			if ( '' !== $users ) {
+				$nav[] = array( 'label' => __( 'Users', 'ghca-acd' ), 'icon' => 'users', 'url' => $users, 'current' => '', 'tab' => '' );
+			}
+		}
+		$employee = self::existing_page_url( 'employee-dashboard' );
+		if ( '' !== $employee ) {
+			$nav[] = array( 'label' => $admin ? __( 'Employee view', 'ghca-acd' ) : __( 'My dashboard', 'ghca-acd' ), 'icon' => 'home', 'url' => $employee, 'current' => $admin ? '' : 'true', 'tab' => '' );
+		}
+		$user = function_exists( 'wp_get_current_user' ) ? wp_get_current_user() : null;
+		$name = $user && ! empty( $user->display_name ) ? (string) $user->display_name : '';
+		return array(
+			'org'       => $org,
+			'mono'      => self::initials( $org, 1 ),
+			'logo_url'  => class_exists( 'GHCA_Dashboard_Branding' ) ? GHCA_Dashboard_Branding::get_logo_url() : '',
+			'sub'       => $admin ? __( 'Compliance admin', 'ghca-acd' ) : __( 'Training', 'ghca-acd' ),
+			'home_url'  => $admin ? $dash : ( '' !== $employee ? $employee : home_url( '/' ) ),
+			'nav'       => $nav,
+			'initials'  => self::initials( $name, 2 ),
+			/* translators: %s: display name */
+			'signed_in' => '' !== $name ? sprintf( __( 'Signed in as %s', 'ghca-acd' ), $name ) : '',
+		);
+	}
+
+	public static function initials( string $name, int $max ): string {
+		$letters = '';
+		foreach ( preg_split( '/\s+/u', trim( $name ) ) ?: array() as $word ) {
+			if ( '' === $word || mb_strlen( $letters ) >= $max ) {
+				continue;
+			}
+			$letters .= mb_strtoupper( mb_substr( $word, 0, 1 ) );
+		}
+		return $letters;
+	}
+
+	private static function existing_page_url( string $slug ): string {
+		if ( ! function_exists( 'get_page_by_path' ) || ! get_page_by_path( $slug ) ) {
+			return '';
+		}
+		return GHCA_ACD_Data_Provider::get_page_url( $slug, '/' . $slug . '/' );
+	}
+
+	private static function manage_users_url(): string {
+		if ( class_exists( 'GHCA_ACD_Roles' ) && GHCA_ACD_Roles::user_can_manage_users() && class_exists( 'GHCA_ACD_Data_Provider' ) ) {
+			return GHCA_ACD_Data_Provider::get_page_url( 'manage-users', '/manage-users/' );
+		}
+		if ( function_exists( 'current_user_can' ) && current_user_can( 'edit_users' ) ) {
+			return admin_url( 'users.php' );
+		}
+		return '';
+	}
+
+	/** @return array<int,array<string,string>> */
+	private static function quick_links(): array {
+		$icons = array( 'courses' => 'book', 'users' => 'users', 'reports' => 'chart', 'certificate' => 'award', 'dashboard' => 'home', 'support' => 'lifebuoy' );
+		$links = array();
+		foreach ( GHCA_ACD_Shortcodes::get_quick_links() as $link ) {
+			if ( empty( $link['url'] ) ) {
+				continue;
+			}
+			$links[] = array(
+				'label'    => (string) $link['label'],
+				'subtitle' => (string) ( $link['subtitle'] ?? '' ),
+				'url'      => (string) $link['url'],
+				'icon'     => $icons[ (string) ( $link['icon'] ?? '' ) ] ?? 'link',
+			);
+		}
+		return $links;
+	}
+
+	private static function icon( string $name, string $size = '' ): string {
+		return GHCA_ODP_UI::icon( $name, $size );
 	}
 
 	/** @param array<string,mixed> $model */
 	public static function render_from_model( array $model ): string {
 		$theme = esc_attr( (string) ( $model['theme'] ?? 'gridhouse' ) );
 		$style = (string) ( $model['brand_style'] ?? '' );
-		$html  = '<div class="ghca-acd ghca-acd--v2" data-gh-theme="' . $theme . '"' . ( '' !== $style ? ' style="' . esc_attr( $style ) . '"' : '' ) . '>';
-		$html .= '<header class="gh-ov-header"><div><p class="gh-ov-kicker">' . esc_html__( 'Administrative Compliance Center', 'ghca-acd' ) . '</p>';
-		$html .= '<h1>' . esc_html__( 'Compliance dashboard', 'ghca-acd' ) . '</h1>';
-		$html .= '<p class="gh-ov-meta"><span>' . esc_html( (string) $model['scope'] ) . '</span><span>' . esc_html( (string) $model['as_of'] ) . '</span><span>' . esc_html( (string) $model['active'] ) . '</span></p>';
-		if ( ! empty( $model['scope_note'] ) ) {
-			$html .= '<p class="gh-ov-scope-note">' . esc_html( (string) $model['scope_note'] ) . '</p>';
+		$bleed = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'ghca_acd_ui_full_bleed', true ) : true;
+		$html  = '<div class="ghca-ui' . ( $bleed ? ' ghca-ui--bleed' : '' ) . '">';
+		$html .= '<div class="gh-app ghca-acd ghca-acd--v2" data-theme="' . $theme . '"' . ( '' !== $style ? ' style="' . esc_attr( $style ) . '"' : '' ) . '>';
+		$html .= '<div class="gh-chrome">' . GHCA_ODP_UI::appbar( isset( $model['chrome'] ) && is_array( $model['chrome'] ) ? $model['chrome'] : array() );
+		$html .= '<div class="gh-container">' . self::pagehead_html( $model ) . self::tabs_html( (array) ( $model['tabs'] ?? array() ) ) . '</div></div>';
+		$html .= '<main class="gh-container gh-main">';
+		$html .= '<div id="ghca-tab-overview" class="gh-ov ghca-acd__tab-content is-active" role="tabpanel" aria-labelledby="ghca-tab-overview-tab" tabindex="0">';
+		$html .= self::kpi_html( (array) ( $model['kpis'] ?? array() ) );
+		$html .= (string) ( $model['bulletin_html'] ?? '' );
+		$html .= '<section class="gh-ovp gh-ovp--3" aria-label="' . esc_attr__( 'Compliance summary', 'ghca-acd' ) . '">';
+		$html .= '<div class="gh-ovp-col">' . self::health_html( (array) ( $model['health'] ?? array() ) ) . self::certificates_html( (array) ( $model['certificates'] ?? array() ) ) . '</div>';
+		$html .= self::groups_html( (array) ( $model['groups'] ?? array() ) );
+		$html .= (string) ( $model['announcements_html'] ?? '' );
+		$html .= '</section>';
+		$html .= self::quick_links_html( (array) ( $model['quick_links'] ?? array() ) );
+		$html .= self::support_html( (string) ( $model['support_email'] ?? '' ) );
+		$html .= '</div>';
+		foreach ( (array) ( $model['panels'] ?? array() ) as $id => $panel ) {
+			$html .= '<div id="' . esc_attr( (string) $id ) . '" class="ghca-acd__tab-content gh-legacy" role="tabpanel" aria-labelledby="' . esc_attr( (string) $id ) . '-tab" tabindex="0">';
+			$html .= $panel; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- existing dashboard renderers escape their own markup.
+			$html .= '</div>';
 		}
-		$html .= '</div><div class="gh-ov-actions">';
+		$html .= self::footer_html( $model );
+		$html .= '</main>';
+		$html .= (string) ( $model['drawer_html'] ?? '' );
+		return $html . '</div></div>';
+	}
+
+	/** @param array<string,mixed> $model */
+	private static function pagehead_html( array $model ): string {
+		$html  = '<div class="gh-pagehead"><div class="gh-pagehead-main"><span class="gh-eyebrow">' . esc_html__( 'Compliance center', 'ghca-acd' ) . '</span>';
+		$html .= '<h1 class="gh-h1">' . esc_html__( 'Compliance dashboard', 'ghca-acd' ) . '</h1>';
+		$html .= '<div class="gh-meta"><span class="gh-scope">' . self::icon( 'filter', 'sm' ) . esc_html( (string) ( $model['scope'] ?? '' ) ) . '</span>';
+		$html .= '<span>' . self::icon( 'clock', 'sm' ) . esc_html( (string) ( $model['as_of'] ?? '' ) ) . '</span>';
+		$html .= '<span>' . self::icon( 'users', 'sm' ) . esc_html( (string) ( $model['active'] ?? '' ) ) . '</span></div>';
+		if ( ! empty( $model['scope_note'] ) ) {
+			$html .= '<p class="gh-small gh-muted gh-scope-note">' . esc_html( (string) $model['scope_note'] ) . '</p>';
+		}
+		$html .= '</div><div class="gh-actions">';
+		$icons = array( 'sync' => 'refresh', 'export' => 'download', 'users' => 'user-plus', 'reports' => 'chart' );
 		foreach ( (array) ( $model['actions'] ?? array() ) as $action ) {
 			if ( empty( $action['url'] ) ) {
 				continue;
 			}
+			$icon  = $icons[ (string) ( $action['key'] ?? '' ) ] ?? '';
 			$html .= '<a class="gh-btn gh-btn--' . esc_attr( (string) ( $action['variant'] ?? 'secondary' ) ) . '" href="' . esc_url( (string) $action['url'] ) . '"';
 			$html .= ! empty( $action['tab'] ) ? ' data-ghca-tab-jump="' . esc_attr( (string) $action['tab'] ) . '"' : '';
-			$html .= '>' . esc_html( (string) $action['label'] ) . '</a>';
+			$html .= '>' . ( '' !== $icon ? self::icon( $icon ) : '' ) . esc_html( (string) $action['label'] ) . '</a>';
 		}
-		$html .= '</div></header>';
-		$html .= '<div class="ghca-acd__tabs" role="tablist" aria-label="' . esc_attr__( 'Compliance dashboard sections', 'ghca-acd' ) . '">';
-		foreach ( (array) ( $model['tabs'] ?? array() ) as $tab ) {
+		return $html . '</div></div>';
+	}
+
+	/** @param array<int,array<string,mixed>> $tabs */
+	private static function tabs_html( array $tabs ): string {
+		$html = '<div class="gh-tabs" role="tablist" data-ghca-tablist-main aria-label="' . esc_attr__( 'Compliance sections', 'ghca-acd' ) . '">';
+		foreach ( $tabs as $tab ) {
 			$selected = ! empty( $tab['active'] );
-			$html    .= '<button type="button" role="tab" id="' . esc_attr( (string) $tab['id'] ) . '-tab" class="ghca-acd__tab-btn' . ( $selected ? ' is-active' : '' ) . '" data-ghca-tab-target="' . esc_attr( (string) $tab['id'] ) . '" aria-controls="' . esc_attr( (string) $tab['id'] ) . '" aria-selected="' . ( $selected ? 'true' : 'false' ) . '" tabindex="' . ( $selected ? '0' : '-1' ) . '">';
+			$html    .= '<button type="button" role="tab" id="' . esc_attr( (string) $tab['id'] ) . '-tab" class="gh-tab" data-ghca-tab-target="' . esc_attr( (string) $tab['id'] ) . '" aria-controls="' . esc_attr( (string) $tab['id'] ) . '" aria-selected="' . ( $selected ? 'true' : 'false' ) . '" tabindex="' . ( $selected ? '0' : '-1' ) . '">';
 			$html    .= esc_html( (string) $tab['label'] );
 			if ( isset( $tab['badge'] ) && null !== $tab['badge'] ) {
-				$html .= ' <span class="ghca-acd__tab-badge">' . esc_html( (string) $tab['badge'] ) . '</span>';
+				$tone  = (string) ( $tab['tone'] ?? '' );
+				$html .= '<span class="gh-count' . ( '' !== $tone ? ' gh-count--' . esc_attr( $tone ) : '' ) . '">' . esc_html( (string) $tab['badge'] ) . '</span>';
 			}
 			$html .= '</button>';
 		}
-		$html .= '</div>';
-		$html .= self::kpi_html( (array) ( $model['kpis'] ?? array() ) );
-		$html .= '<div id="ghca-tab-overview" class="ghca-acd__tab-content is-active" role="tabpanel" aria-labelledby="ghca-tab-overview-tab" tabindex="0">';
-		$html .= (string) ( $model['bulletin_html'] ?? '' );
-		$html .= '<div class="gh-ov-grid">';
-		$html .= self::health_html( (array) ( $model['health'] ?? array() ) );
-		$html .= self::groups_html( (array) ( $model['groups'] ?? array() ) );
-		$html .= '<div class="gh-ov-side">' . self::certificates_html( (array) ( $model['certificates'] ?? array() ) ) . (string) ( $model['announcements_html'] ?? '' ) . '</div>';
-		$html .= '</div>';
-		$html .= (string) ( $model['quick_links_html'] ?? '' );
-		$html .= (string) ( $model['support_html'] ?? '' );
-		$html .= '</div>';
-		foreach ( (array) ( $model['panels'] ?? array() ) as $id => $panel ) {
-			$html .= '<div id="' . esc_attr( (string) $id ) . '" class="ghca-acd__tab-content" role="tabpanel" aria-labelledby="' . esc_attr( (string) $id ) . '-tab" tabindex="0">';
-			$html .= $panel; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- existing dashboard renderers escape their own markup.
-			$html .= '</div>';
-		}
-		$html .= (string) ( $model['drawer_html'] ?? '' );
 		return $html . '</div>';
 	}
 
 	/** @param array<int,array<string,string>> $kpis */
 	private static function kpi_html( array $kpis ): string {
-		$html = '<div class="gh-kpis">';
-		foreach ( $kpis as $kpi ) {
-			$tone = (string) ( $kpi['tone'] ?? '' );
-			$tab  = (string) ( $kpi['tab'] ?? '' );
-			$html .= '<div class="gh-kpi' . ( '' !== $tone ? ' gh-kpi--' . esc_attr( $tone ) : '' ) . '">';
-			$html .= '<span class="gh-kpi__label">' . esc_html( (string) $kpi['label'] ) . '</span>';
-			$html .= '<strong>' . esc_html( (string) $kpi['value'] ) . '</strong>';
-			if ( '' !== $tab ) {
-				$html .= '<a href="#' . esc_attr( $tab ) . '" data-ghca-tab-jump="' . esc_attr( $tab ) . '">' . esc_html( (string) $kpi['sub'] ) . '</a>';
-			} else {
-				$html .= '<span>' . esc_html( (string) $kpi['sub'] ) . '</span>';
-			}
-			$html .= '</div>';
+		$icons = array( 'users', 'book', 'progress', 'alert', 'award', 'chart' );
+		$html  = '<section class="gh-grid gh-grid--kpi gh-kpi--overview" aria-label="' . esc_attr__( 'Key figures', 'ghca-acd' ) . '">';
+		foreach ( array_values( $kpis ) as $i => $kpi ) {
+			$tone  = (string) ( $kpi['tone'] ?? '' );
+			$tab   = (string) ( $kpi['tab'] ?? '' );
+			$class = 'gh-stat' . ( '' !== $tone ? ' gh-stat--' . esc_attr( $tone ) : '' );
+			$inner = '<span class="gh-stat-top">' . esc_html( (string) $kpi['label'] ) . '<span class="gh-stat-ico">' . self::icon( $icons[ $i ] ?? 'chart' ) . '</span></span>';
+			$inner .= '<span class="gh-stat-val">' . esc_html( (string) $kpi['value'] ) . '</span><span class="gh-stat-sub">' . esc_html( (string) $kpi['sub'] ) . '</span>';
+			$html .= '' !== $tab
+				? '<a class="' . $class . '" href="#' . esc_attr( $tab ) . '" data-ghca-tab-jump="' . esc_attr( $tab ) . '">' . $inner . '</a>'
+				: '<div class="' . $class . '">' . $inner . '</div>';
 		}
-		return $html . '</div>';
+		return $html . '</section>';
 	}
 
 	/** @param array<string,mixed> $health */
 	private static function health_html( array $health ): string {
 		$slices = isset( $health['slices'] ) && is_array( $health['slices'] ) ? $health['slices'] : array();
 		$total  = (int) ( $health['total'] ?? 0 );
-		$html   = '<section class="gh-card" aria-labelledby="gh-ov-health-title"><header class="gh-card__head"><h2 id="gh-ov-health-title">' . esc_html__( 'Compliance health', 'ghca-acd' ) . '</h2>';
-		$html  .= '<p>' . esc_html__( 'The percent is the existing compliance rate: completed plus expiring soon. The colors show those groups separately.', 'ghca-acd' ) . '</p></header>';
-		$html  .= '<div class="gh-health"><div class="gh-donut" style="' . esc_attr( self::donut_style( $slices, $total ) ) . '" aria-hidden="true"><span><strong>' . esc_html( (string) ( $health['center'] ?? '—' ) ) . '</strong><small>' . esc_html( (string) ( $health['caption'] ?? '' ) ) . '</small></span></div>';
+		$aria   = $total > 0
+			? sprintf( /* translators: %s: percent */ __( '%s existing compliance rate', 'ghca-acd' ), (string) ( $health['center'] ?? '' ) )
+			: __( 'No employees in scope', 'ghca-acd' );
+		$html   = '<div class="gh-card" aria-labelledby="gh-health-h"><div class="gh-card-hd gh-card-hd--plain"><div><h2 class="gh-h3" id="gh-health-h">' . esc_html__( 'Compliance health', 'ghca-acd' ) . '</h2>';
+		$html  .= '<span class="gh-small gh-muted">' . esc_html__( 'Where every employee in this view stands', 'ghca-acd' ) . '</span></div></div>';
+		$html  .= '<div class="gh-ovp-bd"><div class="gh-health"><div class="gh-donut">' . self::donut_svg( $slices, $total, $aria );
+		$html  .= '<div class="gh-donut-c"><strong>' . esc_html( (string) ( $health['center'] ?? '—' ) ) . '</strong><span>' . esc_html( (string) ( $health['caption'] ?? '' ) ) . '</span></div></div>';
 		$html  .= '<ul class="gh-legend">';
+		$colors = self::tone_colors();
 		foreach ( $slices as $slice ) {
-			$html .= '<li><i class="gh-dot gh-dot--' . esc_attr( (string) $slice['tone'] ) . '" aria-hidden="true"></i><span>' . esc_html( (string) $slice['label'] ) . '</span><strong>' . esc_html( (string) (int) $slice['count'] ) . '</strong></li>';
+			$color = $colors[ (string) $slice['tone'] ] ?? $colors['neutral'];
+			$html .= '<li><i style="background:' . esc_attr( $color ) . '"></i>' . esc_html( (string) $slice['label'] ) . '<strong>' . esc_html( (string) (int) $slice['count'] ) . '</strong></li>';
 		}
 		$html .= '</ul></div>';
-		$html .= '<p class="gh-card__foot">' . esc_html( sprintf( /* translators: %d: employees in scope */ __( '%d employees in scope', 'ghca-acd' ), $total ) );
+		$html .= '<div class="gh-health-ft"><span>' . esc_html( sprintf( /* translators: %d: employees in scope */ __( '%d employees in scope', 'ghca-acd' ), $total ) ) . '</span>';
 		$overdue = 0;
 		foreach ( $slices as $slice ) {
 			if ( 'overdue' === ( $slice['key'] ?? '' ) ) {
@@ -260,87 +384,130 @@ final class GHCA_ACD_Redesign {
 			}
 		}
 		if ( $overdue > 0 ) {
-			$html .= ' <a href="#ghca-tab-overdue" data-ghca-tab-jump="ghca-tab-overdue">' . esc_html( sprintf( /* translators: %d: overdue employees */ __( '%d overdue', 'ghca-acd' ), $overdue ) ) . '</a>';
+			$html .= '<a class="gh-health-od" href="#ghca-tab-overdue" data-ghca-tab-jump="ghca-tab-overdue">' . esc_html( sprintf( /* translators: %d: overdue employees */ __( '%d overdue', 'ghca-acd' ), $overdue ) ) . ' →</a>';
 		}
-		return $html . '</p></section>';
+		$html .= '</div><p class="gh-small gh-muted gh-health-note">' . esc_html__( 'The percent is the existing compliance rate: completed plus expiring soon.', 'ghca-acd' ) . '</p>';
+		return $html . '</div></div>';
 	}
 
-	/** @param array<int,array<string,mixed>> $groups */
-	private static function groups_html( array $groups ): string {
-		$html = '<section class="gh-card" aria-labelledby="gh-ov-groups-title"><header class="gh-card__head"><div><h2 id="gh-ov-groups-title">' . esc_html__( 'Compliance by group', 'ghca-acd' ) . '</h2><p>' . esc_html__( 'Sorted by risk · completion of required courses', 'ghca-acd' ) . '</p></div>';
-		$html .= '<a href="#ghca-tab-courses" data-ghca-tab-jump="ghca-tab-courses">' . esc_html__( 'Course detail', 'ghca-acd' ) . '</a></header>';
-		if ( ! $groups ) {
-			return $html . '<p class="gh-ov-empty">' . esc_html__( 'No groups in this view.', 'ghca-acd' ) . '</p></section>';
-		}
-		$html .= '<ul class="gh-groups">';
-		foreach ( $groups as $row ) {
-			$chip  = self::group_chip( $row );
-			$rate  = (int) $row['rate'];
-			$tone  = 'high' === ( $row['risk'] ?? '' ) ? 'danger' : ( 'medium' === ( $row['risk'] ?? '' ) ? 'warning' : 'success' );
-			$html .= '<li><div class="gh-group__top"><strong>' . esc_html( (string) $row['label'] ) . '</strong><span class="gh-chip gh-chip--' . esc_attr( $chip['tone'] ) . '">' . esc_html( $chip['label'] ) . '</span></div>';
-			$html .= '<p>' . esc_html( sprintf( /* translators: 1: employees, 2: overdue */ __( '%1$d employees · %2$d overdue', 'ghca-acd' ), (int) $row['employees'], (int) $row['overdue'] ) ) . '</p>';
-			$html .= '<div class="gh-bar" role="img" aria-label="' . esc_attr( $rate . '%' ) . '"><span class="gh-bar__fill gh-bar__fill--' . esc_attr( $tone ) . '" style="width:' . esc_attr( (string) max( 0, min( 100, $rate ) ) ) . '%"></span></div>';
-			$html .= '<b>' . esc_html( (string) $rate ) . '%</b></li>';
-		}
-		return $html . '</ul></section>';
-	}
-
-	/** @param array<string,int> $certs */
-	private static function certificates_html( array $certs ): string {
-		$rows = array(
-			__( 'Issued for active employees in this view', 'ghca-acd' ) => (int) ( $certs['issued'] ?? 0 ),
-			__( 'Course completions · last 30 days', 'ghca-acd' ) => (int) ( $certs['recent'] ?? 0 ),
-			__( 'Completed, no certificate link', 'ghca-acd' ) => (int) ( $certs['missing'] ?? 0 ),
-		);
-		$html = '<section class="gh-card gh-card--certs" aria-labelledby="gh-ov-certs-title"><header class="gh-card__head"><h2 id="gh-ov-certs-title">' . esc_html__( 'Certificates & records', 'ghca-acd' ) . '</h2>';
-		$html .= '<a href="#ghca-tab-certificates" data-ghca-tab-jump="ghca-tab-certificates">' . esc_html__( 'View all', 'ghca-acd' ) . '</a></header><dl>';
-		foreach ( $rows as $label => $value ) {
-			$html .= '<div><dt>' . esc_html( (string) $label ) . '</dt><dd>' . esc_html( (string) $value ) . '</dd></div>';
-		}
-		return $html . '</dl></section>';
-	}
-
-	/** @param array<int,array<string,mixed>> $slices */
-	private static function donut_style( array $slices, int $total ): string {
-		if ( $total < 1 ) {
-			return 'background:var(--gh-neutral-100)';
-		}
-		$colors = array(
+	/** @return array<string,string> */
+	private static function tone_colors(): array {
+		return array(
 			'success' => 'var(--gh-status-success-solid)',
 			'warning' => 'var(--gh-status-warning-solid)',
 			'info'    => 'var(--gh-status-info-solid)',
 			'danger'  => 'var(--gh-status-danger-solid)',
 			'neutral' => 'var(--gh-status-neutral-solid)',
 		);
-		$stops  = array();
-		$cursor = 0.0;
-		foreach ( $slices as $slice ) {
+	}
+
+	/** @param array<int,array<string,mixed>> $slices */
+	private static function donut_svg( array $slices, int $total, string $label ): string {
+		$circ   = 2 * M_PI * 47;
+		$colors = self::tone_colors();
+		$svg    = '<svg width="112" height="112" viewBox="0 0 112 112" role="img" aria-label="' . esc_attr( $label ) . '">';
+		$svg   .= '<circle cx="56" cy="56" r="47" fill="none" stroke="var(--gh-border)" stroke-width="12"></circle>';
+		$acc    = 0.0;
+		foreach ( $total > 0 ? $slices : array() as $slice ) {
 			$count = (int) ( $slice['count'] ?? 0 );
 			if ( $count < 1 ) {
 				continue;
 			}
-			$end     = $cursor + ( $count / $total * 100 );
-			$color   = $colors[ (string) ( $slice['tone'] ?? 'neutral' ) ] ?? $colors['neutral'];
-			$stops[] = $color . ' ' . round( $cursor, 2 ) . '% ' . round( $end, 2 ) . '%';
-			$cursor  = $end;
+			$len   = $circ * $count / $total;
+			$color = $colors[ (string) ( $slice['tone'] ?? 'neutral' ) ] ?? $colors['neutral'];
+			$svg  .= '<circle cx="56" cy="56" r="47" fill="none" stroke="' . esc_attr( $color ) . '" stroke-width="12" stroke-dasharray="' . esc_attr( number_format( $len, 1, '.', '' ) . ' ' . number_format( $circ, 1, '.', '' ) ) . '" stroke-dashoffset="' . esc_attr( number_format( -$acc, 1, '.', '' ) ) . '" transform="rotate(-90 56 56)"></circle>';
+			$acc  += $len;
 		}
-		if ( ! $stops ) {
-			return 'background:var(--gh-neutral-100)';
+		return $svg . '</svg>';
+	}
+
+	/** @param array<int,array<string,mixed>> $groups */
+	private static function groups_html( array $groups ): string {
+		$html  = '<div class="gh-card" aria-labelledby="gh-groups-h"><div class="gh-card-hd gh-card-hd--plain"><div><h2 class="gh-h3" id="gh-groups-h">' . esc_html__( 'Compliance by group', 'ghca-acd' ) . '</h2>';
+		$html .= '<span class="gh-small gh-muted">' . esc_html__( 'Sorted by risk · completion of required courses', 'ghca-acd' ) . '</span></div>';
+		$html .= '<a class="gh-btn gh-btn--ghost gh-btn--sm" href="#ghca-tab-courses" data-ghca-tab-jump="ghca-tab-courses">' . esc_html__( 'Course detail', 'ghca-acd' ) . self::icon( 'arrow-right', 'sm' ) . '</a></div><div class="gh-ovp-bd">';
+		if ( ! $groups ) {
+			return $html . '<p class="gh-ovp-empty">' . esc_html__( 'No groups in this view.', 'ghca-acd' ) . '</p></div></div>';
 		}
-		return 'background:conic-gradient(' . implode( ',', $stops ) . ')';
+		$status = array( 'danger' => 'overdue', 'warning' => 'duesoon', 'success' => 'progress' );
+		$html  .= '<ul class="gh-grp">';
+		foreach ( $groups as $row ) {
+			$chip      = self::group_chip( $row );
+			$rate      = max( 0, min( 100, (int) $row['rate'] ) );
+			$overdue   = (int) $row['overdue'];
+			$employees = (int) $row['employees'];
+			$st        = $rate >= 100 && $overdue < 1 ? 'completed' : ( $status[ $chip['tone'] ] ?? 'progress' );
+			$bar       = $overdue > 0 ? ' gh-bar--danger' : ( $rate >= 100 ? ' gh-bar--success' : '' );
+			$meta      = 1 === $employees
+				? __( '1 employee', 'ghca-acd' )
+				: sprintf( /* translators: %d: employees */ __( '%d employees', 'ghca-acd' ), $employees );
+			if ( $overdue > 0 ) {
+				$meta .= ' · ' . sprintf( /* translators: %d: overdue employees */ __( '%d overdue', 'ghca-acd' ), $overdue );
+			}
+			$html .= '<li><div class="gh-grp-n"><strong>' . esc_html( (string) $row['label'] ) . '</strong><span>' . esc_html( $meta ) . '</span></div>';
+			$html .= '<div class="gh-bar' . $bar . '" role="img" aria-label="' . esc_attr( $rate . '%' ) . '"><span style="width:' . esc_attr( (string) $rate ) . '%"></span></div>';
+			$html .= '<span class="gh-grp-pct">' . esc_html( (string) $rate ) . '%</span>';
+			$html .= '<span class="gh-grp-st"><span class="gh-st gh-st--' . esc_attr( $st ) . '">' . esc_html( $chip['label'] ) . '</span></span></li>';
+		}
+		return $html . '</ul></div></div>';
+	}
+
+	/** @param array<string,int> $certs */
+	private static function certificates_html( array $certs ): string {
+		$missing = (int) ( $certs['missing'] ?? 0 );
+		$rows    = array(
+			array( __( 'Issued', 'ghca-acd' ), __( '· active employees in this view', 'ghca-acd' ), (int) ( $certs['issued'] ?? 0 ), '' ),
+			array( __( 'Course completions', 'ghca-acd' ), __( '· last 30 days', 'ghca-acd' ), (int) ( $certs['recent'] ?? 0 ), '' ),
+			array( __( 'Missing', 'ghca-acd' ), __( '· completed, no certificate link', 'ghca-acd' ), $missing, $missing > 0 ? 'is-danger' : 'is-zero' ),
+		);
+		$html = '<div class="gh-card" aria-labelledby="gh-certs-h"><div class="gh-card-hd gh-card-hd--plain"><h2 class="gh-h3" id="gh-certs-h">' . esc_html__( 'Certificates & records', 'ghca-acd' ) . '</h2>';
+		$html .= '<a class="gh-btn gh-btn--ghost gh-btn--sm" href="#ghca-tab-certificates" data-ghca-tab-jump="ghca-tab-certificates">' . esc_html__( 'View all', 'ghca-acd' ) . self::icon( 'arrow-right', 'sm' ) . '</a></div>';
+		$html .= '<div class="gh-ovp-bd"><ul class="gh-certl">';
+		foreach ( $rows as $row ) {
+			$html .= '<li><a href="#ghca-tab-certificates" data-ghca-tab-jump="ghca-tab-certificates"' . ( '' !== $row[3] ? ' class="' . esc_attr( $row[3] ) . '"' : '' ) . '>' . esc_html( $row[0] ) . '<small>' . esc_html( $row[1] ) . '</small><strong>' . esc_html( (string) $row[2] ) . '</strong></a></li>';
+		}
+		return $html . '</ul></div></div>';
+	}
+
+	/** @param array<int,array<string,string>> $links */
+	private static function quick_links_html( array $links ): string {
+		if ( ! $links ) {
+			return '';
+		}
+		$html = '<section aria-labelledby="gh-ql-h"><div class="gh-card"><div class="gh-card-hd gh-card-hd--plain"><h2 class="gh-h3" id="gh-ql-h">' . esc_html__( 'Quick links', 'ghca-acd' ) . '</h2></div><div class="gh-card-bd gh-qlinks gh-qlinks--row">';
+		foreach ( $links as $link ) {
+			$html .= '<a class="gh-qlink" href="' . esc_url( $link['url'] ) . '">' . self::icon( $link['icon'] ) . '<span><strong>' . esc_html( $link['label'] ) . '</strong>';
+			$html .= '' !== $link['subtitle'] ? '<span>' . esc_html( $link['subtitle'] ) . '</span>' : '';
+			$html .= '</span></a>';
+		}
+		return $html . '</div></div></section>';
+	}
+
+	private static function support_html( string $email ): string {
+		$html  = '<section class="gh-card gh-card--sunken gh-help-row" aria-labelledby="gh-help-h"><span class="gh-stat-ico gh-help-ico">' . self::icon( 'lifebuoy', 'lg' ) . '</span>';
+		$html .= '<div class="gh-help-txt"><h2 class="gh-h4" id="gh-help-h">' . esc_html__( 'Need help with records or course access?', 'ghca-acd' ) . '</h2>';
+		$html .= '<p class="gh-p gh-secondary">' . esc_html__( 'First check the employee is in the right LearnDash group with the required courses assigned.', 'ghca-acd' ) . '</p></div>';
+		if ( '' !== $email && ( ! function_exists( 'is_email' ) || is_email( $email ) ) ) {
+			$html .= '<a class="gh-btn gh-btn--secondary" href="' . esc_url( 'mailto:' . $email ) . '">' . self::icon( 'mail' ) . esc_html__( 'Contact support', 'ghca-acd' ) . '</a>';
+		}
+		return $html . '</section>';
+	}
+
+	/** @param array<string,mixed> $model */
+	private static function footer_html( array $model ): string {
+		$org  = isset( $model['chrome']['org'] ) ? (string) $model['chrome']['org'] : '';
+		$year = function_exists( 'wp_date' ) ? wp_date( 'Y' ) : gmdate( 'Y' );
+		return '<footer class="gh-muted gh-foot"><span>© ' . esc_html( $year . ( '' !== $org ? ' ' . $org : '' ) ) . '</span><span>' . esc_html__( 'Powered by Gridhouse Digital', 'ghca-acd' ) . '</span></footer>';
 	}
 
 	/** @param array<string,mixed> $data @return array<int,array<string,mixed>> */
 	private static function tabs( array $data ): array {
-		$tabs = array(
+		$overdue = (int) ( $data['overdue_employees'] ?? 0 );
+		$tabs    = array(
 			array( 'id' => 'ghca-tab-overview', 'label' => __( 'Overview', 'ghca-acd' ), 'badge' => null, 'active' => true ),
 			array( 'id' => 'ghca-tab-employees', 'label' => __( 'Employees', 'ghca-acd' ), 'badge' => (int) ( $data['total_employees'] ?? 0 ), 'active' => false ),
+			array( 'id' => 'ghca-tab-overdue', 'label' => __( 'Overdue', 'ghca-acd' ), 'badge' => $overdue > 0 ? $overdue : null, 'tone' => 'danger', 'active' => false ),
 		);
-		if ( GHCA_ACD_Roles::user_can_manage_users() ) {
-			$tabs[] = array( 'id' => 'ghca-tab-inactive-employees', 'label' => __( 'Inactive', 'ghca-acd' ), 'badge' => (int) ( $data['total_inactive_employees'] ?? 0 ), 'active' => false );
-		}
-		$overdue = (int) ( $data['overdue_employees'] ?? 0 );
-		$tabs[] = array( 'id' => 'ghca-tab-overdue', 'label' => __( 'Overdue & at risk', 'ghca-acd' ), 'badge' => $overdue > 0 ? $overdue : null, 'active' => false );
 		if ( GHCA_ACD_Roles::user_can_review_external_training() ) {
 			$tabs[] = array( 'id' => 'ghca-tab-external-training', 'label' => __( 'External training', 'ghca-acd' ), 'badge' => null, 'active' => false );
 		}
@@ -348,6 +515,9 @@ final class GHCA_ACD_Redesign {
 		$tabs[] = array( 'id' => 'ghca-tab-courses', 'label' => __( 'Courses', 'ghca-acd' ), 'badge' => GHCA_ACD_Data_Provider::count_unique_tracked_courses( $data['employees'] ?? array() ), 'active' => false );
 		$tabs[] = array( 'id' => 'ghca-tab-certificates', 'label' => __( 'Certificates', 'ghca-acd' ), 'badge' => null, 'active' => false );
 		$tabs[] = array( 'id' => 'ghca-tab-reports', 'label' => __( 'Reports', 'ghca-acd' ), 'badge' => null, 'active' => false );
+		if ( GHCA_ACD_Roles::user_can_manage_users() ) {
+			$tabs[] = array( 'id' => 'ghca-tab-inactive-employees', 'label' => __( 'Inactive', 'ghca-acd' ), 'badge' => (int) ( $data['total_inactive_employees'] ?? 0 ), 'active' => false );
+		}
 		return $tabs;
 	}
 
@@ -374,34 +544,34 @@ final class GHCA_ACD_Redesign {
 	/** @return array<int,array<string,string>> */
 	private static function header_actions(): array {
 		$page = function_exists( 'get_permalink' ) ? ( get_permalink() ?: home_url( '/compliance-admin-dashboard/' ) ) : '';
-		$manage = '';
-		if ( class_exists( 'GHCA_ACD_Roles' ) && GHCA_ACD_Roles::user_can_manage_users() && class_exists( 'GHCA_ACD_Data_Provider' ) ) {
-			$manage = GHCA_ACD_Data_Provider::get_page_url( 'manage-users', '/manage-users/' );
-		} elseif ( function_exists( 'current_user_can' ) && current_user_can( 'edit_users' ) ) {
-			$manage = admin_url( 'users.php' );
-		} elseif ( class_exists( 'GHCA_ACD_Data_Provider' ) ) {
+		$manage = self::manage_users_url();
+		if ( '' === $manage && class_exists( 'GHCA_ACD_Data_Provider' ) ) {
 			$manage = GHCA_ACD_Data_Provider::get_page_url( 'group-management', '/group-management/' );
 		}
 		return array(
 			array(
+				'key'     => 'sync',
 				'label'   => __( 'Sync', 'ghca-acd' ),
 				'url'     => function_exists( 'wp_nonce_url' ) ? wp_nonce_url( add_query_arg( 'ghca_acd_sync', '1', $page ), 'ghca_acd_sync', 'ghca_nonce' ) : $page,
 				'variant' => 'secondary',
 				'tab'     => '',
 			),
 			array(
+				'key'     => 'export',
 				'label'   => __( 'Export', 'ghca-acd' ),
 				'url'     => function_exists( 'wp_nonce_url' ) ? wp_nonce_url( admin_url( 'admin-post.php?action=ghca_acd_export_csv' ), 'ghca_acd_export_csv' ) : '',
 				'variant' => 'secondary',
 				'tab'     => '',
 			),
 			array(
+				'key'     => 'users',
 				'label'   => __( 'Manage users', 'ghca-acd' ),
 				'url'     => $manage,
 				'variant' => 'secondary',
 				'tab'     => '',
 			),
 			array(
+				'key'     => 'reports',
 				'label'   => __( 'View reports', 'ghca-acd' ),
 				'url'     => $page . '#ghca-tab-reports',
 				'variant' => 'primary',
@@ -411,7 +581,7 @@ final class GHCA_ACD_Redesign {
 	}
 
 	public static function custom_brand_style(): string {
-		if ( ! class_exists( 'GHCA_Dashboard_Branding' ) || ! function_exists( 'get_option' ) ) {
+		if ( 'gridhouse' !== self::theme_slug() || ! class_exists( 'GHCA_Dashboard_Branding' ) || ! function_exists( 'get_option' ) ) {
 			return '';
 		}
 		$saved = get_option( GHCA_Dashboard_Branding::OPTION, array() );

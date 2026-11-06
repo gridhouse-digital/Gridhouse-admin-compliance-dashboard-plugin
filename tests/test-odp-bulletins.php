@@ -274,17 +274,33 @@ $overview = GHCA_ACD_Redesign::render_from_model( array(
 ) );
 check( false !== strpos( $overview, '&lt;script&gt;alert(1)&lt;/script&gt;' ) && false === strpos( $overview, '<script>alert(1)</script>' ), 'Group labels are escaped' );
 check( false === strpos( $overview, 'NEW, proposed' ) && false === strpos( $overview, 'Pending issuance' ), 'Overview does not invent sample banners or unsupported certificate states' );
-check( false !== strpos( $overview, 'Course completions · last 30 days' ), 'Recent completions stay labeled as completions' );
+check( false !== strpos( $overview, 'Course completions<small>· last 30 days</small>' ), 'Recent completions stay labeled as completions' );
+check( false !== strpos( $overview, 'Issued<small>· active employees in this view</small>' ), 'The certificate row names the active view' );
+check( false !== strpos( $overview, 'class="ghca-ui' ) && false !== strpos( $overview, 'class="gh-app ghca-acd ghca-acd--v2" data-theme="gridhouse"' ), 'Overview renders inside the isolated board root' );
+check( false !== strpos( $overview, 'gh-grid gh-grid--kpi gh-kpi--overview' ) && 6 === preg_match_all( '/class="gh-stat(?: gh-stat--[a-z]+)?"/', $overview ), 'Overview renders the six-figure board strip' );
+check( false !== strpos( $overview, 'class="gh-ovp gh-ovp--3"' ) && false !== strpos( $overview, 'stroke-dasharray=' ), 'Overview uses the board grid and SVG donut' );
 check( false === strpos( $overview, 'Issued, all time' ) && false !== strpos( $overview, 'Issued for active employees in this view' ), 'Certificates are labeled as the active view' );
 check( false === strpos( $overview, 'Training now' ) && false !== strpos( $overview, 'have not started' ), 'In progress does not say training now' );
 check( false !== strpos( $overview, 'existing compliance rate' ), 'The donut states the existing rate' );
 $css_unscoped = array();
+$css_depth    = 0;
+$css_frames   = 0;
 foreach ( file( __DIR__ . '/../assets/gh-redesign.css' ) as $css_line ) {
 	$css_line = trim( $css_line );
-	if ( '' === $css_line || 0 === strpos( $css_line, '/*' ) || 0 === strpos( $css_line, '*' ) || 0 === strpos( $css_line, '@' ) ) {
+	$was_top  = 0 === $css_depth || ( 1 === $css_depth && $css_frames > 0 );
+	$css_depth += substr_count( $css_line, '{' ) - substr_count( $css_line, '}' );
+	if ( 0 === strpos( $css_line, '@media' ) ) {
+		$css_frames = 0;
+	} elseif ( 0 === strpos( $css_line, '@' ) ) {
+		$css_frames = -1;
+	}
+	if ( 0 === $css_depth ) {
+		$css_frames = 0;
+	}
+	if ( '' === $css_line || 0 === strpos( $css_line, '/*' ) || 0 === strpos( $css_line, '*' ) || 0 === strpos( $css_line, '@' ) || 0 === strpos( $css_line, '}' ) || ! $was_top || false === strpos( $css_line, '{' ) ) {
 		continue;
 	}
-	if ( preg_match( '/^\.(?!ghca-acd--v2\b|gh-ui\b)/', $css_line ) || preg_match( '/^body(?!\.gh-ui-body\b)/', $css_line ) || preg_match( '/^(html|a|button|h1|h2|p|ul|li|div|input|form|section|header|main)\b/', $css_line ) ) {
+	if ( 0 !== strpos( $css_line, ':is(.ghca-ui, #ghca-ui-scope)' ) && 0 !== strpos( $css_line, 'body.gh-ui-body' ) ) {
 		$css_unscoped[] = $css_line;
 	}
 }

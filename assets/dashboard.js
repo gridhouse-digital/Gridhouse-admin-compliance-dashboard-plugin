@@ -512,14 +512,19 @@
     });
   }
 
+  // The redesigned overview uses .gh-tab buttons without the legacy classes,
+  // whose !important colours would override the board styling.
+  var GHCA_TAB = '.ghca-acd__tab-btn, .gh-tab[data-ghca-tab-target]';
+  var GHCA_TABLIST = '.ghca-acd__tabs, .gh-tabs[data-ghca-tablist-main]';
+
   function activateTab(targetId, moveFocus) {
     if (!targetId) return;
 
-    var tabBtn = document.querySelector('.ghca-acd__tab-btn[data-ghca-tab-target="' + targetId + '"]');
+    var tabBtn = document.querySelector('.ghca-acd__tab-btn[data-ghca-tab-target="' + targetId + '"], .gh-tab[data-ghca-tab-target="' + targetId + '"]');
     if (!tabBtn) return;
 
-    var tabContainer = tabBtn.closest('.ghca-acd__tabs');
-    var allBtns = tabContainer ? tabContainer.querySelectorAll('.ghca-acd__tab-btn') : document.querySelectorAll('.ghca-acd__tab-btn');
+    var tabContainer = tabBtn.closest(GHCA_TABLIST);
+    var allBtns = tabContainer ? tabContainer.querySelectorAll(GHCA_TAB) : document.querySelectorAll(GHCA_TAB);
     var allContents = document.querySelectorAll('.ghca-acd__tab-content');
 
     allBtns.forEach(function(btn) {
@@ -566,7 +571,7 @@
         return;
       }
 
-      var tabBtn = e.target.closest('.ghca-acd__tab-btn');
+      var tabBtn = e.target.closest(GHCA_TAB);
       if (!tabBtn) return;
       var targetId = tabBtn.getAttribute('data-ghca-tab-target');
       if (!targetId) return;
@@ -583,10 +588,10 @@
      * Bound per-tablist rather than on document so the drawer's own tablist
      * (.ghca-acd__drawer-tabs, injected later by AJAX) is never intercepted.
      */
-    document.querySelectorAll('.ghca-acd__tabs').forEach(function (tablist) {
+    document.querySelectorAll(GHCA_TABLIST).forEach(function (tablist) {
       if (tablist.closest('.ghca-acd__drawer')) return;
       tablist.addEventListener('keydown', function (e) {
-        var btns = Array.prototype.slice.call(tablist.querySelectorAll('.ghca-acd__tab-btn'));
+        var btns = Array.prototype.slice.call(tablist.querySelectorAll(GHCA_TAB));
         if (!btns.length) return;
         var current = btns.indexOf(document.activeElement);
         if (current === -1) return;
@@ -1089,6 +1094,8 @@
     function post(extra, onDone) {
       var params = new URLSearchParams();
       params.append('nonce', window.ghcaAcd.nonce);
+      var format = listEl.getAttribute('data-ghca-announce-format');
+      if (format) params.append('format', format);
       Object.keys(extra).forEach(function (k) { params.append(k, extra[k]); });
       fetch(window.ghcaAcd.ajaxUrl, {
         method: 'POST',
