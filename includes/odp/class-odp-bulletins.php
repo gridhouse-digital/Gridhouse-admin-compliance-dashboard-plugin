@@ -313,11 +313,22 @@ final class GHCA_ODP_Bulletins {
 			$cards[] = $public;
 			$payload_items[ $public['id'] ] = $public;
 		}
+		$order = array_keys( $payload_items );
 		$total = (int) $page_items['total'];
 		$from  = $total > 0 ? ( ( (int) $page_items['page'] - 1 ) * 9 ) + 1 : 0;
 		$to    = $total > 0 ? $from + count( $cards ) - 1 : 0;
+		$pages = (int) $page_items['pages'];
+		$urls  = array();
+		for ( $n = 1; $n <= $pages; $n++ ) {
+			$urls[ $n ] = self::library_url( $page_items['query'], $n );
+		}
 		$body  = GHCA_ODP_UI::library( array(
 			'state'    => $view['state'],
+			'home_url'   => self::home_url( $context ),
+			'home_label' => self::home_label( $context ),
+			'page'       => (int) $page_items['page'],
+			'pages'      => $pages,
+			'page_urls'  => $urls,
 			'context'  => $context,
 			'kicker'   => 'admin' === $context ? __( 'Agency bulletins', 'ghca-acd' ) : __( 'Employee bulletins', 'ghca-acd' ),
 			'action'   => self::library_url(),
@@ -331,6 +342,7 @@ final class GHCA_ODP_Bulletins {
 			'payload'  => array(
 				'disclaimer' => GHCA_ODP_Contract::DISCLAIMER,
 				'bulletins'  => $payload_items,
+				'order'      => $order,
 			),
 		) );
 		$status = 'unavailable' === $view['state'] ? 503 : 200;
@@ -341,8 +353,21 @@ final class GHCA_ODP_Bulletins {
 	public static function single_model( string $id, string $context ): array {
 		$lookup = self::lookup( $id, $context );
 		$item   = 'current' === $lookup['result'] && is_array( $lookup['bulletin'] ) ? self::card( $lookup['bulletin'] ) : null;
+		$more   = array();
+		$view   = self::snapshot( $context );
+		foreach ( $view['bulletins'] as $other ) {
+			if ( count( $more ) >= 3 ) {
+				break;
+			}
+			if ( (string) $other['id'] !== $id ) {
+				$more[] = self::card( $other );
+			}
+		}
 		$body   = GHCA_ODP_UI::single( array(
 			'result'         => $lookup['result'],
+			'home_url'       => self::home_url( $context ),
+			'home_label'     => self::home_label( $context ),
+			'more'           => $more,
 			'library_url'    => self::library_url(),
 			'kicker'         => __( 'ODP Bulletin', 'ghca-acd' ),
 			'item'           => $item,
@@ -370,6 +395,7 @@ final class GHCA_ODP_Bulletins {
 			'payload'     => array(
 				'disclaimer' => GHCA_ODP_Contract::DISCLAIMER,
 				'bulletins'  => $payload,
+				'order'      => array_keys( $payload ),
 			),
 		);
 		return array(
@@ -382,7 +408,7 @@ final class GHCA_ODP_Bulletins {
 	/** @param array<string,mixed> $item @return array<string,mixed> */
 	private static function card( array $item ): array {
 		$url = self::item_url( (string) $item['id'] );
-		return GHCA_ODP_UI::public_item( $item, $url, self::date_label( (string) $item['published_at'] ) );
+		return GHCA_ODP_UI::public_item( $item, $url, self::date_label( (string) $item['published_at'] ), self::date_parts( (string) $item['published_at'] ) );
 	}
 
 	/** @param array<string,mixed> $item @return array<string,mixed> */
@@ -395,12 +421,39 @@ final class GHCA_ODP_Bulletins {
 	}
 
 	/** @return array<string,mixed> */
+	private static function home_url( string $context ): string {
+		if ( ! class_exists( 'GHCA_ACD_Data_Provider' ) ) {
+			return home_url( '/' );
+		}
+		return 'admin' === $context
+			? GHCA_ACD_Data_Provider::get_admin_dashboard_url()
+			: GHCA_ACD_Data_Provider::get_page_url( 'employee-dashboard', '/employee-dashboard/' );
+	}
+
+	private static function home_label( string $context ): string {
+		return 'admin' === $context ? __( 'Compliance dashboard', 'ghca-acd' ) : __( 'Employee dashboard', 'ghca-acd' );
+	}
+
+	/** @return array{short:string,year:string,long:string} */
+	public static function date_parts( string $iso ): array {
+		$parsed = GHCA_ODP_Contract::parse_iso( $iso );
+		if ( null === $parsed ) {
+			return array( 'short' => '', 'year' => '', 'long' => '' );
+		}
+		$fmt = function_exists( 'wp_date' ) ? 'wp_date' : 'gmdate';
+		return array(
+			'short' => (string) $fmt( 'M j', $parsed['unix'] ),
+			'year'  => (string) $fmt( 'Y', $parsed['unix'] ),
+			'long'  => (string) $fmt( 'l, F j, Y', $parsed['unix'] ),
+		);
+	}
+
+	/** @return array<string,mixed> */
 	private static function shell( string $context, string $title, string $body, int $status ): array {
 		$admin = 'admin' === $context;
-		$home  = $admin && class_exists( 'GHCA_ACD_Data_Provider' )
-			? GHCA_ACD_Data_Provider::get_admin_dashboard_url()
-			: ( class_exists( 'GHCA_ACD_Data_Provider' ) ? GHCA_ACD_Data_Provider::get_page_url( 'employee-dashboard', '/employee-dashboard/' ) : home_url( '/' ) );
+		$home  = self::home_url( $context );
 		return array(
+			'chrome'        => GHCA_ACD_Redesign::chrome( $context, '' ),
 			'http_status'   => $status,
 			'title'         => $title,
 			'lang'          => str_replace( '_', '-', (string) get_locale() ),
@@ -409,7 +462,7 @@ final class GHCA_ODP_Bulletins {
 			'context'       => $context,
 			'theme'         => GHCA_ACD_Redesign::theme_slug(),
 			'home_url'      => $home,
-			'home_label'    => $admin ? __( 'Compliance dashboard', 'ghca-acd' ) : __( 'Employee dashboard', 'ghca-acd' ),
+			'home_label'    => self::home_label( $context ),
 			'context_label' => $admin ? __( 'Agency view', 'ghca-acd' ) : __( 'Employee view', 'ghca-acd' ),
 			'library_url'   => self::library_url(),
 			'body_html'     => $body,

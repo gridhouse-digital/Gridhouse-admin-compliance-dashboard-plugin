@@ -1,6 +1,7 @@
 <?php
 /**
- * Bulletin markup. Text is escaped. The drawer and the full page share one
+ * Bulletin markup, following the 4fa32636 design boards (.gh-ticker, .gh-bul,
+ * .gh-bl, .gh-bp). Text is escaped. The drawer and the full page share one
  * plain-text body; the library shows the separate preview.
  */
 
@@ -9,6 +10,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class GHCA_ODP_UI {
+	public static function icon( string $name, string $size = '' ): string {
+		$class = 'gh-i' . ( '' !== $size ? ' gh-i--' . $size : '' ) . ' i-' . $name;
+		return '<span class="' . esc_attr( $class ) . '" aria-hidden="true"></span>';
+	}
+
 	public static function state_message( string $state ): string {
 		if ( 'empty' === $state ) {
 			return __( 'No ODP bulletins right now.', 'ghca-acd' );
@@ -41,6 +47,41 @@ final class GHCA_ODP_UI {
 		return __( 'No bulletin with this id is in the current feed.', 'ghca-acd' );
 	}
 
+	/**
+	 * Shared app bar from the AdminChrome board.
+	 *
+	 * @param array<string,mixed> $chrome
+	 */
+	public static function appbar( array $chrome ): string {
+		$logo = (string) ( $chrome['logo_url'] ?? '' );
+		$org  = (string) ( $chrome['org'] ?? '' );
+		$html = '<header class="gh-appbar"><div class="gh-container gh-appbar-in">';
+		$html .= '<a class="gh-logo" href="' . esc_url( (string) ( $chrome['home_url'] ?? '' ) ) . '">';
+		if ( '' !== $logo ) {
+			$html .= '<span class="gh-logo-mark has-img" aria-hidden="true"><img src="' . esc_url( $logo ) . '" alt=""></span>';
+		} else {
+			$html .= '<span class="gh-logo-mark" aria-hidden="true">' . esc_html( (string) ( $chrome['mono'] ?? '' ) ) . '</span>';
+		}
+		$html .= '<span><span class="gh-logo-name">' . esc_html( $org ) . '</span><span class="gh-logo-sub">' . esc_html( (string) ( $chrome['sub'] ?? '' ) ) . '</span></span></a>';
+		$nav = isset( $chrome['nav'] ) && is_array( $chrome['nav'] ) ? $chrome['nav'] : array();
+		if ( $nav ) {
+			$html .= '<nav class="gh-nav" aria-label="' . esc_attr__( 'Main', 'ghca-acd' ) . '">';
+			foreach ( $nav as $link ) {
+				$current = (string) ( $link['current'] ?? '' );
+				$html   .= '<a href="' . esc_url( (string) $link['url'] ) . '"';
+				$html   .= '' !== $current ? ' aria-current="' . esc_attr( $current ) . '"' : '';
+				$html   .= ! empty( $link['tab'] ) ? ' data-ghca-tab-jump="' . esc_attr( (string) $link['tab'] ) . '"' : '';
+				$html   .= '>' . self::icon( (string) $link['icon'] ) . esc_html( (string) $link['label'] ) . '</a>';
+			}
+			$html .= '</nav>';
+		}
+		$html .= '<div class="gh-appbar-tools">';
+		if ( ! empty( $chrome['initials'] ) ) {
+			$html .= '<span class="gh-avatar" role="img" aria-label="' . esc_attr( (string) ( $chrome['signed_in'] ?? '' ) ) . '">' . esc_html( (string) $chrome['initials'] ) . '</span>';
+		}
+		return $html . '</div></div></header>';
+	}
+
 	/** @param array<string,mixed> $model */
 	public static function ticker( array $model ): string {
 		$items = isset( $model['items'] ) && is_array( $model['items'] ) ? $model['items'] : array();
@@ -48,26 +89,27 @@ final class GHCA_ODP_UI {
 		if ( ! $items && 'empty' === $state ) {
 			return '';
 		}
-		$html  = '<section class="gh-ticker" data-gh-ticker aria-label="' . esc_attr__( 'ODP bulletins', 'ghca-acd' ) . '">';
-		$html .= '<span class="gh-ticker__mark">' . esc_html__( 'ODP Bulletin', 'ghca-acd' ) . '</span>';
+		$html  = '<section class="gh-ticker" data-gh-ticker aria-label="' . esc_attr__( 'ODP Bulletin', 'ghca-acd' ) . '">';
+		$html .= '<span class="gh-ticker-lbl">' . self::icon( 'megaphone' ) . esc_html__( 'ODP Bulletin', 'ghca-acd' ) . '</span>';
 		if ( $items ) {
-			$html .= '<button type="button" class="gh-ticker__pause" data-gh-ticker-pause data-label-pause="' . esc_attr__( 'Pause', 'ghca-acd' ) . '" data-label-play="' . esc_attr__( 'Play', 'ghca-acd' ) . '" aria-pressed="false">' . esc_html__( 'Pause', 'ghca-acd' ) . '</button>';
-			$html .= '<div class="gh-ticker__viewport"><ul class="gh-ticker__track">';
+			$html .= '<div class="gh-ticker-vp"><ul class="gh-ticker-track" style="list-style:none;margin:0">';
 			foreach ( $items as $item ) {
-				$html .= '<li><a href="' . esc_url( (string) $item['url'] ) . '" data-gh-open-bulletin="' . esc_attr( (string) $item['id'] ) . '">';
-				$html .= '<time datetime="' . esc_attr( (string) $item['published_at'] ) . '">' . esc_html( (string) $item['date_label'] ) . '</time> ';
-				$html .= esc_html( (string) $item['headline'] ) . '</a></li>';
+				$html .= '<li class="gh-ticker-item"><time datetime="' . esc_attr( (string) $item['published_at'] ) . '">' . esc_html( (string) ( $item['date_short'] ?? $item['date_label'] ) ) . '</time>';
+				$html .= '<a href="' . esc_url( (string) $item['url'] ) . '" data-gh-open-bulletin="' . esc_attr( (string) $item['id'] ) . '">' . esc_html( (string) $item['headline'] ) . '</a></li>';
 			}
 			$html .= '</ul></div>';
-			if ( in_array( $state, array( 'cached', 'offline' ), true ) ) {
-				$html .= '<p class="gh-ticker__status" role="status">' . esc_html( self::state_message( $state ) ) . '</p>';
-			}
 		} else {
-			$html .= '<p class="gh-ticker__status" role="status">' . esc_html( self::state_message( $state ) ) . '</p>';
+			$html .= '<div class="gh-ticker-msg" role="status">' . esc_html( self::state_message( $state ) ) . '</div>';
 		}
-		$html .= '<a class="gh-ticker__all" href="' . esc_url( (string) $model['library_url'] ) . '">' . esc_html__( 'All bulletins', 'ghca-acd' ) . '</a>';
-		$html .= '</section>';
-		return $html;
+		$html .= '<div class="gh-ticker-ctl">';
+		if ( $items && in_array( $state, array( 'cached', 'offline' ), true ) ) {
+			$html .= '<span class="gh-ticker-state" role="status">' . self::icon( 'clock', 'sm' ) . esc_html__( 'Saved copy', 'ghca-acd' ) . '<span class="gh-sr"> ' . esc_html( self::state_message( $state ) ) . '</span></span>';
+		}
+		if ( count( $items ) > 1 ) {
+			$html .= '<button type="button" class="gh-btn gh-btn--ghost gh-btn--icon gh-btn--sm" data-gh-ticker-pause aria-pressed="false" aria-label="' . esc_attr__( 'Pause bulletin ticker', 'ghca-acd' ) . '" data-label-pause="' . esc_attr__( 'Pause bulletin ticker', 'ghca-acd' ) . '" data-label-play="' . esc_attr__( 'Play bulletin ticker', 'ghca-acd' ) . '">' . self::icon( 'pause' ) . '</button>';
+		}
+		$html .= '<a href="' . esc_url( (string) $model['library_url'] ) . '">' . esc_html__( 'All bulletins', 'ghca-acd' ) . '</a>';
+		return $html . '</div></section>';
 	}
 
 	/** @param array<string,mixed> $model */
@@ -75,55 +117,57 @@ final class GHCA_ODP_UI {
 		$state = (string) ( $model['state'] ?? 'unavailable' );
 		$query = (string) ( $model['query'] ?? '' );
 		$items = isset( $model['items'] ) && is_array( $model['items'] ) ? $model['items'] : array();
-		$html  = '<header class="gh-odp-head"><p class="gh-odp-kicker">' . esc_html( (string) $model['kicker'] ) . '</p>';
-		$html .= '<h1>' . esc_html__( 'ODP Bulletins', 'ghca-acd' ) . '</h1>';
-		$html .= '<p class="gh-odp-lead">' . esc_html( self::context_lead( (string) $model['context'] ) ) . '</p></header>';
+		$total = (int) ( $model['total'] ?? 0 );
+		$html  = '<div class="gh-odp"><div class="gh-odp-col"><div class="gh-odp-hd">';
+		$html .= self::crumbs( $model, array( array( 'label' => __( 'ODP Bulletins', 'ghca-acd' ), 'url' => '' ) ) );
+		$html .= '<div class="gh-odp-chiprow">' . self::chip() . '</div>';
+		$html .= '<h1 id="gh-odp-h">' . esc_html__( 'ODP Bulletins', 'ghca-acd' ) . '</h1>';
+		$html .= '<p class="gh-odp-intro">' . esc_html__( 'Plain-language updates to help you understand ODP guidance.', 'ghca-acd' ) . '</p>';
+		$html .= '<div class="gh-odp-tools" role="search"><form method="get" action="' . esc_url( (string) $model['action'] ) . '">';
+		$html .= '<div class="gh-input-wrap">' . self::icon( 'search' ) . '<label class="gh-sr" for="gh-odp-q">' . esc_html__( 'Search bulletins', 'ghca-acd' ) . '</label>';
+		$html .= '<input id="gh-odp-q" class="gh-input" type="search" name="ghca_odp_q" maxlength="120" placeholder="' . esc_attr__( 'Search bulletins', 'ghca-acd' ) . '" value="' . esc_attr( $query ) . '"></div></form>';
+		if ( $items ) {
+			$count = '' !== $query
+				? sprintf( /* translators: %d: matching bulletins */ __( '%d matching · newest first', 'ghca-acd' ), $total )
+				: sprintf( /* translators: %d: bulletins in this view */ __( '%d bulletins · newest first', 'ghca-acd' ), $total );
+			$html .= '<span class="gh-odp-count" role="status">' . esc_html( $count ) . '</span>';
+		}
+		$html .= '</div></div>';
 		$html .= self::status_block( $state );
-		$html .= '<form class="gh-odp-search" method="get" action="' . esc_url( (string) $model['action'] ) . '" role="search">';
-		$html .= '<label>' . esc_html__( 'Search bulletins', 'ghca-acd' ) . ' <input type="search" name="ghca_odp_q" maxlength="120" value="' . esc_attr( $query ) . '"></label>';
-		$html .= '<button type="submit">' . esc_html__( 'Search', 'ghca-acd' ) . '</button></form>';
 		if ( ! $items ) {
 			if ( '' !== $query ) {
-				$html .= '<p class="gh-odp-empty" role="status">' . esc_html__( 'No bulletins match that search.', 'ghca-acd' ) . '</p>';
+				$html .= self::empty_block( 'search', __( 'No bulletins match that search.', 'ghca-acd' ), __( 'Try a shorter word, or clear the search to see every bulletin.', 'ghca-acd' ) );
 			} elseif ( 'fresh' === $state || 'empty' === $state ) {
-				$html .= '<p class="gh-odp-empty" role="status">' . esc_html__( 'No ODP bulletins right now.', 'ghca-acd' ) . '</p>';
+				$html .= self::empty_block( 'megaphone', __( 'No ODP bulletins right now.', 'ghca-acd' ), __( 'New summaries appear here when Gridhouse publishes them.', 'ghca-acd' ) );
 			}
-			return $html . self::payload_script( $model );
+			return $html . '</div>' . self::library_aside( $model ) . '</div>' . self::payload_script( $model );
 		}
-		$html .= '<p class="gh-odp-count">' . esc_html( sprintf(
-			/* translators: 1: first visible row, 2: last visible row, 3: total matches */
-			__( 'Showing %1$d–%2$d of %3$d', 'ghca-acd' ),
-			(int) $model['from'],
-			(int) $model['to'],
-			(int) $model['total']
-		) ) . '</p>';
-		$html .= '<ul class="gh-odp-library">';
+		$stale = in_array( $state, array( 'cached', 'offline' ), true );
+		$html .= '<ol class="gh-bl' . ( $stale ? ' is-stale' : '' ) . '" aria-labelledby="gh-odp-h">';
 		foreach ( $items as $item ) {
-			$html .= '<li class="gh-odp-card"><p class="gh-odp-card__meta"><time datetime="' . esc_attr( (string) $item['published_at'] ) . '">' . esc_html( (string) $item['date_label'] ) . '</time>';
-			$html .= ' <span>' . esc_html( (string) $item['audience_label'] ) . '</span></p>';
-			$html .= '<h2><a href="' . esc_url( (string) $item['url'] ) . '">' . esc_html( (string) $item['headline'] ) . '</a></h2>';
-			$html .= '<p>' . esc_html( (string) $item['preview'] ) . '</p>';
-			$html .= '<button type="button" data-gh-open-bulletin="' . esc_attr( (string) $item['id'] ) . '">' . esc_html__( 'Read summary', 'ghca-acd' ) . '</button></li>';
+			$html .= '<li class="gh-bl-item"><div class="gh-bl-date"><strong>' . esc_html( (string) ( $item['date_md'] ?? $item['date_label'] ) ) . '</strong>' . esc_html( (string) ( $item['date_year'] ?? '' ) ) . '</div>';
+			$html .= '<div class="gh-bl-main"><h2 class="gh-bl-h"><a href="' . esc_url( (string) $item['url'] ) . '">' . esc_html( (string) $item['headline'] ) . '</a></h2>';
+			$html .= '<p class="gh-bl-p">' . esc_html( (string) $item['preview'] ) . '</p>';
+			$html .= '<div class="gh-bl-ft"><a class="gh-bl-read" href="' . esc_url( (string) $item['url'] ) . '" data-gh-open-bulletin="' . esc_attr( (string) $item['id'] ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: bulletin headline */ __( 'Read bulletin: %s', 'ghca-acd' ), (string) $item['headline'] ) ) . '">' . esc_html__( 'Read bulletin', 'ghca-acd' ) . self::icon( 'arrow-right' ) . '</a>';
+			if ( ! empty( $item['source_url'] ) ) {
+				$html .= '<span class="gh-bl-meta">' . self::icon( 'file' ) . esc_html__( 'Official source linked', 'ghca-acd' ) . '</span>';
+			}
+			$html .= '<span class="gh-bl-meta">' . esc_html( (string) $item['audience_label'] ) . '</span>';
+			$html .= '</div></div></li>';
 		}
-		$html .= '</ul>';
-		$html .= '<nav class="gh-odp-pager" aria-label="' . esc_attr__( 'Bulletin pages', 'ghca-acd' ) . '">';
-		if ( ! empty( $model['prev_url'] ) ) {
-			$html .= '<a href="' . esc_url( (string) $model['prev_url'] ) . '">' . esc_html__( 'Previous', 'ghca-acd' ) . '</a>';
-		}
-		if ( ! empty( $model['next_url'] ) ) {
-			$html .= '<a href="' . esc_url( (string) $model['next_url'] ) . '">' . esc_html__( 'Next', 'ghca-acd' ) . '</a>';
-		}
-		$html .= '</nav>';
-		return $html . self::payload_script( $model );
+		$html .= '</ol>';
+		$html .= self::pager( $model );
+		return $html . '</div>' . self::library_aside( $model ) . '</div>' . self::payload_script( $model );
 	}
 
 	/** @param array<string,mixed> $model */
 	public static function single( array $model ): string {
 		$result = (string) ( $model['result'] ?? 'unknown' );
-		$html   = '<header class="gh-odp-head"><p class="gh-odp-kicker">' . esc_html( (string) $model['kicker'] ) . '</p>';
-		$html  .= '<p><a href="' . esc_url( (string) $model['library_url'] ) . '">' . esc_html__( 'All bulletins', 'ghca-acd' ) . '</a></p></header>';
-		if ( 'current' !== $result ) {
-			$html .= '<h1>' . esc_html__( 'ODP Bulletin', 'ghca-acd' ) . '</h1>';
+		$item   = 'current' === $result && isset( $model['item'] ) && is_array( $model['item'] ) ? $model['item'] : null;
+		$trail  = array( array( 'label' => __( 'ODP Bulletins', 'ghca-acd' ), 'url' => (string) ( $model['library_url'] ?? '' ) ) );
+		$trail[] = array( 'label' => $item ? (string) $item['headline'] : __( 'ODP Bulletin', 'ghca-acd' ), 'url' => '' );
+		$html   = '<div class="gh-odp"><article class="gh-bp" aria-labelledby="gh-bp-h">' . self::crumbs( $model, $trail );
+		if ( null === $item ) {
 			$message = self::result_message( $result );
 			if ( 'not_in_view' === $result && ! empty( $model['audience_label'] ) ) {
 				$message = sprintf(
@@ -132,30 +176,31 @@ final class GHCA_ODP_UI {
 					(string) $model['audience_label']
 				);
 			}
-			$html .= '<p class="gh-odp-empty" role="status">' . esc_html( $message ) . '</p>';
-			return $html;
+			$html .= '<div class="gh-bp-top">' . self::chip() . '</div><h1 class="gh-bp-h" id="gh-bp-h">' . esc_html__( 'ODP Bulletin', 'ghca-acd' ) . '</h1>';
+			$html .= '<div class="gh-bul-msg" role="status"><span class="gh-bul-msgico">' . self::icon( 'info' ) . '</span><p>' . esc_html( $message ) . '</p></div>';
+			$html .= self::back_nav( $model );
+			return $html . '</article>' . self::more_aside( $model ) . '</div>';
 		}
-		$item  = $model['item'];
-		$html .= '<article class="gh-odp-article">';
-		$html .= '<p class="gh-odp-card__meta"><time datetime="' . esc_attr( (string) $item['published_at'] ) . '">' . esc_html( (string) $item['date_label'] ) . '</time> ';
-		$html .= '<span>' . esc_html( (string) $item['audience_label'] ) . '</span></p>';
-		$html .= '<h1>' . esc_html( (string) $item['headline'] ) . '</h1>';
+		$html .= '<div class="gh-bp-top">' . self::chip() . '<span class="gh-badge gh-badge--outline">' . esc_html( (string) $item['audience_label'] ) . '</span></div>';
+		$html .= '<h1 class="gh-bp-h" id="gh-bp-h">' . esc_html( (string) $item['headline'] ) . '</h1>';
 		if ( ! empty( $model['audience_note'] ) ) {
 			$html .= '<p class="gh-odp-note" role="note">' . esc_html( (string) $model['audience_note'] ) . '</p>';
 		}
-		$html .= '<div class="gh-odp-tools"><button type="button" data-gh-copy data-url="' . esc_attr( (string) $item['url'] ) . '">' . esc_html__( 'Copy link', 'ghca-acd' ) . '</button>';
-		$html .= '<span data-gh-copy-status class="gh-sr" role="status"></span></div>';
-		$html .= self::body_html( (string) $item['body'] );
-		$html .= self::source_link( $item['source_url'] ?? null );
-		$html .= '<p class="gh-odp-disclaimer">' . esc_html( GHCA_ODP_Contract::DISCLAIMER ) . '</p>';
-		$html .= '</article>';
-		return $html;
+		$published = sprintf( /* translators: %s: long publication date */ __( 'Published %s', 'ghca-acd' ), (string) ( $item['date_long'] ?? $item['date_label'] ) );
+		$html .= '<div class="gh-bp-meta"><span class="gh-bul-date">' . self::icon( 'calendar' ) . '<time datetime="' . esc_attr( (string) $item['published_at'] ) . '">' . esc_html( $published ) . '</time></span>';
+		$html .= '<span><button class="gh-copy" type="button" data-gh-copy data-url="' . esc_attr( (string) $item['url'] ) . '">' . self::icon( 'link' ) . esc_html__( 'Copy link', 'ghca-acd' ) . '</button>';
+		$html .= '<span data-gh-copy-status class="gh-sr" role="status"></span></span></div>';
+		$html .= self::body_html( (string) $item['body'], 'gh-bp-body' );
+		$html .= self::source_block( $item['source_url'] ?? null, 'page' );
+		$html .= '<p class="gh-bp-note">' . self::icon( 'info' ) . esc_html( GHCA_ODP_Contract::DISCLAIMER ) . '</p>';
+		$html .= self::back_nav( $model );
+		return $html . '</article>' . self::more_aside( $model ) . '</div>';
 	}
 
-	public static function body_html( string $body ): string {
-		$html = '<div class="gh-odp-body">';
+	public static function body_html( string $body, string $class = 'gh-bul-sum' ): string {
+		$html = '<div class="' . esc_attr( $class ) . '"' . ( 'gh-bul-sum' === $class ? ' data-gh-drawer-body' : '' ) . '>';
 		foreach ( GHCA_ODP_Contract::paragraphs( $body ) as $paragraph ) {
-			$html .= '<p class="gh-odp-copy">' . esc_html( $paragraph ) . '</p>';
+			$html .= '<p>' . esc_html( $paragraph ) . '</p>';
 		}
 		return $html . '</div>';
 	}
@@ -166,25 +211,40 @@ final class GHCA_ODP_UI {
 		if ( ! is_string( $safe ) || '' === $safe ) {
 			return '';
 		}
-		return '<p><a class="gh-odp-source" href="' . esc_url( $safe ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Read source', 'ghca-acd' ) . '<span class="gh-sr"> ' . esc_html__( '(opens an external page in a new tab)', 'ghca-acd' ) . '</span></a></p>';
+		return '<a class="gh-btn gh-btn--secondary" href="' . esc_url( $safe ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Read source', 'ghca-acd' ) . self::icon( 'external' ) . '<span class="gh-sr"> ' . esc_html__( '(opens an external page in a new tab)', 'ghca-acd' ) . '</span></a>';
+	}
+
+	/** @param mixed $url */
+	private static function source_block( $url, string $variant ): string {
+		$link = self::source_link( $url );
+		if ( '' === $link ) {
+			return '';
+		}
+		$host = (string) parse_url( (string) GHCA_ODP_Contract::safe_http_url( $url ), PHP_URL_HOST );
+		$meta = sprintf( /* translators: %s: source host name */ __( 'Opens %s in a new tab', 'ghca-acd' ), $host );
+		return '<div class="gh-bp-src"><span class="gh-bul-srcico">' . self::icon( 'file' ) . '</span><span class="gh-bul-srcmeta"><strong>' . esc_html__( 'Official source', 'ghca-acd' ) . '</strong><span>' . esc_html( $meta ) . '</span></span>' . $link . '</div>';
 	}
 
 	/** @param array<string,mixed> $model */
 	public static function drawer( array $model ): string {
-		$html  = '<div class="gh-drawer" id="gh-odp-drawer" hidden>';
-		$html .= '<div class="gh-drawer__backdrop" data-gh-drawer-close></div>';
-		$html .= '<aside class="gh-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="gh-odp-drawer-title" tabindex="-1">';
-		$html .= '<header class="gh-drawer__bar"><p>' . esc_html__( 'ODP Bulletin', 'ghca-acd' ) . '</p>';
-		$html .= '<button type="button" data-gh-drawer-close>' . esc_html__( 'Close', 'ghca-acd' ) . '</button></header>';
-		$html .= '<p class="gh-odp-card__meta" data-gh-drawer-meta></p>';
-		$html .= '<h2 id="gh-odp-drawer-title" data-gh-drawer-title></h2>';
-		$html .= '<div class="gh-odp-tools"><a data-gh-drawer-full href="' . esc_url( (string) ( $model['library_url'] ?? '' ) ) . '">' . esc_html__( 'Open full page', 'ghca-acd' ) . '</a>';
-		$html .= '<a href="' . esc_url( (string) ( $model['library_url'] ?? '' ) ) . '">' . esc_html__( 'All bulletins', 'ghca-acd' ) . '</a>';
-		$html .= '<button type="button" data-gh-copy data-url="">' . esc_html__( 'Copy link', 'ghca-acd' ) . '</button>';
-		$html .= '<span data-gh-copy-status class="gh-sr" role="status"></span></div>';
-		$html .= '<div class="gh-odp-body" data-gh-drawer-body></div>';
-		$html .= '<p data-gh-drawer-source-wrap hidden></p>';
-		$html .= '<p class="gh-odp-disclaimer">' . esc_html( GHCA_ODP_Contract::DISCLAIMER ) . '</p>';
+		$library = esc_url( (string) ( $model['library_url'] ?? '' ) );
+		$html  = '<div class="gh-odp-layer" id="gh-odp-drawer" hidden>';
+		$html .= '<div class="gh-scrim" data-gh-drawer-close aria-hidden="true"></div>';
+		$html .= '<aside class="gh-drawer gh-bul" role="dialog" aria-modal="true" aria-labelledby="gh-odp-drawer-title" tabindex="-1">';
+		$html .= '<div class="gh-bul-hd"><span class="gh-bul-chip">' . self::icon( 'megaphone' ) . esc_html__( 'ODP Bulletin', 'ghca-acd' ) . '</span>';
+		$html .= '<span class="gh-bul-pos" data-gh-drawer-pos></span>';
+		$html .= '<button type="button" class="gh-bul-x" data-gh-drawer-close data-gh-drawer-x aria-label="' . esc_attr__( 'Close bulletin', 'ghca-acd' ) . '">' . self::icon( 'x' ) . '</button></div>';
+		$html .= '<div class="gh-bul-bd"><span class="gh-bul-date">' . self::icon( 'calendar' ) . '<time data-gh-drawer-meta></time></span>';
+		$html .= '<h2 class="gh-bul-h" id="gh-odp-drawer-title" data-gh-drawer-title></h2>';
+		$html .= '<div class="gh-bul-sum" data-gh-drawer-body></div>';
+		$html .= '<div class="gh-bul-src" data-gh-drawer-source-wrap hidden><span class="gh-bul-eyebrow">' . esc_html__( 'Source', 'ghca-acd' ) . '</span>';
+		$html .= '<div class="gh-bul-srcrow"><span class="gh-bul-srcico">' . self::icon( 'file' ) . '</span><span class="gh-bul-srcmeta"><strong>' . esc_html__( 'Official source', 'ghca-acd' ) . '</strong><span data-gh-drawer-source-host></span></span>';
+		$html .= '<a class="gh-btn gh-btn--secondary gh-btn--sm" data-gh-drawer-source href="#" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Read source', 'ghca-acd' ) . self::icon( 'external', 'sm' ) . '<span class="gh-sr"> ' . esc_html__( '(opens an external page in a new tab)', 'ghca-acd' ) . '</span></a></div></div>';
+		$html .= '<p class="gh-bul-note">' . self::icon( 'info' ) . esc_html( GHCA_ODP_Contract::DISCLAIMER ) . '</p></div>';
+		$html .= '<div class="gh-bul-ft"><a class="gh-btn gh-btn--secondary gh-btn--sm gh-bul-open" data-gh-drawer-full href="' . $library . '">' . self::icon( 'article', 'sm' ) . esc_html__( 'Open full page', 'ghca-acd' ) . '</a>';
+		$html .= '<a class="gh-bul-all" href="' . $library . '">' . esc_html__( 'All bulletins', 'ghca-acd' ) . self::icon( 'arrow-right' ) . '</a>';
+		$html .= '<div class="gh-bul-step"><button type="button" data-gh-drawer-step="-1" aria-label="' . esc_attr__( 'Newer bulletin', 'ghca-acd' ) . '">' . self::icon( 'chev-left' ) . '</button>';
+		$html .= '<button type="button" data-gh-drawer-step="1" aria-label="' . esc_attr__( 'Older bulletin', 'ghca-acd' ) . '">' . self::icon( 'chev-right' ) . '</button></div></div>';
 		$html .= '</aside></div>';
 		return $html;
 	}
@@ -203,14 +263,14 @@ final class GHCA_ODP_UI {
 		}
 		$html .= '<title>' . esc_html( (string) $model['title'] ) . '</title>';
 		$html .= '<link rel="stylesheet" href="' . esc_url( (string) $model['css'] ) . '">';
-		$html .= '</head><body class="gh-ui-body"><a class="gh-skip" href="#gh-odp-main">' . esc_html__( 'Skip to content', 'ghca-acd' ) . '</a>';
+		$html .= '</head><body class="gh-ui-body">';
 		$style = (string) ( $model['brand_style'] ?? '' );
-		$html .= '<div class="gh-ui gh-ui--' . esc_attr( (string) $model['context'] ) . '" data-gh-theme="' . esc_attr( (string) $model['theme'] ) . '"' . ( '' !== $style ? ' style="' . esc_attr( $style ) . '"' : '' ) . '">';
-		$html .= '<header class="gh-ui-bar"><a href="' . esc_url( (string) $model['home_url'] ) . '">' . esc_html( (string) $model['home_label'] ) . '</a>';
-		$html .= '<span>' . esc_html( (string) $model['context_label'] ) . '</span></header>';
-		$html .= '<main id="gh-odp-main">' . $body . '</main>';
+		$html .= '<div class="ghca-ui"><div class="gh-app gh-ui--' . esc_attr( (string) $model['context'] ) . '" data-theme="' . esc_attr( (string) $model['theme'] ) . '"' . ( '' !== $style ? ' style="' . esc_attr( $style ) . '"' : '' ) . '>';
+		$html .= '<a class="gh-skip" href="#gh-odp-main">' . esc_html__( 'Skip to content', 'ghca-acd' ) . '</a>';
+		$html .= self::appbar( isset( $model['chrome'] ) && is_array( $model['chrome'] ) ? $model['chrome'] : array() );
+		$html .= '<main id="gh-odp-main" class="gh-container gh-odp-main">' . $body . '</main>';
 		$html .= self::drawer( $model );
-		$html .= '</div><script src="' . esc_url( (string) $model['js'] ) . '" defer></script></body></html>';
+		$html .= '</div></div><script src="' . esc_url( (string) $model['js'] ) . '" defer></script></body></html>';
 		return $html;
 	}
 
@@ -224,8 +284,12 @@ final class GHCA_ODP_UI {
 		return '<script type="application/json" id="gh-odp-data">' . $json . '</script>';
 	}
 
-	/** @param array<string,mixed> $item @return array<string,mixed> */
-	public static function public_item( array $item, string $url, string $date_label ): array {
+	/**
+	 * @param array<string,mixed> $item
+	 * @param array<string,string> $dates short (Nov 2), md, year, long labels
+	 * @return array<string,mixed>
+	 */
+	public static function public_item( array $item, string $url, string $date_label, array $dates = array() ): array {
 		$source = GHCA_ODP_Contract::safe_http_url( $item['source_url'] ?? null );
 		return array(
 			'id'             => (string) $item['id'],
@@ -235,11 +299,101 @@ final class GHCA_ODP_UI {
 			'paragraphs'     => GHCA_ODP_Contract::paragraphs( (string) $item['body'] ),
 			'published_at'   => (string) $item['published_at'],
 			'date_label'     => $date_label,
+			'date_short'     => (string) ( $dates['short'] ?? $date_label ),
+			'date_md'        => (string) ( $dates['short'] ?? $date_label ),
+			'date_year'      => (string) ( $dates['year'] ?? '' ),
+			'date_long'      => (string) ( $dates['long'] ?? $date_label ),
 			'audience'       => (string) $item['audience'],
 			'audience_label' => GHCA_ODP_Contract::audience_label( (string) $item['audience'] ),
 			'source_url'     => is_string( $source ) ? $source : null,
+			'source_host'    => is_string( $source ) ? (string) parse_url( $source, PHP_URL_HOST ) : '',
 			'url'            => $url,
 		);
+	}
+
+	private static function chip(): string {
+		return '<span class="gh-bul-chip">' . self::icon( 'megaphone' ) . esc_html__( 'ODP Bulletin', 'ghca-acd' ) . '</span>';
+	}
+
+	/**
+	 * @param array<string,mixed> $model
+	 * @param array<int,array{label:string,url:string}> $trail
+	 */
+	private static function crumbs( array $model, array $trail ): string {
+		$home = (string) ( $model['home_url'] ?? '' );
+		$html = '<nav aria-label="' . esc_attr__( 'Breadcrumb', 'ghca-acd' ) . '"><ol class="gh-crumbs">';
+		if ( '' !== $home ) {
+			$html .= '<li><a href="' . esc_url( $home ) . '">' . esc_html( (string) ( $model['home_label'] ?? '' ) ) . '</a></li>';
+		}
+		foreach ( $trail as $step ) {
+			$html .= '' !== $step['url']
+				? '<li><a href="' . esc_url( $step['url'] ) . '">' . esc_html( $step['label'] ) . '</a></li>'
+				: '<li><span aria-current="page">' . esc_html( $step['label'] ) . '</span></li>';
+		}
+		return $html . '</ol></nav>';
+	}
+
+	private static function empty_block( string $icon, string $title, string $text ): string {
+		return '<div class="gh-odp-empty" role="status"><span class="gh-bul-msgico">' . self::icon( $icon ) . '</span><strong>' . esc_html( $title ) . '</strong><p>' . esc_html( $text ) . '</p></div>';
+	}
+
+	/** @param array<string,mixed> $model */
+	private static function pager( array $model ): string {
+		$pages = (int) ( $model['pages'] ?? 1 );
+		$page  = (int) ( $model['page'] ?? 1 );
+		$html  = '<nav class="gh-pager" aria-label="' . esc_attr__( 'Bulletin pages', 'ghca-acd' ) . '"><span>' . esc_html( sprintf(
+			/* translators: 1: first visible row, 2: last visible row, 3: total matches */
+			__( 'Showing %1$d–%2$d of %3$d', 'ghca-acd' ),
+			(int) $model['from'],
+			(int) $model['to'],
+			(int) $model['total']
+		) ) . '</span>';
+		if ( $pages < 2 ) {
+			return $html . '</nav>';
+		}
+		$urls  = isset( $model['page_urls'] ) && is_array( $model['page_urls'] ) ? $model['page_urls'] : array();
+		$html .= '<div class="gh-pager-btns">';
+		$html .= ! empty( $model['prev_url'] ) ? '<a href="' . esc_url( (string) $model['prev_url'] ) . '" aria-label="' . esc_attr__( 'Previous page', 'ghca-acd' ) . '">' . self::icon( 'chev-left' ) . '</a>' : '';
+		for ( $n = 1; $n <= $pages; $n++ ) {
+			$html .= $n === $page
+				? '<a aria-current="page">' . esc_html( (string) $n ) . '</a>'
+				: '<a href="' . esc_url( (string) ( $urls[ $n ] ?? '' ) ) . '">' . esc_html( (string) $n ) . '</a>';
+		}
+		$html .= ! empty( $model['next_url'] ) ? '<a href="' . esc_url( (string) $model['next_url'] ) . '" aria-label="' . esc_attr__( 'Next page', 'ghca-acd' ) . '">' . self::icon( 'chev-right' ) . '</a>' : '';
+		return $html . '</div></nav>';
+	}
+
+	/** @param array<string,mixed> $model */
+	private static function library_aside( array $model ): string {
+		$html  = '<aside class="gh-odp-aside" aria-label="' . esc_attr__( 'About ODP bulletins', 'ghca-acd' ) . '">';
+		$html .= '<div class="gh-odp-about">' . self::chip() . '<h2>' . esc_html__( 'What these are', 'ghca-acd' ) . '</h2>';
+		$html .= '<p>' . esc_html__( 'Short, plain-language summaries of guidance from Pennsylvania’s Office of Developmental Programs, written by Gridhouse for your team.', 'ghca-acd' ) . '</p>';
+		$html .= '<p>' . esc_html__( 'Your agency’s own news lives in', 'ghca-acd' ) . ' <strong>' . esc_html__( 'Announcements', 'ghca-acd' ) . '</strong> ' . esc_html__( 'on your dashboard.', 'ghca-acd' ) . '</p></div>';
+		$html .= '<div class="gh-odp-about"><h2>' . esc_html__( 'Only what applies to you', 'ghca-acd' ) . '</h2>';
+		$html .= '<p>' . esc_html( self::context_lead( (string) ( $model['context'] ?? 'employee' ) ) ) . '</p></div>';
+		return $html . '</aside>';
+	}
+
+	/** @param array<string,mixed> $model */
+	private static function more_aside( array $model ): string {
+		$more = isset( $model['more'] ) && is_array( $model['more'] ) ? $model['more'] : array();
+		$html = '<aside class="gh-odp-aside" aria-label="' . esc_attr__( 'More bulletins', 'ghca-acd' ) . '"><div class="gh-odp-about"><h2>' . esc_html__( 'More bulletins', 'ghca-acd' ) . '</h2>';
+		if ( $more ) {
+			$html .= '<ul class="gh-odp-mini">';
+			foreach ( $more as $item ) {
+				$html .= '<li><a href="' . esc_url( (string) $item['url'] ) . '"><time datetime="' . esc_attr( (string) $item['published_at'] ) . '">' . esc_html( (string) $item['date_label'] ) . '</time>' . esc_html( (string) $item['headline'] ) . '</a></li>';
+			}
+			$html .= '</ul>';
+		} else {
+			$html .= '<p>' . esc_html__( 'No other bulletins in this view.', 'ghca-acd' ) . '</p>';
+		}
+		$html .= '<a class="gh-bul-all" href="' . esc_url( (string) ( $model['library_url'] ?? '' ) ) . '">' . esc_html__( 'All bulletins', 'ghca-acd' ) . self::icon( 'arrow-right' ) . '</a>';
+		return $html . '</div></aside>';
+	}
+
+	/** @param array<string,mixed> $model */
+	private static function back_nav( array $model ): string {
+		return '<div class="gh-bp-nav"><a class="gh-btn gh-btn--secondary" href="' . esc_url( (string) ( $model['library_url'] ?? '' ) ) . '">' . self::icon( 'arrow-left' ) . esc_html__( 'Back to all bulletins', 'ghca-acd' ) . '</a></div>';
 	}
 
 	private static function context_lead( string $context ): string {
@@ -253,6 +407,7 @@ final class GHCA_ODP_UI {
 		if ( ! in_array( $state, array( 'cached', 'offline', 'unavailable' ), true ) ) {
 			return '';
 		}
-		return '<p class="gh-odp-status gh-odp-status--' . esc_attr( $state ) . '" role="status">' . esc_html( self::state_message( $state ) ) . '</p>';
+		$title = 'unavailable' === $state ? __( 'Bulletins unavailable', 'ghca-acd' ) : __( 'Showing a saved copy', 'ghca-acd' );
+		return '<div class="gh-odp-stale gh-odp-status--' . esc_attr( $state ) . '" role="status">' . self::icon( 'clock' ) . '<div><strong>' . esc_html( $title ) . '</strong><span>' . esc_html( self::state_message( $state ) ) . '</span></div></div>';
 	}
 }
