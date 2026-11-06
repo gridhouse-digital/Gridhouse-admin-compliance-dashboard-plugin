@@ -53,6 +53,12 @@ Agency announcements stay on their own CPT.
 
 Overview chrome is off until `ghca_acd_ui_redesign` is saved. Bulletin routes stay available either way. Deactivating the plugin removes the rewrite version and flushes rules. Deleting `ghca_odp_feed_cache` drops the last feed copy.
 
+## Rewrite version and a stale `notoptions` cache
+
+Rules are flushed once, at `shutdown`, until `ghca_odp_rewrite_version` holds the current version. With a persistent object cache, a cross-request race can leave that key in the cached `notoptions` list after the row was written. `get_option()` then reports it missing. `update_option()` falls through to `add_option()`, whose upsert changes 0 rows for an identical value, so core returns before it clears `notoptions`. Every request would register and run the flush again.
+
+Before flushing, the plugin removes only this key from `notoptions`, the same way core does after a successful write, and reads the option again through `get_option()`. It does not query the table directly, write the row again, or flush the object cache. `tests/integration-odp-rewrite-notoptions.php` reproduces the state in a local WordPress and fails without this change. The test runs on the default in-memory object cache. It does not prove why a Redis install got into that state.
+
 ## Not in this slice
 
 Employees, courses, certificates, reports, audit, external training, drawers other than the bulletin drawer, the employee dashboard plugin, and the settings boards beyond the overview checkbox.
