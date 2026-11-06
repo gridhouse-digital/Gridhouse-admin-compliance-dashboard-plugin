@@ -36,7 +36,7 @@ final class GHCA_ODP_Bulletins {
 		foreach ( GHCA_ODP_Routes::rules() as $regex => $query ) {
 			add_rewrite_rule( $regex, $query, 'top' );
 		}
-		if ( self::REWRITE_VERSION !== (string) get_option( self::REWRITE_OPTION, '' ) ) {
+		if ( self::REWRITE_VERSION !== (string) get_option( self::REWRITE_OPTION, '' ) && false === has_action( 'shutdown', array( __CLASS__, 'flush_rewrites_once' ) ) ) {
 			add_action( 'shutdown', array( __CLASS__, 'flush_rewrites_once' ), 99 );
 		}
 	}
@@ -46,11 +46,32 @@ final class GHCA_ODP_Bulletins {
 	 * The version option makes this a one-time write.
 	 */
 	public static function flush_rewrites_once(): void {
-		if ( self::REWRITE_VERSION === (string) get_option( self::REWRITE_OPTION, '' ) ) {
+		if ( self::stored_rewrite_version_matches() ) {
 			return;
 		}
 		flush_rewrite_rules( false );
 		update_option( self::REWRITE_OPTION, self::REWRITE_VERSION, false );
+	}
+
+	/**
+	 * A persistent object cache can keep this key in 'notoptions' after the row
+	 * was written (a cross-request race). get_option() then reports it missing,
+	 * update_option() falls through to add_option(), whose upsert changes 0 rows
+	 * for an identical value and returns before core clears 'notoptions'. That
+	 * loops forever. Drop only this key from 'notoptions', as core does after a
+	 * successful write, and re-read through the options API.
+	 */
+	private static function stored_rewrite_version_matches(): bool {
+		if ( self::REWRITE_VERSION === (string) get_option( self::REWRITE_OPTION, '' ) ) {
+			return true;
+		}
+		$notoptions = wp_cache_get( 'notoptions', 'options' );
+		if ( ! is_array( $notoptions ) || ! isset( $notoptions[ self::REWRITE_OPTION ] ) ) {
+			return false;
+		}
+		unset( $notoptions[ self::REWRITE_OPTION ] );
+		wp_cache_set( 'notoptions', $notoptions, 'options' );
+		return self::REWRITE_VERSION === (string) get_option( self::REWRITE_OPTION, '' );
 	}
 
 	/** @param array<int,string> $vars */
