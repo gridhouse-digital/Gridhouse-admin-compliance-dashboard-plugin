@@ -10,7 +10,8 @@ One place for what each staging site runs. Update it whenever a build is install
 | `1.7.3-rc.8-d93f640` | Previously installed; replaced by `51d8679` | before November 7 | First Slices 1–4 build. |
 | `1.7.3-rc.8-a890189` | Previously installed | earlier | Slice 3. |
 | `1.7.3-rc.8-ce36016` | Prepared, not installed | | Slice 5. |
-| `1.7.3-rc.8-63c3287` | Downloaded and integrity-verified, **not installed** | | Slice 6. Superseded by the bulk-retry fix build; do not install. |
+| `1.7.3-rc.8-63c3287` | Downloaded and integrity-verified, **not installed** | | Slice 6. Superseded by `ef5d03d`; do not install. |
+| `1.7.3-rc.8-ef5d03d` | Prepared, not installed | | Slice 6 with the bulk-retry fix. The build to verify next. |
 | `0f5d4e0`, `b2da862`, `c6bc947`, `680d12e` | Prepared, not installed | | Interim builds, superseded. |
 
 Outstanding staging checks from earlier builds remain open; staging is not cleared. The blocked bulletin feed on staging is expected and the outbound guard is unchanged.

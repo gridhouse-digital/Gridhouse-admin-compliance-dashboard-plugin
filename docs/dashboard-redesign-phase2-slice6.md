@@ -192,3 +192,19 @@ Uncheck the redesign option: the legacy screens return unchanged (the export han
 | Checks on the archive | `unzip -t` clean; every file compared with `git show 63c3287:<path>`; `php -l` on every PHP file |
 
 Downloaded and integrity-verified by the reviewer; not installed. Superseded by the bulk-retry fix build below, which should be installed instead. Older builds are kept unchanged.
+
+### Bulk-retry fix build (install this instead of `63c3287`)
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-ef5d03d.zip` |
+| Source commit | `ef5d03d821c464e659c81dee6a8fd2fd010c7735` |
+| Byte size | 678,262 |
+| SHA-256 | `b999e56885f6aad4fb556f6adeccdf7d8543a05fed72eedda2a299d96705b5fd` |
+| Root folder / entry file | `Gridhouse-admin-compliance-dashboard-plugin-main/gridhouse-admin-compliance-dashboard.php` (same as staging; updates in place) |
+| Contents | Cumulative Slices 1-6 plus the bulk-retry fix. 142 runtime files, each byte-identical to the commit; `BUILD.txt` lists every file's SHA-256 |
+| Runtime difference from `63c3287` | `assets/dashboard.js`, `includes/messaging/class-bulk-messaging.php`, `class-messaging-repository.php`, `class-messaging-service.php`, `class-messaging-worker.php` |
+| Checks on the archive | `unzip -t` clean; every file compared with `git show ef5d03d:<path>`; every file's SHA-256 found in the manifest; `php -l` on every PHP file |
+
+Not installed anywhere. No schema change: the scheduling lock is a short-lived row in the options table, removed when the request finishes. Older builds are kept unchanged.
+
