@@ -115,6 +115,44 @@ Still open, carried over from slices 2 and 3: phone tab height, column drop, the
 | Phone tab bars | Found while verifying: on a phone, keyboard selection could leave the chosen tab partly off-screen in the drawer's tab bar and in the dashboard's main tab bar. The drawer focused the tab before the other tabs lost their bolder selected state, so the scroll was computed for a width that then changed. Now every tab gets its state first and focus comes after. The redesigned drawer and main tab bars also call `scrollIntoView({ inline: 'nearest' })`. The legacy tab bars end in the same state as before, and the scroll call is not applied to them. |
 | Tests | Course, Overdue-only and combined filters; empty states and reset; the new defaults; phone tab scrolling and keyboard access in both tab bars. See [Tests](#tests). |
 
+## Bulletin pages in the theme: completion and end-to-end checks
+
+The in-theme bulletin pages shipped in `c422dc2`, and the `#F3EFEA` body in `b2da862`. This round finishes the integration and tests the real page path end to end.
+
+**How the pages integrate with the theme.** No theme's markup is hard-coded. The pages are printed with WordPress's own template API:
+- **Classic themes** (BuddyBoss, Hello with Elementor Pro header/footer locations, and others): `get_header()`, the bulletin content, `get_footer()`. Whatever the theme or its builder hooks into those calls appears exactly once.
+- **Block themes:** the theme's `header` and `footer` template parts, inside core's canvas.
+
+Assets go through `wp_enqueue_style` / `wp_enqueue_script`, the title through `pre_get_document_title`, noindex through `wp_robots`, and the body classes through `body_class`.
+
+**Changed in this round** (`includes/odp/class-odp-bulletins.php` only):
+
+| Change | Why |
+| --- | --- |
+| `neutral_main_query()` clears `is_home`, `is_404`, `is_archive`, `is_paged`, `is_search` and `is_posts_page` on the main query, for the bulletin routes only, before the theme header renders | The routes have no post behind them. WordPress's main query therefore read them as the **blog home**, or as a **404** when rewrite rules were not flushed. Themes use those flags for the current menu item, for `home blog` / `error404` body classes, and for home-only header variants. Without the fix, the theme header saw `is_home` true. The tests below fail when the call is removed. The plugin still sets the real status code. |
+| The page model no longer builds the plugin app-bar data (`chrome`) | It was unused since the pages moved into the theme. |
+
+Unchanged: routing (`/odp-bulletins/`, `/odp-bulletins/<id>/`), the login redirect, audience filtering, bulletin content, the unavailable, unknown, expired and out-of-audience states, status codes, branding, the drawer and the styles. No stylesheet changed in this round. Plugin styles stay scoped to `.ghca-ui`, plus the single body-colour rule on `body.ghca-ui-page`.
+
+**Exactly what was tested. Synthetic only: no WordPress, no BuddyBoss, no Akansoh theme, no network.**
+
+| Test | What it covers |
+| --- | --- |
+| `php tests/test-odp-pages.php` (30 checks) | Runs the **real** `GHCA_ODP_Bulletins::render_screen()` path, through `tests/odp-page-runner.php`, one process per scenario. The path covers route match, login check, audience, feed read from the plugin's cache option, page model, and the theme wrapper with stand-in `get_header()` / `get_footer()` and block parts. It checks:<ul><li>**Library, agency:** 200 and no network request. Exactly one theme header, footer, document and body. No plugin app bar, logo, nav, skip link or standalone body. Content sits between the header and footer. The agency audience sees "both" and agency-lead bulletins, not employee-only ones. Cards link to the bulletin page. The agency theme and brand colour are applied, with the drawer and its data. Body classes are `gh-odp-page ghca-ui-page`, never `home`, `blog` or `error404`, and the theme header sees `is_home` and `is_404` false. Assets, noindex and title go through WordPress.</li><li>**Library, employee:** employee and shared bulletins only. Search narrows the list.</li><li>**Detail:** 200 with the headline, body, back link to the library and source link, inside the theme. An agency-only bulletin opened by an employee withholds its text and shows the audience notice (unchanged phase-1 behaviour). An unknown id is a 404 inside the theme.</li><li>**Signed out** (library and detail): the login redirect back to the same URL. No page, no status and no feed read happen first.</li><li>**Feed blocked**, as by the staging outbound guard (no cache, the request refused): exactly one refused request, then 503 and the unavailable state inside the theme, for the library and the detail page.</li><li>**Block theme:** one document with the header and footer parts.</li><li>**Unflushed rewrite rules** (WordPress had marked a 404): still 200, and the theme never sees a 404.</li><li>**Any other URL:** nothing printed, enqueued or fetched.</li></ul> |
+| `node tests/browser-odp-pages.cjs` (24 checks) | Chromium. **Every request runs the same real path.** The stand-in classic theme has its own header with a shadow, a footer, transparent 48 px padding and a blue-grey body; the plugin assets come from the repository. It checks:<ul><li>**At 1440 and 390:** one theme header and footer and no plugin chrome. `#F3EFEA` in the exposed theme padding and behind the content. The list card, about cards and search input stay white. Wix Madefor in the content while the theme keeps its own font. The theme header, its links, the footer and the content padding are unchanged with and without the plugin stylesheet. No sideways scroll.</li><li>**Library to detail by clicking the card, and back by the link:** each request is rendered by the plugin's route, with one theme header and footer, and `#F3EFEA`.</li><li>The drawer opens and closes. The employee audience is right. No script errors.</li><li>**Signed out:** the stand-in site reports the login redirect requested by the plugin, and no bulletin content or page reaches the browser. Playwright cannot follow an HTTP redirect from an intercepted response, so the 302 itself, which is WordPress's `auth_redirect()`, was not exercised.</li><li>**Blocked feed at 1440 and 390:** the unavailable state inside the theme, with no bulletins and no sideways scroll.</li></ul> |
+
+**Not verified (needs the real site):**
+- the Akansoh/BuddyBoss header, navigation and footer around these pages;
+- a real WordPress main query and menus;
+- the real login redirect and real roles;
+- a real feed. The staging feed stays blocked by the outbound guard; it was not unblocked, and no test bulletins were published.
+
+**On staging (Taz), after this package is approved and installed:**
+1. Open `/odp-bulletins/` and one bulletin, signed in as an agency lead and as an employee. Each should show one site header with navigation and one footer, and no plugin header. The page background is `#F3EFEA` and the cards are white. With the feed blocked, the library shows "Bulletins unavailable".
+2. The theme menu should not highlight Home or the blog page on these URLs.
+3. Signed out, both URLs go to the login page and come back after login.
+4. Check a phone width.
+
 ## Correction: page background around the dashboard
 
 **Cause (confirmed on Akansoh staging).** `assets/dashboard.css` sets `body.ghca-acd-page { background-color: #eceff3; }` for the legacy dashboard. The redesign's warm page rule targeted only `body.gh-ui-body`, a class used by the old standalone bulletin pages and never present on a theme page. On the redesigned dashboard the body therefore stayed `#eceff3`. The theme's padding above and below the content is transparent, so those areas showed blue-grey strips. It was not a header shadow, and it came from the plugin's own stylesheet; an earlier answer in this thread that the plugin could not paint outside its wrapper had overlooked `dashboard.css`.

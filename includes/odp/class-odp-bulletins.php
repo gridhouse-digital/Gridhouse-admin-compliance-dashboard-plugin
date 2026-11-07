@@ -304,6 +304,7 @@ final class GHCA_ODP_Bulletins {
 			auth_redirect();
 		}
 		nocache_headers();
+		self::neutral_main_query();
 		$context = self::trusted_context();
 		if ( 'single' === $match['screen'] ) {
 			self::send_document( self::single_model( $match['id'], $context ) );
@@ -328,6 +329,28 @@ final class GHCA_ODP_Bulletins {
 		self::prepare_theme_page( $model );
 		echo self::themed_page( GHCA_ODP_UI::themed( $model ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- themed() escapes; the rest is theme output.
 		exit;
+	}
+
+	/**
+	 * The bulletin routes have no post behind them, so WordPress's main query reads them as the blog home page
+	 * (or as a 404 when rewrite rules are not flushed). The theme header renders after this point, and themes use
+	 * those flags for menus (current item), body classes (home, blog, error404) and home-only header variants. Clear
+	 * them for these routes only; the plugin sets the real status code itself.
+	 *
+	 * @param object|null $query The main query; defaults to the global one.
+	 */
+	public static function neutral_main_query( $query = null ): void {
+		if ( null === $query ) {
+			$query = $GLOBALS['wp_query'] ?? null;
+		}
+		if ( ! is_object( $query ) ) {
+			return;
+		}
+		foreach ( array( 'is_home', 'is_front_page', 'is_404', 'is_archive', 'is_posts_page', 'is_paged', 'is_search' ) as $flag ) {
+			if ( property_exists( $query, $flag ) ) {
+				$query->$flag = false;
+			}
+		}
 	}
 
 	/**
@@ -536,7 +559,7 @@ final class GHCA_ODP_Bulletins {
 		$admin = 'admin' === $context;
 		$home  = self::home_url( $context );
 		return array(
-			'chrome'        => GHCA_ACD_Redesign::chrome( $context, '' ),
+			// No 'chrome': the page sits in the theme's own header and footer (GHCA_ODP_UI::themed()).
 			'http_status'   => $status,
 			'title'         => $title,
 			'lang'          => str_replace( '_', '-', (string) get_locale() ),
