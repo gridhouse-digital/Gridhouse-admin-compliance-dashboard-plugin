@@ -503,6 +503,52 @@ final class GHCA_ACD_Messaging_Repository {
 		return $out;
 	}
 
+	/**
+	 * The most recent communication for each of several employees, with its deliveries, in one query. Read
+	 * only; used for the "Last reminder" column of the Overdue tab. Ids are cast to positive integers and
+	 * bound as placeholders. Callers check the communication-history permission and the schema first.
+	 *
+	 * @param array<int,int> $employee_user_ids
+	 * @return array<int,array{created_at:string,deliveries:array<int,array{channel:string,state:string}>}>
+	 */
+	public static function latest_for_employees( array $employee_user_ids ): array {
+		global $wpdb;
+
+		$ids = array_values( array_unique( array_filter( array_map( 'absint', $employee_user_ids ) ) ) );
+		if ( empty( $ids ) ) {
+			return array();
+		}
+		$communications = GHCA_ACD_Messaging_Schema::communications_table();
+		$placeholders   = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$rows           = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				'SELECT c.employee_user_id AS employee_user_id, c.created_at AS created_at, d.channel AS channel, d.state AS state
+				 FROM ' . $communications . ' c
+				 INNER JOIN (SELECT MAX(id) AS id FROM ' . $communications . ' WHERE employee_user_id IN (' . $placeholders . ') GROUP BY employee_user_id) latest ON latest.id = c.id
+				 INNER JOIN ' . GHCA_ACD_Messaging_Schema::deliveries_table() . ' d ON d.communication_id = c.id
+				 ORDER BY d.id ASC', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$ids
+			),
+			ARRAY_A
+		);
+
+		$out = array();
+		foreach ( (array) $rows as $row ) {
+			$employee = (int) ( $row['employee_user_id'] ?? 0 );
+			if ( $employee <= 0 ) {
+				continue;
+			}
+			if ( ! isset( $out[ $employee ] ) ) {
+				$out[ $employee ] = array( 'created_at' => (string) ( $row['created_at'] ?? '' ), 'deliveries' => array() );
+			}
+			$out[ $employee ]['deliveries'][] = array(
+				'channel' => sanitize_key( (string) ( $row['channel'] ?? '' ) ),
+				'state'   => sanitize_key( (string) ( $row['state'] ?? '' ) ),
+			);
+		}
+		return $out;
+	}
+
 	public static function history_count( int $employee_user_id, array $filters = array() ): int {
 		global $wpdb;
 		$parts = self::history_query_parts( $employee_user_id, $filters );

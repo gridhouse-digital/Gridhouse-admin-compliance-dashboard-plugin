@@ -166,7 +166,7 @@ final class GHCA_ACD_Redesign {
 			'quick_links'        => self::quick_links(),
 			'support_email'      => class_exists( 'GHCA_Dashboard_Branding' ) ? GHCA_Dashboard_Branding::get_support_email() : '',
 			'panels'             => self::secondary_panels( $atts, $data ),
-			'board_panels'       => array( 'ghca-tab-employees', 'ghca-tab-inactive-employees' ),
+			'board_panels'       => array( 'ghca-tab-employees', 'ghca-tab-inactive-employees', 'ghca-tab-overdue', 'ghca-tab-courses', 'ghca-tab-certificates' ),
 			'employee_drawer'    => true,
 			'flash'              => GHCA_ACD_Shortcodes::flash_items(),
 		);
@@ -542,9 +542,9 @@ final class GHCA_ACD_Redesign {
 	private static function secondary_panels( $atts, array $data ): array {
 		$panels = array(
 			'ghca-tab-employees'    => GHCA_ACD_Redesign_Tables::render_employees( $atts ),
-			'ghca-tab-courses'      => GHCA_ACD_Shortcodes::render_course_overview( $atts ),
-			'ghca-tab-certificates' => GHCA_ACD_Shortcodes::render_certificate_tracking( $atts ),
-			'ghca-tab-overdue'      => GHCA_ACD_Shortcodes::render_overdue_employees( $atts ),
+			'ghca-tab-courses'      => GHCA_ACD_Redesign_Lists::render_courses( $atts ),
+			'ghca-tab-certificates' => GHCA_ACD_Redesign_Lists::render_certificates( $atts ),
+			'ghca-tab-overdue'      => GHCA_ACD_Redesign_Lists::render_overdue( $atts ),
 			'ghca-tab-reports'      => GHCA_ACD_Shortcodes::render_reports( $atts ),
 			'ghca-tab-audit'        => GHCA_ACD_Audit_UI::render(),
 		);

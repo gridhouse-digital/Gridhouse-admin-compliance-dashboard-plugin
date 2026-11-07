@@ -54,7 +54,7 @@ function wp_create_nonce( $a = '' ) { return 'nonce'; }
 // The real one measures against time(); this one against the fixed test clock, so output never drifts.
 function human_time_diff( $from, $to = 0 ) { $d = (int) round( abs( $GLOBALS['ghca_env']['now'] - $from ) / 86400 ); return $d . ( 1 === $d ? ' day' : ' days' ); }
 function get_the_title( $id ) { return 'Synthetic group ' . $id; }
-function get_option( $k, $d = false ) { return $d; }
+function get_option( $k, $d = false ) { return $GLOBALS['ghca_env']['options'][ $k ] ?? $d; }
 function wp_get_current_user() { return (object) array( 'roles' => array() ); }
 
 class WP_Post {}
@@ -114,6 +114,7 @@ require_once __DIR__ . '/../../includes/class-data-provider.php';
 require_once __DIR__ . '/../../includes/class-redesign-tables.php';
 require_once __DIR__ . '/../../includes/class-fluentcrm.php';
 require_once __DIR__ . '/../../includes/class-certificate-download.php';
+require_once __DIR__ . '/../../includes/class-redesign-lists.php';
 
 /** Employee record in the shape build_employee_records() produces. */
 function ghca_env_employee( int $id, string $name, int $group, string $slug, string $label, int $done, int $total, int $due_offset_days, string $activity ): array {

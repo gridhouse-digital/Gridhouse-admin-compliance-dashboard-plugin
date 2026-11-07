@@ -33,6 +33,7 @@ require_once __DIR__ . '/includes/class-redesign-tables.php';
 require_once __DIR__ . '/includes/class-redesign-drawer.php';
 require_once __DIR__ . '/includes/class-redesign-edit.php';
 require_once __DIR__ . '/includes/class-redesign-reminder.php';
+require_once __DIR__ . '/includes/class-redesign-lists.php';
 require_once __DIR__ . '/includes/odp/class-odp-bulletins.php';
 require_once __DIR__ . '/includes/class-export.php';
 require_once __DIR__ . '/includes/class-fluentcrm.php';
@@ -185,6 +186,7 @@ final class GHCA_Admin_Compliance_Dashboard {
         'pdfError'         => __( 'Packet generation failed. No packet was created. Please try again.', 'ghca-acd' ),
         'tableError'       => __( 'Could not update the table. Your session may have expired — please reload the page.', 'ghca-acd' ),
         'tableNetworkError' => __( 'Could not reach the server. The table below may be out of date.', 'ghca-acd' ),
+        'certDownloadError' => __( 'The certificate could not be downloaded. Nothing was saved.', 'ghca-acd' ),
       )
     );
     wp_enqueue_script( 'ghca-agency-training', plugin_dir_url( __FILE__ ) . 'assets/agency-training.js', array( 'ghca-admin-dashboard' ), self::VERSION . '-' . (string) filemtime( plugin_dir_path( __FILE__ ) . 'assets/agency-training.js' ), true );

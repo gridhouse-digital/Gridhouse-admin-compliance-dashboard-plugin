@@ -125,14 +125,99 @@
       orderField: 'ghca_order'
     },
     courses: {
-      fields: ['ghca_crs_group', 'ghca_crs_search', 'ghca_crs_cert', 'ghca_crs_per'],
+      // ghca_crs_sort is sent by the redesigned tab only; the legacy table ignores it.
+      fields: ['ghca_crs_group', 'ghca_crs_search', 'ghca_crs_cert', 'ghca_crs_per', 'ghca_crs_sort'],
       checkboxFields: [],
       pageField: 'ghca_crs_page'
+    },
+    // The redesigned Certificates tab (slice 4). There is no legacy version of this table.
+    certificates: {
+      fields: ['ghca_cert_view', 'ghca_cert_course', 'ghca_cert_search', 'ghca_cert_when', 'ghca_cert_per', 'ghca_cert_orderby', 'ghca_cert_order'],
+      checkboxFields: [],
+      pageField: 'ghca_cert_page',
+      orderbyField: 'ghca_cert_orderby',
+      orderField: 'ghca_cert_order'
     }
   };
 
   document.querySelectorAll('[data-ghca-filter-form]').forEach(function (form) {
     initTableFilters(form);
+  });
+
+  /*
+   * Board buttons that set one form field and refresh its table: the Certificates sub-tabs (Issued, Expiring,
+   * Missing) and the "Show missing" alert button. Pressed state follows the field, so it is never out of step.
+   */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-ghca-set-field]');
+    if (!btn) { return; }
+    var formId = btn.getAttribute('data-ghca-set-form');
+    var form = formId ? document.getElementById(formId) : btn.closest('form');
+    var name = btn.getAttribute('data-ghca-set-field');
+    var field = form && form.elements ? form.elements.namedItem(name) : null;
+    if (!form || !field) { return; }
+    e.preventDefault();
+    field.value = btn.getAttribute('data-ghca-set-value') || '';
+    var pressed = null;
+    form.querySelectorAll('[data-ghca-set-field="' + name + '"]').forEach(function (other) {
+      var on = other.getAttribute('data-ghca-set-value') === field.value;
+      other.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (on) { pressed = other; }
+    });
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    // From outside the form (the alert), take the user to the list it changed.
+    if (formId && pressed) {
+      try { pressed.focus({ preventScroll: false }); } catch (err) { pressed.focus(); }
+    }
+  });
+
+  /*
+   * Certificates tab PDF button. Same endpoint and broker as the drawer, ids only. Only a real PDF is saved;
+   * anything else leaves nothing behind and says so.
+   */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-ghca-cert-pdf]');
+    if (!btn) { return; }
+    e.preventDefault();
+    if (btn.getAttribute('aria-busy') === 'true') { return; }
+    var url;
+    try {
+      url = new URL(btn.getAttribute('data-ghca-cert-pdf') || '', window.location.href);
+    } catch (err) { url = null; }
+    var failure = (window.ghcaAcd && window.ghcaAcd.certDownloadError) || 'The certificate could not be downloaded. Nothing was saved.';
+    if (!url || url.origin !== window.location.origin) {
+      if (typeof ghcaToast === 'function') { ghcaToast(failure, true); }
+      return;
+    }
+    var name = (btn.getAttribute('data-ghca-cert-title') || 'certificate').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'certificate';
+    btn.setAttribute('aria-busy', 'true');
+    btn.disabled = true;
+    fetch(url.href, { credentials: 'same-origin' })
+      .then(function (res) {
+        if (!res.ok) { throw new Error('download failed'); }
+        var type = res.headers && res.headers.get ? res.headers.get('Content-Type') : '';
+        return res.arrayBuffer().then(function (buffer) {
+          if (!ghcaCertificateResponseIsPdf(type, new Uint8Array(buffer.slice(0, 5)))) { throw new Error('not a pdf'); }
+          return new Blob([buffer], { type: 'application/pdf' });
+        });
+      })
+      .then(function (blob) {
+        var objectUrl = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = name + '.pdf';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
+      })
+      .catch(function () {
+        if (typeof ghcaToast === 'function') { ghcaToast(failure, true); }
+      })
+      .finally(function () {
+        btn.removeAttribute('aria-busy');
+        btn.disabled = false;
+      });
   });
 
   function initTableFilters(form) {
@@ -330,6 +415,14 @@
       if (!e.target) {
         return;
       }
+      // A board Sort select has no name: it writes "orderby:order" into the form's existing hidden sort fields.
+      if (e.target.hasAttribute && e.target.hasAttribute('data-ghca-sort-select')) {
+        var parts = (e.target.value || '').split(':');
+        var by = form.querySelector('input[name="' + (config.orderbyField || 'ghca_orderby') + '"]');
+        var dir = form.querySelector('input[name="' + (config.orderField || 'ghca_order') + '"]');
+        if (by) { by.value = parts[0] || ''; }
+        if (dir) { dir.value = parts[1] || 'asc'; }
+      }
       if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') {
         refresh(true);
       }
@@ -375,7 +468,9 @@
     // Clearing one filter (a chip's x) or all of them. Per page, sort and the page field are not filters.
     function clearFilters(name) {
       var controls = Array.prototype.slice.call(form.elements).filter(function (el) {
-        if (el.type === 'hidden' || el.type === 'submit' || el.hasAttribute('data-ghca-per-page')) { return false; }
+        if (el.type === 'hidden' || el.type === 'submit' || el.type === 'button' || el.hasAttribute('data-ghca-per-page')) { return false; }
+        // Sort and the Certificates view are not filters, so clearing filters leaves them as they are.
+        if (el.hasAttribute('data-ghca-sort-select') || el.hasAttribute('data-ghca-not-filter')) { return false; }
         return name === 'all' || el.name === name;
       });
       controls.forEach(function (el) {

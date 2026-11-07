@@ -223,7 +223,8 @@ $r = ghca_env_ajax( array( 'ghca_table' => 'employees', 'ghca_ui' => 'board' ) )
 check( true === $r['payload']['success'] && str_contains( $r['payload']['data']['html'], 'ghca-acd__table--employees' ), 'with the redesign off, even a board request gets the legacy markup' );
 reset_env();
 $r = ghca_env_ajax( array( 'ghca_table' => 'courses', 'ghca_ui' => 'board' ) );
-check( true === $r['payload']['success'] && ! isset( $r['payload']['data']['chips'] ), 'the courses table is not part of this slice' );
+// Slice 4 redesigned the Courses tab, so its board refresh now answers with board parts too.
+check( true === $r['payload']['success'] && isset( $r['payload']['data']['chips'] ) && ! str_contains( $r['payload']['data']['html'], 'ghca-acd__table--courses' ), 'the courses table answers a board request with board markup (slice 4)' );
 
 // ---- Handler order: nonce and capability first, then the markup choice.
 $ajax = (string) file_get_contents( __DIR__ . '/../includes/class-ajax-handlers.php' );

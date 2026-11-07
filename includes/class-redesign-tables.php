@@ -80,7 +80,7 @@ final class GHCA_ACD_Redesign_Tables {
 		return in_array( $slug, array( 'overdue', 'new_hire_overdue', 'expired' ), true );
 	}
 
-	private static function icon( string $name, string $size = '' ): string {
+	public static function icon( string $name, string $size = '' ): string {
 		return '<span class="gh-i' . ( '' !== $size ? ' gh-i--' . esc_attr( $size ) : '' ) . ' i-' . esc_attr( $name ) . '" aria-hidden="true"></span>';
 	}
 
@@ -180,7 +180,7 @@ final class GHCA_ACD_Redesign_Tables {
 		return sprintf( __( 'Showing %1$d–%2$d of %3$d', 'ghca-acd' ), $meta['from'], $meta['to'], $meta['total'] );
 	}
 
-	private static function sort_th( string $key, string $label, string $orderby, string $order, string $help = '' ): string {
+	public static function sort_th( string $key, string $label, string $orderby, string $order, string $help = '' ): string {
 		$active = $orderby === $key;
 		$next   = $active && 'asc' === $order ? 'desc' : 'asc';
 		$aria   = $active ? ( 'asc' === $order ? 'ascending' : 'descending' ) : 'none';
@@ -384,7 +384,7 @@ final class GHCA_ACD_Redesign_Tables {
 	 *
 	 * @param array<int|string,string> $options
 	 */
-	private static function select_field( string $id, string $label, string $name, string $current, array $options, string $all_label ): string {
+	public static function select_field( string $id, string $label, string $name, string $current, array $options, string $all_label ): string {
 		$h  = '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $id ) . '">' . esc_html( $label ) . '</label><select id="' . esc_attr( $id ) . '" class="gh-select" name="' . esc_attr( $name ) . '"><option value="">' . esc_html( $all_label ) . '</option>';
 		foreach ( $options as $value => $text ) {
 			$h .= '<option value="' . esc_attr( (string) $value ) . '"' . selected( $current, (string) $value, false ) . '>' . esc_html( (string) $text ) . '</option>';

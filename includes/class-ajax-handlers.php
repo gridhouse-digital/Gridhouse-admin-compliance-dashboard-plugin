@@ -1449,7 +1449,7 @@ final class GHCA_ACD_AJAX {
 
     $table = isset( $_POST['ghca_table'] ) ? sanitize_key( wp_unslash( (string) $_POST['ghca_table'] ) ) : 'employees';
 
-    // The redesigned Employees and Inactive tabs ask for board markup; the choice is markup only, never access.
+    // The redesigned tabs ask for board markup; the choice is markup only, never access.
     $board = GHCA_ACD_Redesign_Tables::board_requested();
 
     switch ( $table ) {
@@ -1465,11 +1465,24 @@ final class GHCA_ACD_AJAX {
         break;
       case 'priority':
         $filters = GHCA_ACD_Data_Provider::get_priority_filters();
+        if ( $board ) {
+          wp_send_json_success( GHCA_ACD_Redesign_Lists::priority_parts( $filters ) );
+        }
         $html    = GHCA_ACD_Shortcodes::get_priority_table_html( $filters );
         break;
       case 'courses':
         $filters = GHCA_ACD_Data_Provider::get_course_filters();
+        if ( $board ) {
+          wp_send_json_success( GHCA_ACD_Redesign_Lists::course_parts( $filters, GHCA_ACD_Redesign_Lists::course_sort() ) );
+        }
         $html    = GHCA_ACD_Shortcodes::get_course_table_html( $filters );
+        break;
+      case 'certificates':
+        // Only the redesigned Certificates tab has this table; the legacy panel has no list to refresh.
+        if ( ! $board ) {
+          wp_send_json_error( array( 'message' => __( 'Unknown table.', 'ghca-acd' ) ), 400 );
+        }
+        wp_send_json_success( GHCA_ACD_Redesign_Lists::certificate_parts( GHCA_ACD_Redesign_Lists::certificate_filters() ) );
         break;
       default:
         $filters = GHCA_ACD_Data_Provider::get_employee_filters();

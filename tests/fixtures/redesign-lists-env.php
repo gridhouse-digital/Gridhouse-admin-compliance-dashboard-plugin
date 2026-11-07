@@ -6,6 +6,9 @@
  * counting, paging and markup under test are the plugin's own code. Synthetic data, not a live site.
  */
 require_once __DIR__ . '/redesign-tables-env.php';
+if ( ! function_exists( 'absint' ) ) {
+	function absint( $v ) { return abs( (int) $v ); }
+}
 
 // The legacy renderers these tabs replace print through a few more WordPress helpers.
 if ( ! function_exists( 'wp_kses_post' ) ) {
