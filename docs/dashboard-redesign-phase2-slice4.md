@@ -290,7 +290,24 @@ Suggested staging checks for Taz, after the package is approved for staging (fic
 
 ## Package
 
-### Background-fix build (current)
+### Bulletin-integration build (current)
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-c6bc947.zip`, with sidecar `…-c6bc947.BUILD.txt` |
+| Size | 649,430 bytes |
+| SHA-256 | `fb980645ef80632131aaff2232107d4fd94699d93bd465d04564a45ba488db14` |
+| Built from | `c6bc94706501ef7bb678bbe25e47bf7327cb133e` on `gridhouse-overview-odp-bulletins-af45`, plugin version `1.7.3-rc.8` |
+| Contents | Cumulative: Slices 1–4, bulletin pages in the theme (including the query-flag fix), and the `#F3EFEA` body. 161 entries (139 runtime files, `BUILD.txt`, 21 folders). Same root folder and entry file. |
+| Difference from `b2da862` | `includes/odp/class-odp-bulletins.php` only |
+
+Verification:
+
+- **Archive:** `unzip -t` reports no errors, with one root folder and the entry file at its expected path. The 139 files are byte-identical to the commit, and the manifest verifies. The sidecar's size and SHA-256 match, and the commit is recorded. `php -l` and `node --check` pass.
+- **Tests against the extracted package:** 75 PHP scripts, the JS and Playwright tests, and the browser suites all pass (lists 51, tables 53, drawer 159, themed bulletin 34, page background 18, bulletin pages 24).
+- **No overwrite:** building again with the same name was refused, and the earlier builds are kept.
+
+### Background-fix build (prepared, not installed)
 
 | | |
 | --- | --- |
