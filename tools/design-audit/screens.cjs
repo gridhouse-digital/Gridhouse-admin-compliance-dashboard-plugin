@@ -22,6 +22,9 @@ module.exports = [
   { name: 'edit-records-1440', width: 1440, board: 'Drawer-EditRecords', plugin: 'drawer.html', prep: edit, scope: '.gh-drawer--emp', boardScope: '.gh-drawer' },
   { name: 'reminder-1440', width: 1440, board: 'Modal-SendReminder', plugin: 'drawer.html', prep: remind, scope: '[data-ghca-reminder-dialog]', boardScope: '.gh-modal' },
   { name: 'sheet-390', width: 390, board: 'M-Admin-Sheet', plugin: 'drawer.html', prep: drawer(''), scope: '.gh-drawer--emp', boardScope: '.gh-sheet, .gh-phone, body' },
+  { name: 'external-1440', width: 1440, board: 'Admin-ExternalReview', plugin: 'admin.html', prep: tab('ghca-tab-external-training'), scope: '#ghca-tab-external-training', boardScope: 'main' },
+  { name: 'audit-1440', width: 1440, board: 'Admin-AuditData', plugin: 'admin.html', prep: tab('ghca-tab-audit'), scope: '#ghca-tab-audit', boardScope: 'main' },
+  { name: 'reports-1440', width: 1440, board: 'Admin-Reports', plugin: 'admin.html', prep: tab('ghca-tab-reports'), scope: '#ghca-tab-reports', boardScope: 'main' },
   { name: 'odp-list-1440', width: 1440, board: 'ODP-List-Admin', plugin: 'library.html', scope: '.gh-odp-main', boardScope: 'main' },
   { name: 'odp-page-1440', width: 1440, board: 'ODP-Page-Admin', plugin: 'bulletin.html', scope: '.gh-odp-main', boardScope: 'main' },
 ];

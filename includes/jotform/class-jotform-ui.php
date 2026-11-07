@@ -825,4 +825,194 @@ final class GHCA_ACD_Jotform_UI {
 	}
 
 	private static function notice( bool $frontend = false ): void { $key = $frontend ? 'ghca_review_notice' : 'ghca_notice'; if ( empty( $_GET[ $key ] ) ) { return; } $notice = sanitize_text_field( wp_unslash( $_GET[ $key ] ) ); ?><div class="notice <?php echo 0 === strpos( $notice, 'error_' ) || false !== strpos( $notice, 'failed' ) || false !== strpos( $notice, 'blocked' ) ? 'notice-error' : 'notice-success'; ?> is-dismissible"><p><?php echo esc_html( str_replace( '_', ' ', $notice ) ); ?></p></div><?php }
+
+	/* ---------------------------------------------------------------------
+	 * Redesigned review (Admin-ExternalReview board). Only the redesign calls this; review_markup() above
+	 * still serves the admin screen and the dashboard with the redesign off. Every form posts the same
+	 * fields, nonce and decision values to handle_training_action(), so permissions, validation, the PDF
+	 * preflight and the training calculations are the handler's, unchanged.
+	 * ------------------------------------------------------------------- */
+
+	public static function render_review_board(): string {
+		if ( ! GHCA_ACD_Roles::user_can_review_external_training() ) {
+			return '';
+		}
+		$catalog     = GHCA_ACD_Jotform_Repository::catalog( true );
+		$ready       = GHCA_ACD_External_Evidence_Store::readiness();
+		$page        = isset( $_GET['review_page'] ) ? max( 1, absint( $_GET['review_page'] ) ) : 1;
+		$filter      = isset( $_GET['review_filter'] ) && 'unsigned' === sanitize_key( wp_unslash( $_GET['review_filter'] ) ) ? 'unsigned' : 'all';
+		$pending     = GHCA_ACD_Jotform_Repository::pending_training_page( 25, ( $page - 1 ) * 25, $filter );
+		$approved    = GHCA_ACD_Jotform_Repository::active_approved_training();
+		$return_url  = add_query_arg( 'ghca_tab', 'external-training', get_permalink() ?: home_url( '/' ) );
+		$total_pages = max( 1, (int) ceil( (int) $pending['total'] / 25 ) );
+		$icon        = static function ( string $name, string $size = '' ): string { return GHCA_ODP_UI::icon( $name, $size ); };
+
+		$h  = '<div class="gh-toolbar"><div class="gh-ext-hd"><div><h2 class="gh-h3">' . esc_html__( 'External training review', 'ghca-acd' ) . '</h2><span class="gh-small gh-muted">' . esc_html__( 'Certificates from outside LearnDash count toward compliance only after someone approves them. Approval keeps an encrypted copy that cannot be changed. External training counts toward annual training only, unless you also approve it for orientation.', 'ghca-acd' ) . '</span></div>';
+		$h .= '<nav class="gh-subtabs" aria-label="' . esc_attr__( 'Pending submissions', 'ghca-acd' ) . '">';
+		foreach ( array( 'all' => __( 'All pending', 'ghca-acd' ), 'unsigned' => __( 'Unsigned only', 'ghca-acd' ) ) as $key => $label ) {
+			$current = $key === $filter;
+			$h      .= '<a class="gh-subtab" href="' . esc_url( add_query_arg( array( 'review_filter' => $key, 'review_page' => 1 ), $return_url ) . '#ghca-tab-external-training' ) . '"' . ( $current ? ' aria-current="page" aria-selected="true"' : ' aria-selected="false"' ) . '>' . esc_html( $label );
+			if ( $current ) {
+				$h .= ' <span class="gh-count' . ( (int) $pending['total'] > 0 ? ' gh-count--warning' : '' ) . '">' . esc_html( (string) (int) $pending['total'] ) . '</span>';
+			}
+			$h .= '</a>';
+		}
+		$h .= '</nav></div></div>';
+
+		$h .= self::board_notice();
+		if ( is_wp_error( $ready ) ) {
+			$h .= '<div class="gh-alert gh-alert--danger" role="alert">' . $icon( 'alert' ) . '<div class="gh-alert-body"><span class="gh-alert-t">' . esc_html__( 'Approvals are paused', 'ghca-acd' ) . '</span><p>' . esc_html( $ready->get_error_message() ) . '</p></div></div>';
+		}
+
+		if ( empty( $pending['items'] ) ) {
+			$h .= '<div class="gh-card gh-empty gh-empty--ok"><span class="gh-empty-ico">' . $icon( 'check-circle', 'xl' ) . '</span><strong class="gh-h4">' . esc_html( 'unsigned' === $filter ? __( 'No unsigned submissions waiting', 'ghca-acd' ) : __( 'Nothing waiting for review', 'ghca-acd' ) ) . '</strong><span class="gh-secondary">' . esc_html__( 'New outside certificates appear here when an employee submits one or an administrator enters one.', 'ghca-acd' ) . '</span></div>';
+		}
+		foreach ( $pending['items'] as $row ) {
+			$h .= self::board_review_card( $row, $catalog, $ready, $return_url );
+		}
+		if ( $total_pages > 1 ) {
+			/* translators: 1: page, 2: pages */
+			$h .= '<nav class="gh-pager" aria-label="' . esc_attr__( 'Pending pages', 'ghca-acd' ) . '"><span>' . esc_html( sprintf( __( 'Page %1$d of %2$d', 'ghca-acd' ), $page, $total_pages ) ) . '</span><div class="gh-pager-btns">';
+			$h .= $page > 1 ? '<a class="gh-btn gh-btn--secondary gh-btn--sm" href="' . esc_url( add_query_arg( array( 'review_filter' => $filter, 'review_page' => $page - 1 ), $return_url ) . '#ghca-tab-external-training' ) . '">' . $icon( 'chev-left', 'sm' ) . esc_html__( 'Previous', 'ghca-acd' ) . '</a>' : '';
+			$h .= $page < $total_pages ? '<a class="gh-btn gh-btn--secondary gh-btn--sm" href="' . esc_url( add_query_arg( array( 'review_filter' => $filter, 'review_page' => $page + 1 ), $return_url ) . '#ghca-tab-external-training' ) . '">' . esc_html__( 'Next', 'ghca-acd' ) . $icon( 'chev-right', 'sm' ) . '</a>' : '';
+			$h .= '</div></nav>';
+		}
+
+		$h .= '<h3 class="gh-h4 gh-ext-sub" id="gh-ext-approved">' . esc_html__( 'Approved and counting', 'ghca-acd' ) . ' <span class="gh-count">' . esc_html( (string) count( $approved ) ) . '</span></h3>';
+		if ( ! $approved ) {
+			$h .= '<p class="gh-secondary">' . esc_html__( 'No approved outside training yet.', 'ghca-acd' ) . '</p>';
+			return $h;
+		}
+		$h .= '<div class="gh-table-wrap gh-ext-tbl" tabindex="0" role="group" aria-labelledby="gh-ext-approved"><table class="gh-table gh-table--ext"><thead><tr><th scope="col">' . esc_html__( 'Employee', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Counts toward', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Completed', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Approved', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Status', 'ghca-acd' ) . '</th><th scope="col" class="c-act"><span class="gh-sr">' . esc_html__( 'Change', 'ghca-acd' ) . '</span></th></tr></thead><tbody>';
+		foreach ( $approved as $row ) {
+			$user     = get_userdata( (int) $row['employee_user_id'] );
+			$snapshot = json_decode( (string) $row['catalog_snapshot'], true );
+			$snapshot = is_array( $snapshot ) ? $snapshot : array();
+			$who      = $user ? (string) $user->display_name : '#' . (int) $row['employee_user_id'];
+			$lesson   = (string) ( $snapshot['title'] ?? $row['proposed_title'] );
+			$orient   = true === ( $snapshot['applies_to_orientation'] ?? false );
+			$h .= '<tr><td><strong>' . esc_html( $who ) . '</strong></td><td>' . esc_html( $lesson ) . '</td><td class="gh-num">' . esc_html( self::board_date( (string) $row['proposed_completion_date'] ) ) . '</td><td class="gh-num">' . esc_html( (string) $row['approved_at'] ) . '</td>';
+			$h .= '<td><span class="gh-st gh-st--approved">' . esc_html__( 'Approved', 'ghca-acd' ) . '</span>' . ( $orient ? ' <span class="gh-badge gh-badge--outline">' . esc_html__( 'Also orientation', 'ghca-acd' ) . '</span>' : '' ) . '</td>';
+			/* translators: 1: lesson, 2: employee */
+			$h .= '<td class="c-act"><details class="gh-ext-manage"><summary class="gh-btn gh-btn--ghost gh-btn--sm">' . $icon( 'edit', 'sm' ) . esc_html__( 'Change', 'ghca-acd' ) . '<span class="gh-sr"> ' . esc_html( sprintf( __( '%1$s for %2$s', 'ghca-acd' ), $lesson, $who ) ) . '</span></summary><div class="gh-ext-manage-bd">' . self::board_orientation_form( $row, $snapshot, $return_url ) . self::board_revoke_form( $row, $return_url ) . '</div></details></td></tr>';
+		}
+		return $h . '</tbody></table></div>';
+	}
+
+	private static function board_date( string $ymd ): string {
+		$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $ymd );
+		return $date && $date->format( 'Y-m-d' ) === $ymd ? $date->format( 'M j, Y' ) : ( '' !== $ymd ? $ymd : '—' );
+	}
+
+	private static function board_hidden( int $training_id, string $return_url ): string {
+		ob_start();
+		wp_nonce_field( self::NONCE );
+		return '<input type="hidden" name="action" value="ghca_acd_jotform_training_action" /><input type="hidden" name="training_id" value="' . (int) $training_id . '" /><input type="hidden" name="frontend_review" value="1" /><input type="hidden" name="return_url" value="' . esc_url( $return_url ) . '" />' . (string) ob_get_clean();
+	}
+
+	/** The same flash the legacy tab prints, as a board alert. */
+	private static function board_notice(): string {
+		if ( empty( $_GET['ghca_review_notice'] ) ) {
+			return '';
+		}
+		$notice = sanitize_text_field( wp_unslash( $_GET['ghca_review_notice'] ) );
+		$error  = 0 === strpos( $notice, 'error_' ) || false !== strpos( $notice, 'failed' ) || false !== strpos( $notice, 'blocked' );
+		return '<div class="gh-alert gh-alert--' . ( $error ? 'danger' : 'success' ) . '" role="' . ( $error ? 'alert' : 'status' ) . '">' . GHCA_ODP_UI::icon( $error ? 'alert' : 'check-circle' ) . '<div class="gh-alert-body"><p>' . esc_html( ucfirst( str_replace( '_', ' ', $notice ) ) ) . '</p></div></div>';
+	}
+
+	/** @param array<string,mixed> $row @param array<int,array<string,mixed>> $catalog @param mixed $ready */
+	private static function board_review_card( array $row, array $catalog, $ready, string $return_url ): string {
+		$id           = (int) $row['id'];
+		$p            = 'gh-ext-' . $id;
+		$user         = get_userdata( (int) $row['employee_user_id'] );
+		$manual       = GHCA_ACD_Jotform_Repository::is_manual( $row );
+		$certificates = $manual ? array() : GHCA_ACD_Jotform_Repository::documents_for_training( $row );
+		$references   = array_values( array_unique( array_filter( array_map( static function ( array $document ): string { return (string) ( $document['evidence_reference'] ?? '' ); }, $certificates ) ) ) );
+		$form         = GHCA_ACD_Jotform_Repository::form( (string) $row['form_id'] );
+		$who          = $user ? $user->display_name . ' (#' . $user->ID . ')' : __( 'Not matched to an employee', 'ghca-acd' );
+		$title        = '' !== (string) $row['proposed_title'] ? (string) $row['proposed_title'] : __( 'Untitled submission', 'ghca-acd' );
+		$icon         = static function ( string $name, string $size = '' ): string { return GHCA_ODP_UI::icon( $name, $size ); };
+
+		// Left: the evidence, exactly what the legacy row offers.
+		$file = '<div class="gh-ext-file">';
+		if ( $manual ) {
+			$manifest = GHCA_ACD_Jotform_Repository::manual_manifest( $row );
+			$file    .= '<span class="gh-ext-doc">' . $icon( 'file', 'xl' ) . '</span><strong class="gh-small">' . esc_html__( 'Manual entry', 'ghca-acd' ) . '</strong>';
+			if ( $manifest ) {
+				foreach ( $manifest as $item ) {
+					/* translators: 1: file name, 2: size, 3: start of the SHA-256 */
+					$file .= '<span class="gh-small gh-secondary gh-ext-fname">' . esc_html( sprintf( __( '%1$s · %2$s · SHA-256 %3$s…', 'ghca-acd' ), (string) ( $item['file_name'] ?? '' ), size_format( (int) ( $item['bytes'] ?? 0 ) ), substr( (string) ( $item['sha256'] ?? '' ), 0, 12 ) ) ) . '</span>';
+				}
+			} else {
+				$file .= '<span class="gh-small gh-ext-bad">' . esc_html__( 'Stored certificate manifest is missing. Reject this entry and upload it again.', 'ghca-acd' ) . '</span>';
+			}
+		} elseif ( $certificates && 1 === count( $references ) ) {
+			$file .= '<span class="gh-ext-doc">' . $icon( 'file', 'xl' ) . '</span><span class="gh-small gh-muted">' . esc_html( 'Evidence-' . $references[0] ) . '</span>';
+			foreach ( $certificates as $certificate ) {
+				$name  = (string) $certificate['file_name'];
+				$file .= '<span class="gh-small gh-secondary gh-ext-fname">' . esc_html( $name ) . '</span><span class="gh-ext-fbtns">';
+				$file .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-document-open="' . (int) $certificate['id'] . '" data-training-id="' . $id . '" data-action="preview">' . $icon( 'eye', 'sm' ) . esc_html__( 'Preview', 'ghca-acd' ) . '<span class="gh-sr"> ' . esc_html( $name ) . '</span></button>';
+				$file .= '<button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-ghca-document-open="' . (int) $certificate['id'] . '" data-training-id="' . $id . '" data-action="download">' . $icon( 'download', 'sm' ) . esc_html__( 'Download', 'ghca-acd' ) . '<span class="gh-sr"> ' . esc_html( $name ) . '</span></button></span>';
+			}
+		} else {
+			$message = $certificates && 0 === count( $references ) ? __( 'Configured evidence reference is invalid or unavailable. Re-sync before review.', 'ghca-acd' ) : ( $certificates ? __( 'Evidence reference metadata is inconsistent. Re-sync before review.', 'ghca-acd' ) : __( 'No indexed certificate is available.', 'ghca-acd' ) );
+			$file   .= '<span class="gh-ext-doc gh-ext-doc--none">' . $icon( 'file-x', 'xl' ) . '</span><span class="gh-small gh-ext-bad">' . esc_html( $message ) . '</span>';
+		}
+		$file .= '</div>';
+
+		// Right: what was submitted, then the decision form.
+		$source = $manual ? __( 'Manual entry by an administrator', 'ghca-acd' ) : ( $form && '' !== (string) ( $form['label'] ?? '' ) ? (string) $form['label'] : __( 'Jotform submission', 'ghca-acd' ) );
+		if ( $manual ) {
+			$entered_by = get_userdata( (int) ( $row['entered_by'] ?? 0 ) );
+			/* translators: 1: administrator, 2: date */
+			$submitted = sprintf( __( '%1$s by %2$s', 'ghca-acd' ), (string) $row['created_at'], $entered_by ? (string) $entered_by->display_name : '#' . (int) ( $row['entered_by'] ?? 0 ) );
+		} else {
+			$submitted = (string) $row['created_at'];
+		}
+		$body  = '<div class="gh-ext-bd"><div class="gh-ext-top"><div><span class="gh-eyebrow">' . esc_html__( 'Submitted training', 'ghca-acd' ) . '</span><h3 class="gh-h4" id="' . esc_attr( $p ) . '-t">' . esc_html( $title ) . '</h3></div><span class="gh-st gh-st--review">' . esc_html__( 'Needs review', 'ghca-acd' ) . '</span></div>';
+		$body .= '<dl class="gh-dl"><div><dt>' . esc_html__( 'Employee', 'ghca-acd' ) . '</dt><dd>' . esc_html( $who ) . '</dd></div><div><dt>' . esc_html__( 'Completed on', 'ghca-acd' ) . '</dt><dd>' . esc_html( self::board_date( (string) $row['proposed_completion_date'] ) ) . '</dd></div><div><dt>' . esc_html__( 'Where it came from', 'ghca-acd' ) . '</dt><dd>' . esc_html( $source ) . '</dd></div><div><dt>' . esc_html__( 'Submitted', 'ghca-acd' ) . '</dt><dd>' . esc_html( $submitted ) . '</dd></div></dl>';
+		if ( $manual && '' !== (string) ( $row['entry_reason'] ?? '' ) ) {
+			$body .= '<p class="gh-small gh-secondary"><strong>' . esc_html__( 'Reason for manual entry:', 'ghca-acd' ) . '</strong> ' . esc_html( (string) $row['entry_reason'] ) . '</p>';
+		}
+		if ( '' !== (string) $row['warning_code'] ) {
+			$body .= '<div class="gh-alert gh-alert--warning">' . $icon( 'alert' ) . '<div class="gh-alert-body"><p>' . esc_html( self::warning_label( (string) $row['warning_code'] ) ) . ( ! empty( $row['warning_detail'] ) ? ' <span class="gh-secondary">' . esc_html( (string) $row['warning_detail'] ) . '</span>' : '' ) . '</p></div></div>';
+		}
+
+		$match   = GHCA_ACD_Jotform_Repository::catalog_match_result( (string) $row['proposed_code'], (string) $row['proposed_title'] );
+		$matched = 'matched' === (string) $match['status'] ? (int) ( $match['item']['id'] ?? 0 ) : 0;
+		$form_h  = '<form class="gh-ext-form" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" aria-labelledby="' . esc_attr( $p ) . '-t">' . self::board_hidden( $id, $return_url );
+		$form_h .= '<div class="gh-ext-grid"><div class="gh-field"><label class="gh-label" for="' . esc_attr( $p ) . '-cat">' . esc_html__( 'Counts toward (catalog lesson)', 'ghca-acd' ) . ' <span class="gh-req" aria-hidden="true">*</span></label><select id="' . esc_attr( $p ) . '-cat" class="gh-select" name="catalog_id" required data-ghca-catalog-select data-match-catalog-id="' . $matched . '"><option value="">' . esc_html__( 'Select lesson', 'ghca-acd' ) . '</option>';
+		foreach ( $catalog as $item ) {
+			$form_h .= '<option value="' . (int) $item['id'] . '"' . selected( (int) $row['catalog_id'], (int) $item['id'], false ) . '>' . esc_html( $item['title'] . ' (' . $item['credit_hours'] . ' hrs)' ) . '</option>';
+		}
+		$form_h .= '</select></div>';
+		$form_h .= '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $p ) . '-emp">' . esc_html__( 'Employee ID', 'ghca-acd' ) . ' <span class="gh-req" aria-hidden="true">*</span></label><input id="' . esc_attr( $p ) . '-emp" class="gh-input" type="number" min="1" name="employee_id" value="' . (int) $row['employee_user_id'] . '" required /></div>';
+		$form_h .= '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $p ) . '-date">' . esc_html__( 'Completion date', 'ghca-acd' ) . ' <span class="gh-req" aria-hidden="true">*</span></label><input id="' . esc_attr( $p ) . '-date" class="gh-input" type="date" name="completion_date" value="' . esc_attr( (string) $row['proposed_completion_date'] ) . '" required /></div>';
+		$form_h .= '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $p ) . '-why">' . esc_html__( 'Mapping override reason', 'ghca-acd' ) . '</label><input id="' . esc_attr( $p ) . '-why" class="gh-input" maxlength="1000" name="override_reason" data-ghca-override-reason aria-describedby="' . esc_attr( $p ) . '-warn" placeholder="' . esc_attr__( 'Required when the selected lesson differs', 'ghca-acd' ) . '" /></div></div>';
+		$form_h .= '<p class="gh-err" id="' . esc_attr( $p ) . '-warn" hidden role="alert" data-ghca-catalog-warning>' . $icon( 'alert', 'sm' ) . esc_html__( 'Selected catalog lesson does not match the submitted title/code or configured alias. Provide an override reason before approval.', 'ghca-acd' ) . '</p>';
+		$form_h .= '<div class="gh-ext-checks"><label class="gh-check"><input type="checkbox" name="applies_to_orientation" value="1" /> ' . esc_html__( 'Also applies to orientation for this employee', 'ghca-acd' ) . '</label>';
+		$form_h .= '<label class="gh-check"><input type="checkbox" name="employee_confirmed" value="1" required /><span>' . esc_html__( 'Employee confirmed', 'ghca-acd' ) . ' <span class="gh-req" aria-hidden="true">*</span></span></label></div>';
+		$form_h .= '<div class="gh-ext-act"><button class="gh-btn gh-btn--secondary" name="decision" value="preflight" formnovalidate>' . $icon( 'file', 'sm' ) . esc_html__( 'PDF preflight', 'ghca-acd' ) . '</button>';
+		$form_h .= '<button class="gh-btn gh-btn--danger-quiet" name="decision" value="reject" formnovalidate>' . $icon( 'x-circle' ) . esc_html__( 'Reject', 'ghca-acd' ) . '</button>';
+		$form_h .= '<button class="gh-btn gh-btn--primary" name="decision" value="approve"' . disabled( is_wp_error( $ready ), true, false ) . '>' . $icon( 'check' ) . esc_html__( 'Approve', 'ghca-acd' ) . '</button></div></form>';
+
+		return '<article class="gh-card gh-ext-card" aria-labelledby="' . esc_attr( $p ) . '-t">' . $file . $body . $form_h . '</div></article>';
+	}
+
+	/** @param array<string,mixed> $row @param array<string,mixed> $snapshot */
+	private static function board_orientation_form( array $row, array $snapshot, string $return_url ): string {
+		$p = 'gh-ext-o' . (int) $row['id'];
+		return '<form class="gh-ext-mform" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . self::board_hidden( (int) $row['id'], $return_url ) . '<input type="hidden" name="revision_id" value="' . (int) $row['approved_revision_id'] . '" />'
+			. '<label class="gh-check"><input type="checkbox" name="applies_to_orientation" value="1"' . checked( true === ( $snapshot['applies_to_orientation'] ?? false ), true, false ) . ' /> ' . esc_html__( 'Applies to orientation for this employee', 'ghca-acd' ) . '</label>'
+			. '<div class="gh-field"><label class="gh-label gh-label--sm" for="' . esc_attr( $p ) . '">' . esc_html__( 'Orientation review reason', 'ghca-acd' ) . ' <span class="gh-req" aria-hidden="true">*</span></label><input id="' . esc_attr( $p ) . '" class="gh-input" name="orientation_reason" maxlength="1000" required /></div>'
+			. '<button class="gh-btn gh-btn--secondary gh-btn--sm" name="decision" value="orientation">' . esc_html__( 'Save orientation applicability', 'ghca-acd' ) . '</button></form>';
+	}
+
+	/** @param array<string,mixed> $row */
+	private static function board_revoke_form( array $row, string $return_url ): string {
+		$p = 'gh-ext-r' . (int) $row['id'];
+		return '<form class="gh-ext-mform" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . self::board_hidden( (int) $row['id'], $return_url )
+			. '<div class="gh-field"><label class="gh-label gh-label--sm" for="' . esc_attr( $p ) . '">' . esc_html__( 'Revocation reason', 'ghca-acd' ) . ' <span class="gh-req" aria-hidden="true">*</span></label><input id="' . esc_attr( $p ) . '" class="gh-input" required maxlength="1000" name="reason" /></div>'
+			. '<button class="gh-btn gh-btn--danger gh-btn--sm" name="decision" value="revoke">' . esc_html__( 'Revoke', 'ghca-acd' ) . '</button></form>';
+	}
 }

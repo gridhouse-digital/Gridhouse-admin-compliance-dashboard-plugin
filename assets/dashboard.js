@@ -2566,6 +2566,72 @@
     stack.querySelectorAll('.gh-toast').forEach(function (toast) { ghcaToastWire(stack, toast); });
   });
 
+  /*
+   * Redesigned Audit data tab: saves one row's first-service date, worked-alone date and CSV exclusion
+   * through the same action, nonce name and fields as the legacy tab. Dates are checked against the
+   * MM/DD/YYYY shape first, because the server stores anything else as empty.
+   */
+  function initAuditDates() {
+    var mdy = /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/[0-9]{4}$/;
+    function realDate(v) {
+      if (!mdy.test(v)) return false;
+      var p = v.split('/'), d = new Date(+p[2], +p[0] - 1, +p[1]);
+      return d.getFullYear() === +p[2] && d.getMonth() === +p[0] - 1 && d.getDate() === +p[1];
+    }
+    document.addEventListener('click', function (event) {
+      var btn = event.target.closest('.ghca-ui [data-ghca-audit-save]');
+      if (!btn || btn.disabled) return;
+      var row = btn.closest('[data-ghca-audit-row]');
+      var wrap = btn.closest('[data-ghca-audit-nonce]');
+      if (!row || !wrap || !window.ghcaAcd || !window.ghcaAcd.ajaxUrl) return;
+      var status = row.querySelector('[data-ghca-audit-status]');
+      var fields = {};
+      var bad = null;
+      row.querySelectorAll('input[data-ghca-audit-field]').forEach(function (input) {
+        var key = input.getAttribute('data-ghca-audit-field');
+        if (input.type === 'checkbox') { fields[key] = input.checked ? '1' : '0'; return; }
+        var v = input.value.trim();
+        input.value = v;
+        var ok = v === '' || realDate(v);
+        input.setAttribute('aria-invalid', ok ? 'false' : 'true');
+        input.classList.toggle('is-invalid', !ok);
+        if (!ok && !bad) bad = input;
+        fields[key] = v;
+      });
+      function say(text, tone) {
+        if (!status) return;
+        status.textContent = text;
+        status.className = 'gh-small gh-aud-msg' + (tone ? ' gh-aud-msg--' + tone : '');
+      }
+      if (bad) {
+        say('Use MM/DD/YYYY, a real date, or leave it empty. Nothing was saved.', 'error');
+        bad.focus();
+        return;
+      }
+      var label = btn.firstChild;
+      var text = label.nodeValue;
+      btn.disabled = true;
+      btn.setAttribute('aria-busy', 'true');
+      label.nodeValue = 'Saving…';
+      say('', '');
+      var data = new FormData();
+      data.append('action', 'ghca_acd_save_audit_dates');
+      data.append('ghca_nonce', wrap.getAttribute('data-ghca-audit-nonce'));
+      data.append('user_id', row.getAttribute('data-ghca-audit-row'));
+      data.append('first_service', fields.first_service || '');
+      data.append('worked_alone', fields.worked_alone || '');
+      data.append('exclude_user', fields.exclude || '0');
+      fetch(window.ghcaAcd.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: data })
+        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (res && res.success) { say('Saved', 'ok'); }
+          else { say((res && typeof res.data === 'string' && res.data) || 'Could not save. Nothing was changed.', 'error'); }
+        })
+        .catch(function () { say('Could not reach the server. Nothing was saved.', 'error'); })
+        .then(function () { btn.disabled = false; btn.removeAttribute('aria-busy'); label.nodeValue = text; });
+    });
+  }
+
   initTabs();
   initEmployeeDrawer();
   initEditRecordsSubpage();
@@ -2576,5 +2642,6 @@
   initOltlManualReview();
   initManualEntry();
   initManualEvidenceOpen();
+  initAuditDates();
 
 })();

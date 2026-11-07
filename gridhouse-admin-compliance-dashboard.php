@@ -34,6 +34,7 @@ require_once __DIR__ . '/includes/class-redesign-drawer.php';
 require_once __DIR__ . '/includes/class-redesign-edit.php';
 require_once __DIR__ . '/includes/class-redesign-reminder.php';
 require_once __DIR__ . '/includes/class-redesign-lists.php';
+require_once __DIR__ . '/includes/class-redesign-admin.php';
 require_once __DIR__ . '/includes/odp/class-odp-bulletins.php';
 require_once __DIR__ . '/includes/class-export.php';
 require_once __DIR__ . '/includes/class-fluentcrm.php';

@@ -226,7 +226,9 @@ foreach ( $legacy as $r ) {
 $html    = GHCA_ACD_Redesign_Lists::render_courses();
 $tracked = GHCA_ACD_Data_Provider::count_unique_tracked_courses( GHCA_ACD_Data_Provider::get_aggregate()['employees'] );
 check( 7 === $tracked && false !== strpos( $html, $tracked . ' tracked courses across 10 assignments' ), 'headline uses count_unique_tracked_courses(), the Courses tab badge figure' );
-check( 8 === substr_count( $parts['html'], 'Issues certificate</span></td>' ) && 2 === substr_count( $parts['html'], 'No certificate</span></td>' ), 'certificate flag per row' );
+check( 8 === substr_count( $parts['html'], 'Yes</span></td>' ) && 2 === substr_count( $parts['html'], '>No</span></td>' ), 'certificate column: Yes or No per row, from the course setting' );
+check( str_contains( $parts['html'], '<th scope="col" class="c-cert">Issues certificate</th>' ) && ! str_contains( $parts['html'], 'Issues certificate</span>' ), 'certificate column heading names the question; cells answer it' );
+check( 10 === substr_count( $parts['html'], '<dt>Issues certificate</dt>' ), 'phone cards label the Yes or No the same way' );
 check( false !== strpos( $parts['html'], 'gh-bar gh-bar--success' ) && false !== strpos( $parts['html'], 'gh-bar gh-bar--danger' ), 'bar tones: complete and low' );
 check( false === stripos( $html, 'Export' ) && false === strpos( $html, '>Report<' ), 'no course export or per-course report: neither exists' );
 check( false === strpos( $html, 'lessons' ) && false === strpos( $html, ' hrs' ), 'no course length or lesson count: the plugin has none' );

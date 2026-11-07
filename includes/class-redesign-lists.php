@@ -610,12 +610,13 @@ final class GHCA_ACD_Redesign_Lists {
 		$h  = '<div class="gh-table-wrap gh-tbl" tabindex="0" role="group" aria-label="' . esc_attr__( 'Course completion table', 'ghca-acd' ) . '"><table class="gh-table gh-table--courses"><thead><tr>';
 		$h .= '<th scope="col" class="c-course">' . esc_html__( 'Course', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Assigned group', 'ghca-acd' ) . '</th>';
 		$h .= '<th scope="col" class="c-num">' . esc_html__( 'Required', 'ghca-acd' ) . '</th><th scope="col" class="c-num">' . esc_html__( 'Done', 'ghca-acd' ) . '</th><th scope="col" class="c-num">' . esc_html__( 'In progress', 'ghca-acd' ) . '</th><th scope="col" class="c-num">' . esc_html__( 'Not started', 'ghca-acd' ) . '</th>';
-		$h .= '<th scope="col" class="c-rate"' . ( 'name' !== $sort ? ' aria-sort="' . ( 'rate_desc' === $sort ? 'descending' : 'ascending' ) . '"' : '' ) . '>' . esc_html__( 'Completion', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Certificate', 'ghca-acd' ) . '</th></tr></thead><tbody>';
+		$h .= '<th scope="col" class="c-rate"' . ( 'name' !== $sort ? ' aria-sort="' . ( 'rate_desc' === $sort ? 'descending' : 'ascending' ) . '"' : '' ) . '>' . esc_html__( 'Completion', 'ghca-acd' ) . '</th><th scope="col" class="c-cert">' . esc_html__( 'Issues certificate', 'ghca-acd' ) . '</th></tr></thead><tbody>';
 		$cards = '';
 		foreach ( $paged['rows'] as $row ) {
 			$pct   = max( 0, min( 100, (int) $row['rate'] ) );
 			$cert  = ! empty( $row['certificate'] );
-			$certh = '<span class="gh-small gh-cert-flag">' . self::icon( $cert ? 'award' : 'minus-circle', 'sm' ) . esc_html( $cert ? __( 'Issues certificate', 'ghca-acd' ) : __( 'No certificate', 'ghca-acd' ) ) . '</span>';
+			// Yes or No from the course's certificate setting (LearnDash _ld_certificate), not whether anyone has earned one.
+			$certh = '<span class="gh-small gh-cert-flag">' . self::icon( $cert ? 'award' : 'minus-circle', 'sm' ) . esc_html( $cert ? __( 'Yes', 'ghca-acd' ) : __( 'No', 'ghca-acd' ) ) . '</span>';
 			$bar   = '<div class="gh-rate"><div class="' . esc_attr( self::course_bar_class( $pct ) ) . '" role="progressbar" aria-valuenow="' . esc_attr( (string) $pct ) . '" aria-valuemin="0" aria-valuemax="100" aria-label="' . esc_attr__( 'Course completion rate', 'ghca-acd' ) . '"><span style="width: ' . esc_attr( (string) $pct ) . '%;"></span></div><strong class="gh-num">' . esc_html( (string) $row['rate_label'] ) . '</strong></div>';
 			$h    .= '<tr><td><strong>' . esc_html( (string) $row['course'] ) . '</strong></td><td><span class="gh-badge gh-badge--outline">' . esc_html( (string) $row['group'] ) . '</span></td>';
 			$h    .= '<td class="c-num">' . esc_html( (string) (int) $row['required'] ) . '</td><td class="c-num">' . esc_html( (string) (int) $row['completed'] ) . '</td><td class="c-num">' . esc_html( (string) (int) $row['in_progress'] ) . '</td><td class="c-num">' . esc_html( (string) (int) $row['not_started'] ) . '</td>';
@@ -628,7 +629,7 @@ final class GHCA_ACD_Redesign_Lists {
 					array( __( 'Completion', 'ghca-acd' ), $bar ),
 					/* translators: 1: done, 2: in progress, 3: not started, 4: required */
 					array( __( 'People', 'ghca-acd' ), esc_html( sprintf( __( '%1$d done · %2$d in progress · %3$d not started, of %4$d', 'ghca-acd' ), (int) $row['completed'], (int) $row['in_progress'], (int) $row['not_started'], (int) $row['required'] ) ) ),
-					array( __( 'Certificate', 'ghca-acd' ), $certh ),
+					array( __( 'Issues certificate', 'ghca-acd' ), $certh ),
 				),
 				'',
 				false

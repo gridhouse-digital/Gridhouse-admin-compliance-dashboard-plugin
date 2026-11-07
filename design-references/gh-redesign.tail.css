@@ -507,3 +507,73 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
    Legacy panels inside the redesign (.gh-legacy) keep their existing look. !important against themes that set
    accent-color globally. */
 :is(.ghca-ui, #ghca-ui-scope) .gh-app :is(input[type="date"], input[type="datetime-local"], input[type="month"], input[type="week"], input[type="time"]):not(.gh-legacy *) { accent-color: var(--gh-agency, var(--gh-color-primary)) !important; }
+
+/* Slice 5: Reports, Audit data and External training (Admin-Reports, Admin-AuditData, Admin-ExternalReview).
+   Board layout from inline styles on the boards, expressed as classes; tokens only, no colour literals. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-tp .gh-alert--neutral .gh-alert-t { color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tp .gh-alert .gh-alert-body p { margin: 2px 0 0; }
+
+/* Reports: four destination cards (board: padding 20, gap 10, 40px icon tile, description fills). */
+:is(.ghca-ui, #ghca-ui-scope) ul.gh-rpt { list-style: none; margin: 0; padding: 0; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rpt-card { padding: 20px; display: flex; flex-direction: column; gap: 10px; margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rpt-card .gh-rpt-ico { width: 40px; height: 40px; background: var(--gh-agency-soft, var(--gh-surface-brand-subtle)) !important; color: var(--gh-agency-ink, var(--gh-primary-800)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rpt-card .gh-rpt-desc { flex: 1; margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rpt-card .gh-btn { align-self: flex-start; }
+
+/* Audit data: the dates table. Inputs keep the stored MM/DD/YYYY text format. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-table-wrap.gh-aud, :is(.ghca-ui, #ghca-ui-scope) .gh-table-wrap.gh-ext-tbl { position: relative; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-person { min-width: 170px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-date { width: 132px; min-width: 0; font-variant-numeric: tabular-nums; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-date.is-invalid { border-color: var(--gh-status-danger-border); box-shadow: 0 0 0 3px var(--gh-status-danger-bg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-aud-pk, :is(.ghca-ui, #ghca-ui-scope) .gh-aud-save { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-aud-msg:empty { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-aud-msg--ok { color: var(--gh-status-success-fg); font-weight: 600; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-aud-msg--error { color: var(--gh-status-danger-fg); font-weight: 600; max-width: 220px; }
+:is(.ghca-ui, #ghca-ui-scope) #ghca-aud-format { margin: 0; }
+
+/* External training: one card per pending submission (board: 180px evidence column, 20/24 body, 14 gap). */
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-hd { display: flex; flex-direction: column; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-hd .gh-subtabs { align-self: flex-start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-card { display: flex; flex-wrap: wrap; overflow: hidden; padding: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-file { flex: 0 0 180px; background: var(--gh-surface-sunken); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 20px; border-right: 1px solid var(--gh-border); text-align: center; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-doc { width: 72px; height: 92px; display: grid; place-items: center; background: var(--gh-surface-card); border: 1px solid var(--gh-border-strong); border-radius: 6px; box-shadow: var(--gh-shadow-1); color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-doc--none { color: var(--gh-status-danger-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-fname { overflow-wrap: anywhere; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-fbtns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-bad { color: var(--gh-status-danger-fg); font-weight: 600; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-bd { flex: 1 1 520px; min-width: 0; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-bd > p { margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-form { display: flex; flex-direction: column; gap: 12px; margin: 0; padding-top: 14px; border-top: 1px solid var(--gh-border); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-form .gh-err[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-checks { display: flex; gap: 8px 20px; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-act { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-sub { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-sub .gh-count { font-family: var(--gh-font-body); line-height: 20px; letter-spacing: normal; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-bd .gh-alert { padding: 10px 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-manage { position: relative; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-manage > summary { list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-manage > summary::-webkit-details-marker { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-manage-bd { display: flex; flex-direction: column; gap: 14px; padding: 14px 0 4px; min-width: 260px; text-align: left; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-mform { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-mform .gh-field { width: 100%; }
+
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ext-file { flex: 1 1 100%; border-right: 0; border-bottom: 1px solid var(--gh-border); flex-direction: row; flex-wrap: wrap; justify-content: flex-start; text-align: left; padding: 14px 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ext-doc { width: 44px; height: 56px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ext-bd { padding: 16px; flex-basis: 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ext-act .gh-btn { flex: 1 1 100%; }
+  /* The pager's per-page select, 36px on phones before; the tablet rule already sets it to the touch size. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-pager-ctl .gh-pager-per { min-height: var(--gh-touch); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ext-fbtns .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-ext-manage > summary.gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-ext-mform .gh-btn { min-height: var(--gh-touch); }
+  /* Audit dates and approved training: rows become stacked cards, each cell labelled. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit, :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit tbody, :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit tr, :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit td { display: block; width: 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-aud.gh-table-wrap { border: 0; background: transparent; box-shadow: none; overflow: visible; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit tr { background: var(--gh-surface-card); border: 1px solid var(--gh-border); border-radius: var(--gh-radius-lg); margin-bottom: 12px; padding: 6px 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit td { border: 0; padding: 8px 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit td[data-label]:not([data-label=""])::before { content: attr(data-label); display: block; font-size: 12px; font-weight: 600; color: var(--gh-text-muted); margin-bottom: 4px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-date { width: 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-save .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-pk .gh-btn { flex: 1 1 auto; min-height: var(--gh-touch); }
+}

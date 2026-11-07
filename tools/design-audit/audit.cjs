@@ -23,6 +23,7 @@ const env = { ...process.env, GHCA_PREVIEW_ASSETS: 'https://p.test/assets', GHCA
 execFileSync('php', [ROOT + '/tests/render-redesign-preview.php', P], { env });
 execFileSync('php', [ROOT + '/tests/render-tables-preview.php', 'page', P, THEME], { env });
 execFileSync('php', [ROOT + '/tests/render-lists-preview.php', 'page', P, THEME], { env });
+execFileSync('php', [ROOT + '/tests/render-admin-preview.php', 'page', P, THEME], { env });
 execFileSync('php', [ROOT + '/tests/render-drawer-preview.php', 'page', P, THEME, ''], { env: { ...env, GHCA_PREVIEW_ENV: '{}' } });
 for (const f of fs.readdirSync(P).filter((f) => f.endsWith('.html'))) { // phase-1 previews write absolute local paths
   fs.writeFileSync(path.join(P, f), fs.readFileSync(path.join(P, f), 'utf8').split(ROOT + '/assets').join('https://p.test/assets').replace(/https:\/\/(preview|example)\.test\/ajax/g, 'https://p.test/ajax'));
