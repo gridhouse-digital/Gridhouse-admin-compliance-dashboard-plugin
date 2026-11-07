@@ -115,6 +115,47 @@ Still open, carried over from slices 2 and 3: phone tab height, column drop, the
 | Phone tab bars | Found while verifying: on a phone, keyboard selection could leave the chosen tab partly off-screen in the drawer's tab bar and in the dashboard's main tab bar. The drawer focused the tab before the other tabs lost their bolder selected state, so the scroll was computed for a width that then changed. Now every tab gets its state first and focus comes after. The redesigned drawer and main tab bars also call `scrollIntoView({ inline: 'nearest' })`. The legacy tab bars end in the same state as before, and the scroll call is not applied to them. |
 | Tests | Course, Overdue-only and combined filters; empty states and reset; the new defaults; phone tab scrolling and keyboard access in both tab bars. See [Tests](#tests). |
 
+## Correction: page background around the dashboard
+
+**Cause (confirmed on Akansoh staging).** `assets/dashboard.css` sets `body.ghca-acd-page { background-color: #eceff3; }` for the legacy dashboard. The redesign's warm page rule targeted only `body.gh-ui-body`, a class used by the old standalone bulletin pages and never present on a theme page. On the redesigned dashboard the body therefore stayed `#eceff3`. The theme's padding above and below the content is transparent, so those areas showed blue-grey strips. It was not a header shadow, and it came from the plugin's own stylesheet; an earlier answer in this thread that the plugin could not paint outside its wrapper had overlooked `dashboard.css`.
+
+**Fix.**
+
+- **Marker class.** `GHCA_Admin_Compliance_Dashboard::add_body_class()` still adds `ghca-acd-page` on pages that host the dashboard, and now also adds `ghca-ui-page` **only while the redesign is on**. The bulletin route adds `ghca-ui-page` as well, since those pages always use the redesigned UI.
+- **Rule.** `gh-redesign.css`, which is only enqueued with the redesign (and on the bulletin pages), has one page-level rule: `html body.ghca-ui-page { background-color: #F3EFEA !important; }`.
+  - `!important` matches the staging Additional CSS workaround, so removing that workaround changes nothing visible and a theme's own body rule cannot win.
+  - The rule targets the class, never a page id.
+- **What does not change.** With the redesign off there is no `ghca-ui-page` class and no `gh-redesign.css`, so the legacy `#eceff3` remains. Only the body background colour changes. Theme padding, margins and the header shadow are untouched, and so are the plugin's cards, inputs and buttons. Pages that do not host the dashboard or bulletins never get the class.
+- **Guard.** `tests/test-odp-bulletins.php` still fails on any unscoped rule in `gh-redesign.css`; it now allows exactly this one rule.
+
+Files: `gridhouse-admin-compliance-dashboard.php` (`add_body_class()`), `includes/odp/class-odp-bulletins.php` (body class), `design-references/gh-redesign.tail.css` and the rebuilt `assets/gh-redesign.css`. `dashboard.css` is unchanged.
+
+**Exactly what was tested (synthetic; not the Akansoh site):**
+
+| Test | What it does |
+| --- | --- |
+| `php tests/test-page-background.php` (14 checks) | Loads the real plugin entry file in a stand-in WordPress and calls the real `add_body_class()`. Redesign on: `ghca-acd-page` + `ghca-ui-page`, with existing classes kept. Redesign off: `ghca-acd-page` only. An Elementor-built page (shortcode in `_elementor_data`) is detected the same way. An ordinary page or a non-singular view gets nothing. The bulletin route adds the class. The warm rule appears once, is the only rule on that class, and there is no page id anywhere. `dashboard.css` still has `#eceff3` and knows nothing of the new class. `gh-redesign.css` is enqueued only with the redesign, after `dashboard.css`. |
+| `node tests/browser-page-background.cjs` (18 checks) | Chromium at 1440 and 390, on pages from `tests/render-page-background-preview.php`, with **no Additional CSS override**. The stand-in classic theme has its own `#fafbfd` body (also on a `body.bb-buddypanel` rule), a header with a shadow, transparent 48 px `#content` padding top and bottom, and a footer. Colours are **read from rendered pixels** at the left, centre and right of the top gutter (under the header) and the bottom gutter (above the footer). |
+
+The browser check covered four pages at each width:
+
+- **Redesign on (the plugin's dashboard markup):** all six gutter points are `#F3EFEA`, and the computed body colour is `#F3EFEA`. The theme padding is still 48 px and transparent, with no sideways scroll. Cards are white, and inputs and buttons keep their own colours.
+- **Redesign off (the legacy Overdue and Courses panels, no `gh-redesign.css`):** all six points and the body are `#eceff3`, unchanged. The header shadow is identical in both states.
+- **An unrelated page with both plugin stylesheets loaded:** the theme's own colour.
+- **An ODP bulletin page inside the theme:** `#F3EFEA`.
+
+Before the fix, the same redesigned page rendered its body `#eceff3`, which reproduces the staging report.
+
+The stand-in theme uses `box-sizing: border-box`, as real themes (BuddyBoss included) do. With the browser default `content-box`, the 390 px page scrolled sideways: `dashboard.css` sets `#content.site-content` to `width: 100%`, and the theme padding is added on top. The previous stylesheet behaves identically, so this is not part of this change. It is recorded under Known gaps.
+
+Regression: phase-1 screens 0 of 1,026 element/viewport combinations changed. Every other suite passes: 74 PHP scripts, JS, Playwright, and the list 51, table 53, drawer 159, themed bulletin 34 and page background 18 browser checks.
+
+**On staging, after the package is approved and installed (Taz):**
+1. With the Additional CSS workaround still in place, nothing should look different.
+2. Then remove only the workaround (`body.page-id-2716.ghca-acd-page { … }`) and reload. The strips above and below the dashboard should stay `#F3EFEA`. If they turn blue-grey, put the workaround back and report: another rule on the site would be winning.
+3. Switch the redesign off on staging only if that is approved separately. The legacy dashboard should show `#eceff3` again.
+4. Other site pages keep the theme's colour.
+
 ## Correction after staging review: bulletin pages inside the theme (`c422dc2`)
 
 Taz's review of Slices 1–4 on Akanso staging (build `d93f640`) found that the ODP bulletin library (`/odp-bulletins/`) and each bulletin page (`/odp-bulletins/<id>/`) did not use the site's theme. They were sent as standalone documents with the plugin's own app bar (logo, navigation, avatar), so the theme header and footer were missing and the plugin header duplicated them.
@@ -169,6 +210,7 @@ Confirmed plugin defects fixed in this round: the bulletin pages' missing theme 
 
 - Remind opening the reminder modal is covered by the slice-3 suite, which binds `[data-ghca-reminder]` document-wide. The slice-4 preview does not load the modal; its browser test checks the hook and the permission gate.
 - The overdue table lets its row menu hang outside the table, as the board does. On a narrow tablet the table cannot scroll sideways inside its box; the menu stays reachable, and the page scrolls instead.
+- In a theme that keeps the browser's default `content-box` sizing, `dashboard.css`'s long-standing `#content.site-content { width: 100% }` plus the theme's side padding can make the dashboard page scroll sideways on phones. It is pre-existing and unchanged by this slice; not seen with `border-box` themes.
 - On phones the pager's chevrons render at 44 px. This is slice-2 behaviour from the canvas app layer, not changed here.
 - Loading is a dim and `aria-busy`, not skeleton rows.
 - Not verified here: LearnDash, BuddyBoss, Elementor and FluentCRM are not installed. The stand-in WordPress runs the plugin's own classes on synthetic data. Staging has not been touched.

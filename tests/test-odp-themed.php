@@ -93,7 +93,7 @@ $out = $page->invoke( null, $frag );
 check( array( 'do_blocks:header', 'do_blocks:footer', 'wp_head', 'wp_body_open', 'wp_footer' ) === $GLOBALS['ghca_t']['calls'], 'block theme: parts rendered before wp_head, then body open and footer hooks' );
 check( 0 === strpos( $out, '<!DOCTYPE html><html lang="en-US"><head><meta charset="UTF-8">' ), 'block theme: one document with the site language' );
 check( false !== strpos( $out, '<div class="wp-site-blocks"><header class="wp-block-template-part">BLOCK HEADER</header>' . $frag . '<footer class="wp-block-template-part">BLOCK FOOTER</footer></div>' ), 'block theme: header part, content, footer part inside .wp-site-blocks' );
-check( false !== strpos( $out, '<body class="page gh-odp-page">' ), 'body class added for the bulletin page' );
+check( false !== strpos( $out, '<body class="page gh-odp-page ghca-ui-page">' ), 'body classes added for the bulletin page (gh-odp-page, and ghca-ui-page for the warm page body)' );
 check( 1 === substr_count( $out, '<header' ), 'block theme: exactly one header' );
 
 // ---- 4. Assets, title and robots.

@@ -84,4 +84,21 @@ with zipfile.ZipFile(out + '.part', 'x', zipfile.ZIP_DEFLATED, compresslevel=9) 
         add(p, files[p][0], files[p][1])
     add('BUILD.txt', build_txt.encode(), 0o644)
 os.rename(out + '.part', out)
+
+# A file inside the ZIP cannot carry the ZIP's own size and checksum, so they go in a sidecar next to it:
+# <zip name>.BUILD.txt, with the same build record plus the archive's byte size and SHA-256.
+data = open(out, 'rb').read()
+sidecar = out[:-4] + '.BUILD.txt'
+if os.path.exists(sidecar):
+    sys.exit(f'REFUSED: {sidecar} already exists')
+with open(sidecar, 'x') as f:
+    f.write(f"""Archive:          {name}
+Byte size:        {len(data)}
+SHA-256:          {hashlib.sha256(data).hexdigest()}
+Verify:           sha256sum {name}   (Linux)   |   Get-FileHash {name} -Algorithm SHA256   (Windows)
+
+The BUILD.txt inside the archive (below) names the commit and lists the SHA-256 of every packaged file.
+
+""" + build_txt)
 print(out)
+print(sidecar)

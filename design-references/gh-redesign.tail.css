@@ -54,6 +54,12 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-skip { position: absolute; left: 8px; top: -60px; z-index: 100001; padding: 8px 12px; border-radius: 8px; background: var(--gh-surface-card); color: var(--gh-text); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-skip:focus { top: 8px; }
 body.gh-ui-body { margin: 0; background: #F3EFEA; }
+/* Theme pages that host the redesigned dashboard or the bulletin pages. The plugin adds ghca-ui-page to <body> only
+   there (dashboard: only while the redesign is on). dashboard.css paints body.ghca-acd-page #eceff3 for the legacy
+   dashboard, and themes paint their own body; where theme padding is transparent above and below the content that
+   colour showed as strips. Only the body colour changes: theme spacing, shadows, cards, inputs and buttons do not.
+   A literal, because the --gh-* tokens are defined on .gh-app, inside the page. */
+html body.ghca-ui-page { background-color: #F3EFEA !important; }
 /* Inside a theme the bulletin <main> meets theme rules such as `main { padding: 40px !important; margin: … }`. Pin the board values. */
 :is(.ghca-ui, #ghca-ui-scope) main.gh-odp-main { padding: 28px 32px 56px !important; margin: 0 auto !important; max-width: 1320px !important; width: 100% !important; background: transparent !important; border: 0 !important; box-shadow: none !important; float: none !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-h, :is(.ghca-ui, #ghca-ui-scope) .gh-bul-h, :is(.ghca-ui, #ghca-ui-scope) .gh-bl-h, :is(.ghca-ui, #ghca-ui-scope) .gh-odp-hd h1 { text-transform: none; font-style: normal; }

@@ -132,6 +132,11 @@ final class GHCA_Admin_Compliance_Dashboard {
     $post = get_post();
     if ( $post && self::page_uses_dashboard( $post ) ) {
       $classes[] = 'ghca-acd-page';
+      // The redesigned dashboard paints the page body warm (#F3EFEA) through this class; see gh-redesign.css.
+      // Without the redesign the class is absent and dashboard.css keeps the legacy body colour.
+      if ( class_exists( 'GHCA_ACD_Settings' ) && GHCA_ACD_Settings::ui_redesign_enabled() ) {
+        $classes[] = 'ghca-ui-page';
+      }
     }
 
     return $classes;

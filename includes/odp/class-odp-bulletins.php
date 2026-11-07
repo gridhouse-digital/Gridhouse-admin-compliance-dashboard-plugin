@@ -353,6 +353,7 @@ final class GHCA_ODP_Bulletins {
 		}, 99 );
 		add_filter( 'body_class', static function ( array $classes ): array {
 			$classes[] = 'gh-odp-page';
+			$classes[] = 'ghca-ui-page'; // Same warm page body as the redesigned dashboard (gh-redesign.css).
 			return $classes;
 		} );
 	}

@@ -956,6 +956,7 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-skip { position: absolute; left: 8px; top: -60px; z-index: 100001; padding: 8px 12px; border-radius: 8px; background: var(--gh-surface-card) !important; color: var(--gh-text) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-skip:focus { top: 8px; }
 body.gh-ui-body { margin: 0; background: #F3EFEA; }
+html body.ghca-ui-page { background-color: #F3EFEA !important; }
 :is(.ghca-ui, #ghca-ui-scope) main.gh-odp-main { padding: 28px 32px 56px !important; margin: 0 auto !important; max-width: 1320px !important; width: 100% !important; background: transparent !important; border: 0 !important; box-shadow: none !important; float: none !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-h, :is(.ghca-ui, #ghca-ui-scope) .gh-bul-h, :is(.ghca-ui, #ghca-ui-scope) .gh-bl-h, :is(.ghca-ui, #ghca-ui-scope) .gh-odp-hd h1 { text-transform: none !important; font-style: normal !important; }
 @media (max-width: 720px) {

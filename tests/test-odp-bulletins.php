@@ -322,7 +322,8 @@ foreach ( file( __DIR__ . '/../assets/gh-redesign.css' ) as $css_line ) {
 	if ( '' === $css_line || 0 === strpos( $css_line, '/*' ) || 0 === strpos( $css_line, '*' ) || 0 === strpos( $css_line, '@' ) || 0 === strpos( $css_line, '}' ) || ! $was_top || false === strpos( $css_line, '{' ) ) {
 		continue;
 	}
-	if ( 0 !== strpos( $css_line, ':is(.ghca-ui, #ghca-ui-scope)' ) && 0 !== strpos( $css_line, 'body.gh-ui-body' ) ) {
+	// Two page-level rules are allowed: the standalone preview body, and the body of plugin pages marked ghca-ui-page.
+	if ( 0 !== strpos( $css_line, ':is(.ghca-ui, #ghca-ui-scope)' ) && 0 !== strpos( $css_line, 'body.gh-ui-body' ) && 'html body.ghca-ui-page { background-color: #F3EFEA !important; }' !== $css_line ) {
 		$css_unscoped[] = $css_line;
 	}
 }
