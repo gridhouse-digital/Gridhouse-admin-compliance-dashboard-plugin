@@ -252,7 +252,26 @@ Suggested staging checks for Taz, after the package is approved for staging (fic
 
 ## Package
 
-### Correction build (current)
+### Background-fix build (current)
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-b2da862.zip`, with sidecar `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-b2da862.BUILD.txt` |
+| Size | 649,030 bytes |
+| SHA-256 | `bd3d97e2ab8f1f5a927c9f05c6909d25ecddbe230df6ff692b5510a6550267f5` |
+| Built from | `b2da86280fb191b1e05f85bd20c8550982519bc7` on `gridhouse-overview-odp-bulletins-af45` (PR 19), plugin version `1.7.3-rc.8` |
+| Contents | Cumulative Slices 1–4, the bulletin-page correction, and the page-background fix. 161 entries (139 runtime files, `BUILD.txt`, 21 folders). Same root folder `Gridhouse-admin-compliance-dashboard-plugin-main/` and entry file `gridhouse-admin-compliance-dashboard.php`. |
+| `BUILD.txt` | Inside the ZIP: the commit, branch, version and the SHA-256 of every file. A file inside an archive cannot hold that archive's own size and checksum, so the sidecar `…b2da862.BUILD.txt` next to the ZIP carries the byte size and SHA-256 above, plus the same record. |
+| Difference from `0f5d4e0` (correction build, not installed) | `assets/gh-redesign.css`, `gridhouse-admin-compliance-dashboard.php`, `includes/odp/class-odp-bulletins.php` |
+| Difference from `d93f640` (installed on staging) | Those three files plus `includes/odp/class-odp-ui.php` |
+
+Verification:
+
+- **Archive:** `unzip -t` reports no errors. There is one root folder, with the entry file at its expected path. The 139 files are byte-identical to the commit, and the internal manifest verifies. The sidecar's size and SHA-256 match the file, and both records carry the commit. Fonts are present, `php -l` and `node --check` pass, and there is no `2716` anywhere in the package.
+- **Tests against the extracted package:** 74 PHP scripts, the JS and Playwright tests, and the browser suites all pass (lists 51, tables 53, drawer 159, themed bulletin 34, page background 18).
+- **No overwrite:** building again with the same name was refused. The earlier ZIPs are kept, with unchanged checksums.
+
+### Correction build (prepared, not installed)
 
 | | |
 | --- | --- |
