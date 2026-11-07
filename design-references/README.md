@@ -21,15 +21,18 @@ The drawer and the full page render one plain-text body. The library uses the se
 
 `board-source.css` is the board stylesheet exactly as the `4fa32636` library board renders it: design tokens v2.1 to v2.4.0, the three brand themes, and every component class the admin and bulletin boards use. Its `@font-face` rules pointed at Google Fonts and were removed; the fonts are self-hosted instead.
 
-`build-gh-redesign.sh` writes `assets/gh-redesign.css` from three parts:
+`build-gh-redesign.sh` writes `assets/gh-redesign.css` from four parts:
 
 1. `gh-redesign.head.css`: self-hosted `@font-face` rules and a reset.
 2. `board-source.css`, passed through `scope-board-css.py`.
-3. `gh-redesign.tail.css`: the plugin adapter (full-bleed placement, fixed drawer, live states, phone rules).
+3. `app-source.css`, the canvas app layer (`gh-app.css`, sha256 `e4a09783…`), passed through `scope-board-css.py --app`. It carries overlay and modal sizing, the toast stack, settings helpers and the table column-drop rules. `--app` drops what is prototype-only (`html`/`body`/`#root`, `.app-protobar`, `.app-doc`, `.app-new`) or owned elsewhere (`.app-tabbar`, `.gh-ehome3`, `.gh-appbar`).
+4. `gh-redesign.tail.css`: the plugin adapter (full-bleed placement, fixed drawer, live states, table kit, phone rules).
 
 `scope-board-css.py` prefixes every selector with `:is(.ghca-ui, #ghca-ui-scope)`. `:root` becomes `.gh-app`. `#ghca-ui-scope` is never rendered. It only adds id specificity, so board rules beat theme and page-builder selectors such as BuddyBoss `.entry-content a` and Elementor `.elementor-widget-container h2`. Every board rule gets the same extra weight, so the board's own cascade order is unchanged. Bare-element board rules (`a`, `button`, `:focus-visible`) skip `.gh-legacy`. Board-only presentation classes (`.gh-phone*`, `.gh-design-note`, `.gh-spec-*`, `.gh-focus-demo`, and similar) are dropped.
 
 Themes and page builders often style links, link children, and button hovers with `!important`, which no specificity can beat. `scope-board-css.py` therefore marks `color`, `background`, `background-color`, `border-color`, and `text-decoration` `!important` on rules for the interactive components listed in `GUARD` and on every rule that targets an `a` element. The board's relative order is unchanged, because all guarded rules carry the same flag. The tail is passed through `scope-board-css.py --guard-only`, which adds the flag without rescoping. The tail also clears theme hover backgrounds on redesign links with a zero-specificity `:where()` rule, so any component rule still wins.
+
+The guard also covers the data table (`.gh-table`: colour, background and the border family), the pager buttons, and the typography themes force on headings (`font-family`, `letter-spacing`, `text-transform`, `font-style` on `.gh-h1`–`.gh-h4`). See `docs/dashboard-redesign-phase2-slice2.md`.
 
 The reset sits first and uses `:where()`, so it neutralises inherited theme margins, borders, fonts, and text transforms. Any board rule wins over it. Nothing in the file targets `html`, `body`, or the page outside the wrapper. The one exception is `body.gh-ui-body`, the standalone bulletin pages this plugin renders itself.
 

@@ -160,31 +160,44 @@ final class GHCA_ACD_Shortcodes {
     return $html;
   }
 
-  public static function render_flash_notices( $atts = array() ): string {
+  /**
+   * Notices set by redirect flags, as data. The legacy banner and the redesigned toast both read this,
+   * so the wording and the conditions that show it cannot drift apart.
+   *
+   * @return array<int,array{tone:string,title:string,text:string}>
+   */
+  public static function flash_items(): array {
     if ( ! self::can_view_dashboard() ) {
-      return '';
+      return array();
     }
+    $items = array();
+    if ( ! empty( $_GET['ghca_acd_synced'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display flag set by the sync redirect.
+      $items[] = array( 'tone' => 'success', 'title' => __( 'Dashboard data refreshed.', 'ghca-acd' ), 'text' => '' );
+    }
+    if ( ! empty( $_GET['ghca_reminder_logged'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display flag set by the reminder redirect.
+      $items[] = array(
+        'tone'  => 'success',
+        'title' => __( 'Compliance reminder logged successfully.', 'ghca-acd' ),
+        'text'  => GHCA_ACD_FluentCRM::is_active() ? __( 'A note was added to the FluentCRM contact when available.', 'ghca-acd' ) : '',
+      );
+    }
+    return $items;
+  }
 
-    if ( empty( $_GET['ghca_reminder_logged'] ) && empty( $_GET['ghca_acd_synced'] ) ) {
+  public static function render_flash_notices( $atts = array() ): string {
+    $items = self::flash_items();
+    if ( empty( $items ) ) {
       return '';
     }
 
     ob_start();
     ?>
     <div class="ghca-acd ghca-acd--flash">
-      <?php if ( ! empty( $_GET['ghca_acd_synced'] ) ) : ?>
+      <?php foreach ( $items as $item ) : ?>
         <div class="ghca-acd__flash ghca-acd__flash--success" role="status">
-          <?php esc_html_e( 'Dashboard data refreshed.', 'ghca-acd' ); ?>
+          <?php echo esc_html( trim( $item['title'] . ' ' . $item['text'] ) ); ?>
         </div>
-      <?php endif; ?>
-      <?php if ( ! empty( $_GET['ghca_reminder_logged'] ) ) : ?>
-        <div class="ghca-acd__flash ghca-acd__flash--success" role="status">
-          <?php esc_html_e( 'Compliance reminder logged successfully.', 'ghca-acd' ); ?>
-          <?php if ( GHCA_ACD_FluentCRM::is_active() ) : ?>
-            <?php esc_html_e( 'A note was added to the FluentCRM contact when available.', 'ghca-acd' ); ?>
-          <?php endif; ?>
-        </div>
-      <?php endif; ?>
+      <?php endforeach; ?>
     </div>
     <?php
     return (string) ob_get_clean();

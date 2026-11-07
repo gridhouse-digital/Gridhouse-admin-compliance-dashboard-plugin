@@ -112,7 +112,13 @@
   function initTableFilters(form) {
     var tableId = form.getAttribute('data-ghca-table') || 'employees';
     var config = tableConfigs[tableId] || tableConfigs.employees;
-    var mount = form.parentElement && form.parentElement.querySelector('[data-ghca-table-id="' + tableId + '"]');
+    // The redesigned filter card keeps the mount outside the form's parent, so fall back to the page.
+    var mount = (form.parentElement && form.parentElement.querySelector('[data-ghca-table-id="' + tableId + '"]')) ||
+      document.querySelector('[data-ghca-table-id="' + tableId + '"]');
+    var isBoard = form.getAttribute('data-ghca-ui') === 'board';
+    var debounceMs = parseInt(form.getAttribute('data-ghca-debounce'), 10) || 400;
+    var chipHost = isBoard ? document.querySelector('[data-ghca-chips="' + tableId + '"]') : null;
+    var statusHost = isBoard ? document.querySelector('[data-ghca-table-status="' + tableId + '"]') : null;
     var controller = null;
     var searchTimer = null;
 
@@ -133,6 +139,7 @@
 
     function setLoading(isLoading) {
       mount.classList.toggle('is-loading', isLoading);
+      mount.setAttribute('aria-busy', isLoading ? 'true' : 'false');
       var btn = form.querySelector('button[type="submit"]');
       if (btn) {
         btn.disabled = isLoading;
@@ -157,6 +164,9 @@
       params.append('action', 'ghca_acd_filter_table');
       params.append('nonce', window.ghcaAcd.nonce);
       params.append('ghca_table', tableId);
+      if (isBoard) {
+        params.append('ghca_ui', 'board');
+      }
 
       config.fields.forEach(function (key) {
         params.append(key, data.get(key) || '');
@@ -205,10 +215,33 @@
       window.history.replaceState({}, '', url.toString());
     }
 
+    // The rows are replaced wholesale, which would drop keyboard focus from a pager or sort control.
+    function focusMarker() {
+      var el = document.activeElement;
+      if (!isBoard || !el || !mount.contains(el)) {
+        return null;
+      }
+      var page = el.closest('[data-ghca-page]');
+      if (page) { return { attr: 'data-ghca-page', value: page.getAttribute('data-ghca-page') }; }
+      var sort = el.closest('[data-ghca-sort]');
+      if (sort) { return { attr: 'data-ghca-sort', value: sort.getAttribute('data-ghca-sort') }; }
+      return null;
+    }
+
+    function restoreFocus(marker) {
+      if (!marker) { return; }
+      var target = mount.querySelector('[' + marker.attr + '="' + marker.value + '"]');
+      target = target && (target.matches('button, a, input, select') ? target : target.querySelector('button'));
+      if (target && !target.disabled) {
+        try { target.focus({ preventScroll: true }); } catch (err) { target.focus(); }
+      }
+    }
+
     function refresh(resetPage) {
       if (resetPage) {
         setPage(1);
       }
+      var marker = focusMarker();
 
       if (controller) {
         controller.abort();
@@ -230,6 +263,13 @@
           if (json && json.success && json.data && typeof json.data.html === 'string') {
             mount.innerHTML = json.data.html;
             mount.classList.remove('is-error');
+            if (chipHost && typeof json.data.chips === 'string') {
+              chipHost.innerHTML = json.data.chips;
+            }
+            if (statusHost && typeof json.data.summary === 'string') {
+              statusHost.textContent = json.data.summary;
+            }
+            restoreFocus(marker);
             syncUrl();
             return;
           }
@@ -276,7 +316,7 @@
       clearTimeout(searchTimer);
       searchTimer = setTimeout(function () {
         refresh(true);
-      }, 400);
+      }, debounceMs);
     });
 
     form.addEventListener('click', function (e) {
@@ -305,6 +345,38 @@
       setPage(pageBtn.getAttribute('data-ghca-page') || '1');
       refresh(false);
     });
+
+    // Clearing one filter (a chip's x) or all of them. Per page, sort and the page field are not filters.
+    function clearFilters(name) {
+      var controls = Array.prototype.slice.call(form.elements).filter(function (el) {
+        if (el.type === 'hidden' || el.type === 'submit' || el.hasAttribute('data-ghca-per-page')) { return false; }
+        return name === 'all' || el.name === name;
+      });
+      controls.forEach(function (el) {
+        if (el.type === 'checkbox') { el.checked = false; } else { el.value = ''; }
+      });
+      refresh(true);
+      var first = form.querySelector('input[type="search"]');
+      if (first) { first.focus(); }
+    }
+
+    function onClear(e) {
+      var clear = e.target.closest('[data-ghca-filter-clear]');
+      if (!clear) { return; }
+      e.preventDefault();
+      clearFilters(clear.getAttribute('data-ghca-filter-clear'));
+    }
+
+    if (isBoard) {
+      if (chipHost) { chipHost.addEventListener('click', onClear); }
+      mount.addEventListener('click', onClear);
+      // The per-page select lives in the pager, outside the form, so the form's own change event never sees it.
+      mount.addEventListener('change', function (e) {
+        if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-ghca-per-page')) {
+          refresh(true);
+        }
+      });
+    }
 
     mount.addEventListener('click', function (e) {
       var sortHeader = e.target.closest('[data-ghca-sort]');
@@ -962,7 +1034,74 @@
     };
   }
 
+  /*
+   * Redesigned screens carry a toast stack inside the themed wrapper (.ghca-ui), so toasts there use the
+   * board component. Anywhere else the original toast is unchanged. Success clears itself after 6 seconds,
+   * an error stays until dismissed, and at most three show at once.
+   */
+  function ghcaToastWire(stack, toast) {
+    var isError = toast.classList.contains('gh-toast--error');
+    var timer = null;
+    function dismiss() {
+      clearTimeout(timer);
+      if (toast.parentNode) { toast.parentNode.removeChild(toast); }
+    }
+    function arm() {
+      clearTimeout(timer);
+      if (!isError) { timer = setTimeout(dismiss, 6000); }
+    }
+    var close = toast.querySelector('.gh-toast-x');
+    if (close) { close.addEventListener('click', dismiss); }
+    toast.addEventListener('mouseenter', function () { clearTimeout(timer); });
+    toast.addEventListener('mouseleave', arm);
+    toast.addEventListener('focusin', function () { clearTimeout(timer); });
+    toast.addEventListener('focusout', arm);
+    arm();
+    var all = stack.querySelectorAll('.gh-toast');
+    for (var i = 0; i < all.length - 3; i++) {
+      if (all[i].parentNode) { all[i].parentNode.removeChild(all[i]); }
+    }
+  }
+
+  function ghcaBoardToast(stack, message, isError) {
+    var text = String(message || '');
+    var title = text;
+    var body = '';
+    var split = text.length > 70 ? text.match(/^(.+?[.!?])\s+(.+)$/) : null;
+    if (split) { title = split[1]; body = split[2]; }
+
+    function el(tag, cls, content) {
+      var node = document.createElement(tag);
+      if (cls) { node.className = cls; }
+      if (content) { node.textContent = content; }
+      return node;
+    }
+    var toast = el('div', 'gh-toast ' + (isError ? 'gh-toast--error' : 'gh-toast--success'));
+    toast.setAttribute('role', isError ? 'alert' : 'status');
+    var icon = el('span', 'gh-i ' + (isError ? 'i-x-circle' : 'i-check-circle'));
+    icon.setAttribute('aria-hidden', 'true');
+    var copy = el('div');
+    copy.appendChild(el('div', 'gh-toast-t', title));
+    if (body) { copy.appendChild(el('p', '', body)); }
+    var close = el('button', 'gh-toast-x');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Dismiss');
+    var closeIcon = el('span', 'gh-i gh-i--sm i-x');
+    closeIcon.setAttribute('aria-hidden', 'true');
+    close.appendChild(closeIcon);
+    toast.appendChild(icon);
+    toast.appendChild(copy);
+    toast.appendChild(close);
+    stack.appendChild(toast);
+    ghcaToastWire(stack, toast);
+  }
+
   function ghcaToast(message, isError) {
+    var stack = document.querySelector('.ghca-ui [data-ghca-toasts]');
+    if (stack) {
+      ghcaBoardToast(stack, message, isError);
+      return;
+    }
     var toast = document.createElement('div');
     toast.className = 'ghca-acd__toast' + (isError ? ' ghca-acd__toast--error' : '');
     toast.setAttribute('role', isError ? 'alert' : 'status');
@@ -2153,6 +2292,11 @@
         .then(function() { btn.disabled = false; });
     });
   }
+
+  // Notices rendered by the server (sync finished, reminder logged) get the same dismiss and timing.
+  document.querySelectorAll('.ghca-ui [data-ghca-toasts]').forEach(function (stack) {
+    stack.querySelectorAll('.gh-toast').forEach(function (toast) { ghcaToastWire(stack, toast); });
+  });
 
   initTabs();
   initEmployeeDrawer();

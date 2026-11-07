@@ -116,3 +116,64 @@ body.gh-ui-body { margin: 0; background: #F3EFEA; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:active, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:active { background-color: var(--gh-agency-hover, var(--gh-color-primary-hover)); color: var(--gh-agency-on-hover, var(--gh-color-on-primary)); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)) !important; outline-offset: 2px !important; box-shadow: none !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary .gh-i { color: inherit; }
+
+/* Table kit: Employees and Inactive. Values are the Admin-Employees board's inline styles; no new colours. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-tp.is-active { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tp:focus { box-shadow: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tcard { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-field--search { flex: 2 1 260px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-input, :is(.ghca-ui, #ghca-ui-scope) .gh-select { height: auto; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-check input[type="checkbox"], :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-check input[type="radio"] { -webkit-appearance: auto; appearance: auto; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-check--filter { flex: 0 0 auto; align-items: center; min-height: 40px; padding: 0 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tmount { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tmount.is-loading { opacity: .55; pointer-events: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table .gh-nowrap { white-space: nowrap; }
+/* The board's sort controls are <button>s, which take the browser's letter-spacing, not the header's. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-table th button { letter-spacing: normal; }
+/* The board gives cells only a bottom rule. Say so for the other sides, so a theme's `td { border: ... }` cannot add them. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-table th, :is(.ghca-ui, #ghca-ui-scope) .gh-table td { border-top-width: 0; border-left-width: 0; border-right-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table th[data-ghca-sort="progress_pct"] { min-width: 180px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-prog { display: flex; align-items: center; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-prog .gh-bar { flex: 1 1 auto; min-width: 56px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-prog-n { font-size: 13px; white-space: nowrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-due { font-weight: 600; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-due--danger { color: var(--gh-status-danger-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-due--warning { color: var(--gh-status-warning-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-person > div { min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-person-s { display: block; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-person-s { color: var(--gh-text-muted); text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-person-s:hover { text-decoration: underline; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-person-chip { margin-top: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-ctl .gh-pager-per { width: 84px; min-height: 36px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns button { cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns button:disabled { opacity: .45; cursor: default; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-gap { align-self: center; padding: 0 2px; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-cards { display: none; flex-direction: column; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard.is-risk { box-shadow: inset 4px 0 0 var(--gh-status-danger-solid); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-top { display: flex; align-items: center; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-id { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-act { display: flex; gap: 8px; }
+/* The board has no reset, so the browser's 1em margin on the card's <dl> is part of its rendered spacing; follow the render. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard .gh-kv { margin: 13px 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-act .gh-btn { flex: 1; }
+@media (max-width: 719px) {
+  /* The phone frames set a 15px base. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tp { font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tbl { display: none; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-cards { display: flex; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tcard { padding: 12px 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tcard .gh-filters .gh-field { flex: 1 1 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mcard-top { flex-wrap: wrap; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mcard-id { flex: 1 1 140px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tmount .gh-pager { flex-direction: column; align-items: stretch; }
+  /* gh-app.css raises tabs to 44px on phones; the accepted phone overview board keeps the board's 42px. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tabs .gh-tab { min-height: 42px; }
+}
+
+/* Themes set text-transform on headings, labels and table headers; the board sets none, so say so. Heading typography is also guarded by the build. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-h1, :is(.ghca-ui, #ghca-ui-scope) .gh-h2, :is(.ghca-ui, #ghca-ui-scope) .gh-h3, :is(.ghca-ui, #ghca-ui-scope) .gh-h4 { text-transform: none; font-style: normal; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-label, :is(.ghca-ui, #ghca-ui-scope) .gh-check, :is(.ghca-ui, #ghca-ui-scope) .gh-table th, :is(.ghca-ui, #ghca-ui-scope) .gh-fchip, :is(.ghca-ui, #ghca-ui-scope) .gh-st { text-transform: none; }
+
+/* Toasts sit above theme headers and sticky bars. */
+:is(.ghca-ui, #ghca-ui-scope) .app-toasts { z-index: 100000; }

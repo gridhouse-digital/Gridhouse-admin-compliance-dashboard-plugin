@@ -112,7 +112,7 @@ final class GHCA_ACD_Redesign {
 
 	/** @param array<string,mixed> $atts */
 	public static function render_full_dashboard( $atts = array() ): string {
-		$html = GHCA_ACD_Shortcodes::render_login_gate( $atts ) . GHCA_ACD_Shortcodes::render_flash_notices( $atts );
+		$html = GHCA_ACD_Shortcodes::render_login_gate( $atts );
 		if ( ! GHCA_ACD_Shortcodes::can_view_dashboard() ) {
 			return $html;
 		}
@@ -159,6 +159,8 @@ final class GHCA_ACD_Redesign {
 			'quick_links'        => self::quick_links(),
 			'support_email'      => class_exists( 'GHCA_Dashboard_Branding' ) ? GHCA_Dashboard_Branding::get_support_email() : '',
 			'panels'             => self::secondary_panels( $atts, $data ),
+			'board_panels'       => array( 'ghca-tab-employees', 'ghca-tab-inactive-employees' ),
+			'flash'              => GHCA_ACD_Shortcodes::flash_items(),
 		);
 		return $html . self::render_from_model( $model );
 	}
@@ -281,14 +283,33 @@ final class GHCA_ACD_Redesign {
 		$html .= self::quick_links_html( (array) ( $model['quick_links'] ?? array() ) );
 		$html .= self::support_html( (string) ( $model['support_email'] ?? '' ) );
 		$html .= '</div>';
+		$board = (array) ( $model['board_panels'] ?? array() );
 		foreach ( (array) ( $model['panels'] ?? array() ) as $id => $panel ) {
-			$html .= '<div id="' . esc_attr( (string) $id ) . '" class="ghca-acd__tab-content gh-legacy" role="tabpanel" aria-labelledby="' . esc_attr( (string) $id ) . '-tab" tabindex="0">';
+			$html .= '<div id="' . esc_attr( (string) $id ) . '" class="ghca-acd__tab-content ' . ( in_array( (string) $id, $board, true ) ? 'gh-tp' : 'gh-legacy' ) . '" role="tabpanel" aria-labelledby="' . esc_attr( (string) $id ) . '-tab" tabindex="0">';
 			$html .= $panel; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- existing dashboard renderers escape their own markup.
 			$html .= '</div>';
 		}
 		$html .= '</main>';
 		$html .= (string) ( $model['drawer_html'] ?? '' );
+		$html .= self::toasts_html( (array) ( $model['flash'] ?? array() ) );
 		return $html . '</div></div>';
+	}
+
+	/**
+	 * Toast stack. It is always present so scripts have a place to put toasts inside the themed wrapper.
+	 * Server-side notices (sync finished, reminder logged) arrive as toasts too; without scripts they stay put.
+	 *
+	 * @param array<int,array{tone:string,title:string,text:string}> $flash
+	 */
+	public static function toasts_html( array $flash ): string {
+		$html = '<div class="app-toasts" data-ghca-toasts>';
+		foreach ( $flash as $item ) {
+			$error = 'error' === ( $item['tone'] ?? '' );
+			$html .= '<div class="gh-toast gh-toast--' . ( $error ? 'error' : 'success' ) . '" role="' . ( $error ? 'alert' : 'status' ) . '">' . self::icon( $error ? 'x-circle' : 'check-circle' );
+			$html .= '<div><div class="gh-toast-t">' . esc_html( (string) ( $item['title'] ?? '' ) ) . '</div>' . ( ! empty( $item['text'] ) ? '<p>' . esc_html( (string) $item['text'] ) . '</p>' : '' ) . '</div>';
+			$html .= '<button class="gh-toast-x" type="button" aria-label="' . esc_attr__( 'Dismiss', 'ghca-acd' ) . '">' . self::icon( 'x', 'sm' ) . '</button></div>';
+		}
+		return $html . '</div>';
 	}
 
 	/** @param array<string,mixed> $model */
@@ -507,7 +528,7 @@ final class GHCA_ACD_Redesign {
 	/** @param array<string,mixed> $atts @param array<string,mixed> $data @return array<string,string> */
 	private static function secondary_panels( $atts, array $data ): array {
 		$panels = array(
-			'ghca-tab-employees'    => GHCA_ACD_Shortcodes::render_employee_table( $atts ),
+			'ghca-tab-employees'    => GHCA_ACD_Redesign_Tables::render_employees( $atts ),
 			'ghca-tab-courses'      => GHCA_ACD_Shortcodes::render_course_overview( $atts ),
 			'ghca-tab-certificates' => GHCA_ACD_Shortcodes::render_certificate_tracking( $atts ),
 			'ghca-tab-overdue'      => GHCA_ACD_Shortcodes::render_overdue_employees( $atts ),
@@ -515,7 +536,7 @@ final class GHCA_ACD_Redesign {
 			'ghca-tab-audit'        => GHCA_ACD_Audit_UI::render(),
 		);
 		if ( GHCA_ACD_Roles::user_can_manage_users() ) {
-			$panels['ghca-tab-inactive-employees'] = GHCA_ACD_Shortcodes::render_employee_table( $atts, 'inactive' );
+			$panels['ghca-tab-inactive-employees'] = GHCA_ACD_Redesign_Tables::render_employees( $atts, 'inactive' );
 		}
 		if ( GHCA_ACD_Roles::user_can_review_external_training() && class_exists( 'GHCA_ACD_Jotform_UI' ) ) {
 			$panels['ghca-tab-external-training'] = GHCA_ACD_Jotform_UI::render_frontend_review();

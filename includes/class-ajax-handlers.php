@@ -1309,13 +1309,19 @@ final class GHCA_ACD_AJAX {
 
     $table = isset( $_POST['ghca_table'] ) ? sanitize_key( wp_unslash( (string) $_POST['ghca_table'] ) ) : 'employees';
 
+    // The redesigned Employees and Inactive tabs ask for board markup; the choice is markup only, never access.
+    $board = GHCA_ACD_Redesign_Tables::board_requested();
+
     switch ( $table ) {
       case 'inactive_employees':
         if ( ! GHCA_ACD_Roles::user_can_manage_users() ) {
           wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'ghca-acd' ) ), 403 );
         }
         $filters = GHCA_ACD_Data_Provider::get_employee_filters( 'inactive' );
-        $html    = GHCA_ACD_Shortcodes::get_employee_table_html( $filters, 'inactive' );
+        if ( $board ) {
+          wp_send_json_success( GHCA_ACD_Redesign_Tables::employee_table_parts( $filters, 'inactive' ) );
+        }
+        $html = GHCA_ACD_Shortcodes::get_employee_table_html( $filters, 'inactive' );
         break;
       case 'priority':
         $filters = GHCA_ACD_Data_Provider::get_priority_filters();
@@ -1327,7 +1333,10 @@ final class GHCA_ACD_AJAX {
         break;
       default:
         $filters = GHCA_ACD_Data_Provider::get_employee_filters();
-        $html    = GHCA_ACD_Shortcodes::get_employee_table_html( $filters );
+        if ( $board && 'employees' === $table ) {
+          wp_send_json_success( GHCA_ACD_Redesign_Tables::employee_table_parts( $filters ) );
+        }
+        $html = GHCA_ACD_Shortcodes::get_employee_table_html( $filters );
         break;
     }
 
