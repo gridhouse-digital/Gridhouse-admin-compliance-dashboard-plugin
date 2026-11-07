@@ -940,9 +940,21 @@
       return (overview && subpage && body) ? { overview: overview, subpage: subpage, body: body } : null;
     }
 
+    // The redesigned drawer widens while its Edit Records sub-page is open (the Drawer-EditRecords board is 920px).
+    function setWide(on) {
+      var host = document.getElementById('ghca-acd-employee-drawer');
+      var dlg = host && host.querySelector('[data-ghca-drawer-dialog]');
+      if (dlg) { dlg.classList.toggle('is-subpage', !!on); }
+    }
+    function isBoardDrawer() {
+      var host = document.getElementById('ghca-acd-employee-drawer');
+      return !!host && host.getAttribute('data-ghca-ui') === 'board';
+    }
+
     function showOverview(focusTrigger) {
       var v = views();
       if (!v) return;
+      setWide(false);
       v.subpage.hidden = true;
       v.overview.hidden = false;
       if (controller) { controller.abort(); controller = null; }
@@ -956,6 +968,7 @@
       var v = views();
       if (!v) return;
       currentUserId = userId;
+      setWide(true);
       v.overview.hidden = true;
       v.subpage.hidden = false;
       v.body.setAttribute('aria-busy', 'true');
@@ -977,6 +990,7 @@
       params.append('action', 'ghca_acd_get_edit_records_form');
       params.append('nonce', window.ghcaAcd.nonce);
       params.append('user_id', userId);
+      if (isBoardDrawer()) { params.append('ghca_ui', 'board'); }
 
       fetch(window.ghcaAcd.ajaxUrl, {
         method: 'POST',
@@ -1004,7 +1018,7 @@
     }
 
     function submitForm(form) {
-      var saveBtn = form.querySelector('.ghca-acd__edit-btn--save');
+      var saveBtn = form.querySelector('.ghca-acd__edit-btn--save, [data-ghca-edit-save]');
       var prevText = saveBtn ? saveBtn.textContent : '';
       if (saveBtn) {
         saveBtn.disabled = true;
@@ -1066,6 +1080,33 @@
       e.preventDefault();
       submitForm(form);
     });
+
+    // "Unsaved changes: N fields": how many controls differ from what the server rendered. The redesigned form
+    // only; it reads defaults the browser already keeps, so nothing is stored and nothing is sent.
+    function countChanged(form) {
+      var changed = 0;
+      Array.prototype.forEach.call(form.elements, function (el) {
+        if (!el.name || el.type === 'hidden' || el.type === 'submit' || el.type === 'button') { return; }
+        if (el.type === 'checkbox' || el.type === 'radio') {
+          if (el.checked !== el.defaultChecked) { changed += 1; }
+        } else if (el.tagName === 'SELECT') {
+          var was = Array.prototype.some.call(el.options, function (o) { return o.defaultSelected; }) ? Array.prototype.filter.call(el.options, function (o) { return o.defaultSelected; })[0].value : el.options[0].value;
+          if (el.value !== was) { changed += 1; }
+        } else if (el.value !== el.defaultValue) {
+          changed += 1;
+        }
+      });
+      return changed;
+    }
+    function updateDirty(e) {
+      var form = e.target && e.target.closest ? e.target.closest('[data-ghca-edit-form]') : null;
+      var slot = form && form.querySelector('[data-ghca-edit-dirty]');
+      if (!slot) { return; }
+      var n = countChanged(form);
+      slot.textContent = n === 0 ? 'No unsaved changes' : (n === 1 ? 'Unsaved changes: 1 field' : 'Unsaved changes: ' + n + ' fields');
+    }
+    document.addEventListener('input', updateDirty);
+    document.addEventListener('change', updateDirty);
 
     // The drawer's overlay close handler invokes this when Escape reaches it.
     window.ghcaAcdEditSubpageBack = function () {
@@ -1529,9 +1570,17 @@
         var mSummary = mirror.querySelector('[data-ghca-packet-step="summary"]');
         var mCerts = mirror.querySelector('[data-ghca-packet-step="certificates"]');
         var mMerge = mirror.querySelector('[data-ghca-packet-step="merge"]');
-        if (mSummary) mSummary.className = state(pct >= 5, pct < 5);
-        if (mCerts) mCerts.className = state(pct >= 92, pct >= 5 && pct < 92);
-        if (mMerge) mMerge.className = isErr ? 'ghca-acd__packet-mirror-step is-error' : state(pct >= 100, pct >= 92);
+        if (mirror.hasAttribute('data-ghca-board')) {
+          // Redesigned mirror: the step keeps its board classes and only its state changes.
+          var set = function (el, done, active, err) { if (el) { el.setAttribute('data-state', err ? 'error' : (done ? 'done' : (active ? 'active' : ''))); } };
+          set(mSummary, pct >= 5, pct < 5, false);
+          set(mCerts, pct >= 92, pct >= 5 && pct < 92, false);
+          set(mMerge, pct >= 100, pct >= 92, isErr);
+        } else {
+          if (mSummary) mSummary.className = state(pct >= 5, pct < 5);
+          if (mCerts) mCerts.className = state(pct >= 92, pct >= 5 && pct < 92);
+          if (mMerge) mMerge.className = isErr ? 'ghca-acd__packet-mirror-step is-error' : state(pct >= 100, pct >= 92);
+        }
       }
 
       if (summaryStep && certificateStep && mergeStep) {

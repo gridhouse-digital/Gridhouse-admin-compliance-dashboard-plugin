@@ -75,10 +75,20 @@ function get_user_meta( $id, $key, $single = false ) {
 		return $GLOBALS['ghca_env']['reviewed_at'];
 	}
 	if ( 'ghca_first_service_date' === $key ) {
-		return '2026-10-20';
+		return $GLOBALS['ghca_env']['first_service'] ?? '2026-10-20';
+	}
+	if ( 'ghca_worked_alone_date' === $key ) {
+		return $GLOBALS['ghca_env']['worked_alone'] ?? '';
+	}
+	if ( 'ghca_acd_verified_employment' === $key ) {
+		return $GLOBALS['ghca_env']['verified'] ?? '';
 	}
 	return '';
 }
+function selected( $a, $b = true, $echo = true ) { $r = (string) $a === (string) $b ? ' selected="selected"' : ''; if ( $echo ) { echo $r; } return $r; }
+function checked( $a, $b = true, $echo = true ) { $r = (string) $a === (string) $b ? ' checked="checked"' : ''; if ( $echo ) { echo $r; } return $r; }
+function get_date_from_gmt( $s, $f = 'Y-m-d H:i:s' ) { $t = strtotime( $s . ' UTC' ); return 'U' === $f ? (string) $t : gmdate( $f, $t ); }
+function wp_get_current_user() { return (object) array( 'user_login' => 'synthetic-admin', 'roles' => array() ); }
 function is_user_logged_in() { return true; }
 class WP_Post {}
 function is_singular() { return true; }
@@ -197,6 +207,8 @@ final class GHCA_ACD_Data_Provider {
 	public static function employment_type_label( int $user_id ): string { return $GLOBALS['ghca_env']['employment'] ?: 'Not set'; }
 	public static function get_user_report_url( int $user_id ): string { return 'https://example.test/user-report?user_id=' . $user_id; }
 	public static function get_user_full_name( int $id ): string { return 'Synthetic Admin'; }
+	public static function employment_type( int $user_id ): string { return $GLOBALS['ghca_env']['employment_key'] ?? ''; }
+	public static function employment_type_options( string $current = '', string $label = '' ): array { return array( 'full_time' => 'Full-time', 'part_time' => 'Part-time', 'per_diem' => 'Per <diem>' ); }
 }
 
 require_once __DIR__ . '/../../includes/odp/class-odp-contract.php';
@@ -204,6 +216,7 @@ require_once __DIR__ . '/../../includes/odp/class-odp-ui.php';
 require_once __DIR__ . '/../../includes/class-redesign.php';
 require_once __DIR__ . '/../../includes/class-redesign-tables.php';
 require_once __DIR__ . '/../../includes/class-redesign-drawer.php';
+require_once __DIR__ . '/../../includes/class-redesign-edit.php';
 require_once __DIR__ . '/../../includes/class-ajax-handlers.php';
 
 /** A record in the shape build_employee_record() returns: one overdue, one in progress, one expiring, two complete. */

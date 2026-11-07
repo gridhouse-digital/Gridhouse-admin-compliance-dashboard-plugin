@@ -488,8 +488,7 @@ final class GHCA_ACD_Redesign_Drawer {
 
 	/** @param array<string,mixed> $m */
 	private static function subpage_html( array $m ): string {
-		unset( $m );
-		return '';
+		return GHCA_ACD_Redesign_Edit::subpage_html( $m );
 	}
 
 	/** @param array<string,mixed> $m */

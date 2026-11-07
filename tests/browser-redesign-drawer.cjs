@@ -47,6 +47,21 @@ function origin(file, state) {
         const out = execFileSync('php', [preview, 'card', JSON.stringify(state.env || {})]).toString();
         return route.fulfill({ contentType: 'application/json', body: out });
       }
+      if (params.action === 'ghca_acd_get_edit_records_form') {
+        state.editRequest = params;
+        delete params.action; delete params.nonce;
+        const out = execFileSync('php', [preview, 'edit', JSON.stringify(params), JSON.stringify(state.env || {})]).toString();
+        return route.fulfill({ contentType: 'application/json', body: out });
+      }
+      if (params.action === 'ghca_acd_save_employee_records') {
+        // Canned. Nothing is written; the request is kept to compare field names with the legacy form.
+        state.saved = params;
+        return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: { message: 'Records updated.' } }) });
+      }
+      if (params.action === 'ghca_acd_agency_training') {
+        state.agency = params;
+        return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: { html: '<p class="gh-small">Synthetic agency confirmation list.</p>', message: 'Saved records loaded.' } }) });
+      }
       if (params.action === 'ghca_acd_retry_reminder') {
         state.retried = params.delivery_id;
         return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: { message: 'The delivery was queued for retry.' } }) });
@@ -383,6 +398,135 @@ const metrics = (page) => page.evaluate(() => {
     m = await page.evaluate(() => ({ over: Array.from(document.querySelectorAll('[data-ghca-tabpanel="communications"] *')).filter((e) => e.getBoundingClientRect().right > document.querySelector('.gh-drawer--emp').getBoundingClientRect().right + 1).length }));
     assert.equal(m.over, 0); ok('phone: Communications has no sideways overflow');
     if (shots) { await page.screenshot({ path: path.join(shots, 'drawer-comms-390.png') }); }
+    await context.close();
+  }
+
+  // ---------- Edit Records sub-page ----------
+  {
+    const state = { calls: [], env: { jotform: true } };
+    const file = build(path.join(dir, 'i'), { env: state.env });
+    const { context, page, errors } = await open(browser, file, { width: 1440, height: 900 }, state);
+    await page.click('#open-drawer'); await drawerOpen(page);
+    await page.click('#ghca-acd-drawer-tab-administration');
+    const before = await page.evaluate(() => Math.round(document.querySelector('.gh-drawer--emp').getBoundingClientRect().width));
+    await page.click('[data-ghca-edit-records]');
+    await page.waitForSelector('[data-ghca-edit-form]');
+    assert.equal(state.editRequest.ghca_ui, 'board'); ok('edit: the form is requested as board markup');
+    const wide = await page.evaluate(() => Math.round(document.querySelector('.gh-drawer--emp').getBoundingClientRect().width));
+    assert.equal(before, 600); assert.equal(wide, 920); ok('edit: the drawer widens from 600px to 920px for the sub-page');
+    assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-ghca-subpage-head')), true); ok('edit: focus moves to the sub-page heading');
+    assert.equal(await page.locator('[data-ghca-admin-view="overview"]').isVisible(), false); ok('edit: the overview is hidden behind the sub-page');
+    assert.equal(await page.locator('.ghca-acd__edit-form').count(), 0); ok('edit: no legacy form markup');
+
+    // Role, group and status are read-only and unnamed, so they cannot be posted.
+    const names = await page.evaluate(() => Array.from(document.querySelectorAll('[data-ghca-edit-form] [name]')).map((e) => e.name));
+    assert.ok(names.includes('employment_type') && names.includes('registration_date') && names.some((x) => /^course\[\d+\]\[completed\]$/.test(x)), names.join(',')); ok('edit: the form carries the same field names as the legacy form');
+    assert.equal(names.includes('role') || names.includes('group') || names.includes('status'), false); ok('edit: role, group and status are not submitted');
+
+    // Dirty counter.
+    assert.match(await page.locator('[data-ghca-edit-dirty]').innerText(), /No unsaved changes/);
+    await page.selectOption('[name="employment_type"]', 'full_time');
+    assert.match(await page.locator('[data-ghca-edit-dirty]').innerText(), /Unsaved changes: 1 field$/); ok('edit: changing a field shows "Unsaved changes: 1 field"');
+    const firstDone = page.locator('input[name$="[mark_complete]"]').first();
+    await firstDone.check();
+    assert.match(await page.locator('[data-ghca-edit-dirty]').innerText(), /Unsaved changes: 2 fields$/); ok('edit: a second change makes it plural');
+    await page.selectOption('[name="employment_type"]', '');
+    await firstDone.uncheck();
+    assert.match(await page.locator('[data-ghca-edit-dirty]').innerText(), /No unsaved changes/); ok('edit: undoing the changes clears the counter');
+
+    // Save posts through the existing script, with the existing field names.
+    await page.selectOption('[name="employment_type"]', 'full_time');
+    await page.click('[data-ghca-edit-save]');
+    await page.waitForFunction(() => document.querySelectorAll('[data-ghca-toasts] .gh-toast--success').length > 0);
+    assert.equal(state.saved.employment_type, 'full_time'); assert.equal(state.saved.user_id, '42'); ok('edit: Save posts the form to the existing action for this employee');
+    assert.ok(Object.keys(state.saved).some((k) => /^course\[\d+\]\[mark_complete\]$/.test(k))); ok('edit: course completion flags are posted as 0 or 1 by the existing script');
+    assert.equal(await page.locator('[data-ghca-edit-form]').count(), 0); ok('edit: after saving the sub-page closes');
+    assert.equal(await page.evaluate(() => Math.round(document.querySelector('.gh-drawer--emp').getBoundingClientRect().width)), 600); ok('edit: and the drawer returns to 600px');
+
+    // Back and Escape.
+    await page.click('[data-ghca-edit-records]');
+    await page.waitForSelector('[data-ghca-edit-form]');
+    await page.click('[data-ghca-subpage-back]');
+    assert.equal(await page.locator('[data-ghca-admin-view="overview"]').isVisible(), true);
+    assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-ghca-edit-records')), true); ok('edit: Back returns to the overview and refocuses Edit records');
+    await page.click('[data-ghca-edit-records]');
+    await page.waitForSelector('[data-ghca-edit-form]');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('[data-ghca-admin-view="overview"]').isVisible(), true);
+    assert.equal(await page.locator('#ghca-acd-employee-drawer').isVisible(), true); ok('edit: Escape goes back one level and leaves the drawer open');
+    await page.click('[data-ghca-edit-records]');
+    await page.waitForSelector('[data-ghca-edit-form]');
+    await page.click('[data-ghca-edit-close]');
+    assert.equal(await page.locator('[data-ghca-admin-view="overview"]').isVisible(), true); ok('edit: Cancel closes the sub-page without saving');
+
+    // Packet period.
+    await page.click('[data-ghca-edit-records]');
+    await page.waitForSelector('[data-ghca-edit-form]');
+    assert.equal(await page.locator('[data-ghca-audit-dates]').isVisible(), false);
+    await page.selectOption('[data-ghca-audit-mode]', 'custom');
+    assert.equal(await page.locator('[data-ghca-audit-dates]').isVisible(), true); ok('packet: choosing a custom period shows the date fields');
+    assert.equal(await page.locator('[data-ghca-admin-view="subpage"] [data-ghca-pdf-packet]').count(), 2); ok('packet: Orientation and Annual keep the generator hook (OLTL is only offered where the OLTL feature applies)');
+    assert.equal(await page.locator('[data-ghca-packet-mirror]').isVisible(), false); ok('packet: the progress mirror is hidden until a packet is generated');
+
+    // Agency training body loads through the existing script.
+    await page.waitForFunction(() => document.querySelector('[data-ghca-agency-status]').textContent.includes('Choose valid start and end dates'));
+    ok('agency: a custom period without dates asks for them instead of loading');
+    await page.selectOption('[data-ghca-audit-mode]', 'cycle');
+    await page.click('[data-ghca-agency-reload]');
+    await page.waitForFunction(() => document.querySelector('[data-ghca-agency-body]').textContent.includes('Synthetic agency confirmation list'));
+    assert.equal(state.agency.operation, 'load'); assert.equal(state.agency.user_id, '42'); ok('agency: the existing script loads saved confirmations for this employee');
+
+    // Fonts.
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('DOM.enable'); await cdp.send('CSS.enable');
+    const doc = await cdp.send('DOM.getDocument', { depth: -1 });
+    for (const sel of ['[data-ghca-subpage-head]', '[data-ghca-edit-form] .gh-h4', '[data-ghca-edit-form] .gh-label', '[data-ghca-edit-form] .gh-input', '[data-ghca-edit-dirty]', '[data-ghca-edit-save]', '[data-ghca-admin-view="subpage"] [data-ghca-pdf-packet]']) {
+      const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: doc.root.nodeId, selector: sel });
+      const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
+      assert.ok(fonts.length > 0 && fonts.every((x) => /Wix Madefor/.test(x.familyName)), 'rendered font for ' + sel + ': ' + JSON.stringify(fonts));
+    }
+    ok('edit: the rendered font is Wix Madefor on every element checked');
+    // On a short screen the form overflows; the Save bar then stays in view while the form scrolls under it.
+    await page.setViewportSize({ width: 1440, height: 520 });
+    await page.evaluate(() => { document.querySelector('.gh-drawer-bd').scrollTop = 0; });
+    const foot = await page.evaluate(() => { const b = document.querySelector('.gh-drawer-bd').getBoundingClientRect(); const r = document.querySelector('.gh-dr-editfoot').getBoundingClientRect(); return { pos: getComputedStyle(document.querySelector('.gh-dr-editfoot')).position, gap: Math.round(b.bottom - r.bottom), pad: parseFloat(getComputedStyle(document.querySelector('.gh-drawer-bd')).paddingBottom), scrolls: document.querySelector('.gh-drawer-bd').scrollHeight > document.querySelector('.gh-drawer-bd').clientHeight }; });
+    assert.equal(foot.pos, 'sticky'); assert.equal(foot.scrolls, true); assert.equal(foot.gap, Math.round(foot.pad)); ok('edit: on a short screen the Save bar stays pinned at the bottom of the drawer body (inside its padding) while the form scrolls');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    if (shots) { await page.screenshot({ path: path.join(shots, 'drawer-edit-1440.png') }); }
+    assert.equal(errors.length, 0, 'console errors: ' + errors.join(' | ')); ok('no console or page errors');
+    await context.close();
+  }
+
+  // ---------- Edit Records: hostile theme and phone ----------
+  {
+    const grab = async (opts) => {
+      const state = { calls: [], env: {} };
+      const { context, page } = await open(browser, build(path.join(dir, opts.dir), { hostile: opts.hostile }), { width: 1440, height: 900 }, state);
+      await page.click('#open-drawer'); await drawerOpen(page);
+      await page.click('#ghca-acd-drawer-tab-administration');
+      await page.click('[data-ghca-edit-records]');
+      await page.waitForSelector('[data-ghca-edit-form]');
+      const m = (sel) => page.evaluate((s) => { const e = document.querySelector(s); if (!e) { return 'missing'; } const c = getComputedStyle(e); return [c.fontFamily, c.fontSize, c.fontWeight, c.lineHeight, c.textTransform, c.color, c.backgroundColor, c.paddingLeft, c.borderTopWidth, Math.round(e.getBoundingClientRect().height)].join('|'); }, sel);
+      const out = {};
+      for (const [k, sel] of Object.entries({ head: '[data-ghca-subpage-head]', h4: '[data-ghca-edit-form] .gh-h4', label: '[data-ghca-edit-form] .gh-label', input: '[data-ghca-edit-form] .gh-input', select: '[data-ghca-edit-form] .gh-select', check: '[data-ghca-edit-form] .gh-check', save: '[data-ghca-edit-save]', pk: '[data-ghca-admin-view="subpage"] [data-ghca-pdf-packet]', back: '[data-ghca-subpage-back]' })) { out[k] = await m(sel); }
+      await context.close();
+      return out;
+    };
+    const clean = await grab({ dir: 'j1', hostile: false });
+    const hostile = await grab({ dir: 'j2', hostile: true });
+    const drift = Object.keys(clean).filter((k) => clean[k] !== hostile[k]).map((k) => k + ': ' + clean[k] + '  vs  ' + hostile[k]);
+    assert.deepEqual(drift, []); ok('edit: heading, card title, label, input, select, checkbox label, buttons and back link measure the same under a hostile theme');
+
+    const state = { calls: [], env: {} };
+    const { context, page } = await open(browser, build(path.join(dir, 'k'), {}), { width: 390, height: 844 }, state);
+    await page.click('#open-drawer'); await drawerOpen(page);
+    await page.click('#ghca-acd-drawer-tab-administration');
+    await page.click('[data-ghca-edit-records]');
+    await page.waitForSelector('[data-ghca-edit-form]');
+    const g = await page.evaluate(() => { const d = document.querySelector('.gh-drawer--emp').getBoundingClientRect(); return { w: Math.round(d.width), vw: window.innerWidth, doc: document.documentElement.scrollWidth, over: Array.from(document.querySelectorAll('[data-ghca-admin-view="subpage"] *')).filter((e) => e.getBoundingClientRect().right > d.right + 1).length, ctl: Array.from(document.querySelectorAll('[data-ghca-edit-form] .gh-input, [data-ghca-edit-form] .gh-select, [data-ghca-edit-save], [data-ghca-pdf-packet]')).filter((e) => e.offsetParent !== null).map((e) => Math.round(e.getBoundingClientRect().height)) }; });
+    assert.equal(g.w, g.vw); assert.ok(g.doc <= g.vw + 1); assert.equal(g.over, 0); ok('phone: the sub-page fills the screen with no sideways overflow');
+    assert.ok(g.ctl.every((h) => h >= 42), 'controls: ' + g.ctl.join(',')); ok('phone: inputs, selects and buttons are at least 42px tall');
+    if (shots) { await page.screenshot({ path: path.join(shots, 'drawer-edit-390.png') }); }
     await context.close();
   }
 

@@ -800,6 +800,19 @@ final class GHCA_ACD_AJAX {
       wp_send_json_error( array( 'message' => __( 'Employee not found.', 'ghca-acd' ) ) );
     }
 
+    $m    = self::edit_records_model( $user_id );
+    $html = GHCA_ACD_Redesign_Tables::board_requested() ? GHCA_ACD_Redesign_Edit::render( $m ) : self::render_legacy_edit_form( $m );
+    wp_send_json_success( array( 'html' => $html, 'name' => $m['employee']['name'] ) );
+  }
+
+  /**
+   * Everything the Edit Records form shows, calculated once and shared by the legacy and the redesigned markup.
+   * It is the data preparation that used to sit inline in the handler, unchanged.
+   *
+   * @return array<string,mixed>
+   */
+  public static function edit_records_model( int $user_id ): array {
+    $user = get_userdata( $user_id );
     $employee = GHCA_ACD_Data_Provider::get_employee_record( $user_id );
 
     // user_registered is stored as GMT; convert to a site-local value for the picker.
@@ -809,9 +822,6 @@ final class GHCA_ACD_AJAX {
       $registered_local = wp_date( 'Y-m-d\TH:i', $reg_ts );
     }
 
-    ob_start();
-    ?>
-    <?php
     /*
      * Read-only context for section 1. These values are DERIVED (WP role, group
      * assignment, suspension state) and are not writable through this endpoint,
@@ -848,6 +858,53 @@ final class GHCA_ACD_AJAX {
     $edit_first_val  = $to_input( $edit_first_raw );
     $edit_alone_val  = $to_input( $edit_alone_raw );
     $employment_record = GHCA_ACD_Employment_Record::get( $user_id );
+    // Used by the redesigned form; the legacy template computes its own per-course values inline.
+    $edit_courses = array();
+    foreach ( $employee['courses'] ?? array() as $course ) {
+      $cid          = (int) $course['id'];
+      $completed_ts = (int) ( $course['completed_ts'] ?? 0 );
+      $started_ts   = self::get_course_activity_started( $user_id, $cid );
+      $edit_courses[] = array(
+        'id'              => $cid,
+        'title'           => self::display_course_title( (string) $course['title'] ),
+        'completed'       => ! empty( $course['completed'] ),
+        'completed_local' => $completed_ts > 0 ? wp_date( 'Y-m-d\TH:i', $completed_ts ) : '',
+        'minutes'         => ( $completed_ts > 0 && $started_ts > 0 && $completed_ts > $started_ts ) ? (int) round( ( $completed_ts - $started_ts ) / 60 ) : 0,
+      );
+    }
+    $employment_type       = GHCA_ACD_Data_Provider::employment_type( $user_id );
+    $employment_type_label = GHCA_ACD_Data_Provider::employment_type_label( $user_id );
+    $employment_options    = GHCA_ACD_Data_Provider::employment_type_options( $employment_type, $employment_type_label );
+    $actor                 = wp_get_current_user();
+    $actor_login           = $actor && $actor->user_login ? (string) $actor->user_login : '';
+
+    return array(
+      'user_id' => $user_id,
+      'user' => $user,
+      'employee' => $employee,
+      'registered_local' => $registered_local,
+      'edit_role_label' => $edit_role_label,
+      'edit_group' => $edit_group,
+      'edit_suspended' => $edit_suspended,
+      'edit_status' => $edit_status,
+      'edit_orient' => $edit_orient,
+      'edit_first_val' => $edit_first_val,
+      'edit_alone_val' => $edit_alone_val,
+      'employment_record' => $employment_record,
+      'edit_courses' => $edit_courses,
+      'employment_type' => $employment_type,
+      'employment_type_label' => $employment_type_label,
+      'employment_options' => $employment_options,
+      'actor_login' => $actor_login,
+    );
+  }
+
+  /** @param array<string,mixed> $m Result of edit_records_model(). */
+  private static function render_legacy_edit_form( array $m ): string {
+    extract( $m, EXTR_SKIP ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract -- the template below is the original markup, unchanged.
+    ob_start();
+    ?>
+    <?php
     ?>
     <form class="ghca-acd__edit-form ghca-acd__v2-edit-form" data-ghca-edit-form data-user-id="<?php echo esc_attr( (string) $user_id ); ?>">
 
@@ -999,7 +1056,7 @@ final class GHCA_ACD_AJAX {
       </div>
     </form>
     <?php
-    wp_send_json_success( array( 'html' => (string) ob_get_clean(), 'name' => $employee['name'] ) );
+    return (string) ob_get_clean();
   }
 
   /** Processes the submitted overrides and syncs them into LearnDash. */

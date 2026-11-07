@@ -81,7 +81,8 @@
     if (refresh) { load(refresh.closest('[data-ghca-agency]')); return; }
     var edit = event.target.closest('[data-ghca-edit-records]');
     if (edit) {
-      var panel = edit.closest('.ghca-acd__drawer-panel--administration').querySelector('[data-ghca-agency]');
+      var admin = edit.closest('.ghca-acd__drawer-panel--administration, [data-ghca-tabpanel="administration"]');
+      var panel = admin && admin.querySelector('[data-ghca-agency]');
       if (panel) load(panel);
     }
   });

@@ -18,6 +18,19 @@ if ( 'card' === $mode ) {
 	exit( 0 );
 }
 
+if ( 'edit' === $mode ) {
+	// The Edit Records form: the plugin's real handler, synthetic records.
+	ghca_env_reset( array_merge( array( 'base' => 'https://preview.test' ), json_decode( $argv[3] ?? '{}', true ) ?: array() ) );
+	$GLOBALS['ghca_env']['employee'] = ghca_env_drawer_employee() + array( 'orientation_label' => '1 of 1 complete' );
+	$_POST = array_merge( array( 'nonce' => 'n' ), json_decode( $argv[2] ?? '{}', true ) ?: array() );
+	try {
+		GHCA_ACD_AJAX::ajax_get_edit_records_form();
+	} catch ( Ghca_Env_Json $e ) {
+		echo json_encode( $e->payload );
+	}
+	exit( 0 );
+}
+
 if ( 'ajax' === $mode ) {
 	ghca_env_reset( array_merge( array( 'base' => 'https://preview.test' ), json_decode( $argv[3] ?? '{}', true ) ?: array() ) );
 	$r = ghca_env_drawer( json_decode( $argv[2] ?? '{}', true ) ?: array() );
@@ -58,6 +71,7 @@ $page   = GHCA_ACD_Redesign::render_from_model( array(
 // wp_footer prints the certificate modal in WordPress; it stays the legacy modal in this step.
 ob_start();
 GHCA_ACD_AJAX::render_certificate_modal();
+GHCA_ACD_AJAX::render_pdf_progress_modal();
 $page .= ob_get_clean();
 
 $tabs_css  = '.ghca-acd__tab-content{display:none}.ghca-acd__tab-content.is-active{display:block}html.ghca-acd--overlay-open,html.ghca-acd--drawer-open{overflow:hidden}';
@@ -70,5 +84,5 @@ $theme_css  = $tabs_css . ( $hostile
 file_put_contents( $out . '/drawer.html', '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Synthetic drawer preview</title>'
 	. $legacy_css . '<link rel="stylesheet" href="' . $assets . '/gh-redesign.css"><style>' . $theme_css . '</style></head><body class="ghca-acd-page">'
 	. '<p style="margin:0;padding:6px 16px;background:#222;color:#fff;font:600 12px/1.2 sans-serif">SYNTHETIC PREVIEW. Not live data.</p>' . $page
-	. '<script>window.ghcaAcd={ajaxUrl:"https://preview.test/ajax",nonce:"test",loading:"Loading…"};</script><script src="' . $assets . '/dashboard.js"></script></body></html>' );
+	. '<script>window.ghcaAcd={ajaxUrl:"https://preview.test/ajax",nonce:"test",loading:"Loading…"};</script><script src="' . $assets . '/dashboard.js"></script><script src="' . $assets . '/agency-training.js"></script></body></html>' );
 echo "wrote $out/drawer.html\n";

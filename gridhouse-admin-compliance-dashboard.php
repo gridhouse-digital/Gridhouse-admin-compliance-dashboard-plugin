@@ -31,6 +31,7 @@ require_once __DIR__ . '/includes/odp/class-odp-ui.php';
 require_once __DIR__ . '/includes/class-redesign.php';
 require_once __DIR__ . '/includes/class-redesign-tables.php';
 require_once __DIR__ . '/includes/class-redesign-drawer.php';
+require_once __DIR__ . '/includes/class-redesign-edit.php';
 require_once __DIR__ . '/includes/odp/class-odp-bulletins.php';
 require_once __DIR__ . '/includes/class-export.php';
 require_once __DIR__ . '/includes/class-fluentcrm.php';
