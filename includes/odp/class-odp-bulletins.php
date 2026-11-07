@@ -487,7 +487,7 @@ final class GHCA_ODP_Bulletins {
 			'context_label' => $admin ? __( 'Agency view', 'ghca-acd' ) : __( 'Employee view', 'ghca-acd' ),
 			'library_url'   => self::library_url(),
 			'body_html'     => $body,
-			'brand_style'   => class_exists( 'GHCA_ACD_Redesign' ) ? GHCA_ACD_Redesign::custom_brand_style() : '',
+			'brand_style'   => class_exists( 'GHCA_ACD_Redesign' ) ? GHCA_ACD_Redesign::brand_style() : '',
 			'rest_nonce'    => function_exists( 'wp_create_nonce' ) ? wp_create_nonce( 'wp_rest' ) : '',
 			'rest_root'     => function_exists( 'rest_url' ) ? rest_url( self::REST_NAMESPACE . '/' ) : '',
 		);

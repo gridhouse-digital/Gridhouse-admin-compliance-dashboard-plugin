@@ -58,9 +58,9 @@ final class GHCA_ACD_Redesign {
 		return array(
 			array( 'label' => __( 'Employees', 'ghca-acd' ), 'value' => (string) $total, 'sub' => __( 'Active in this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-employees' ),
 			array( 'label' => __( 'Tracked courses', 'ghca-acd' ), 'value' => (string) $tracked_courses, 'sub' => __( 'In this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-courses' ),
-			array( 'label' => __( 'In progress', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['in_progress_employees'] ?? 0 ), 'sub' => __( 'Includes new hires who have not started', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-employees' ),
+			array( 'label' => __( 'In progress', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['in_progress_employees'] ?? 0 ), 'sub' => __( 'Includes not started', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-employees' ),
 			array( 'label' => __( 'Overdue', 'ghca-acd' ), 'value' => (string) $overdue, 'sub' => __( 'Employees · view list', 'ghca-acd' ), 'tone' => $overdue > 0 ? 'danger' : '', 'tab' => 'ghca-tab-overdue' ),
-			array( 'label' => __( 'Certificates', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['certificates_issued'] ?? 0 ), 'sub' => __( 'Issued for active employees in this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-certificates' ),
+			array( 'label' => __( 'Certificates', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['certificates_issued'] ?? 0 ), 'sub' => __( 'Issued, active employees', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-certificates' ),
 			array(
 				'label' => __( 'Completion', 'ghca-acd' ),
 				'value' => $total > 0 ? $rate . '%' : '—',
@@ -138,8 +138,7 @@ final class GHCA_ACD_Redesign {
 		$bulletins = class_exists( 'GHCA_ODP_Bulletins' ) ? GHCA_ODP_Bulletins::dashboard_fragment( 'admin' ) : array( 'ticker' => '', 'drawer' => '', 'payload' => '' );
 		$model     = array(
 			'theme'         => self::theme_slug(),
-			'brand_style'   => self::custom_brand_style(),
-			'chrome'        => self::chrome( 'admin', 'compliance' ),
+			'brand_style'   => self::brand_style(),
 			'scope'         => $scope,
 			'scope_note'    => $scoped ? __( 'Group leader view — only your LearnDash groups are shown.', 'ghca-acd' ) : '',
 			'as_of'         => $as_of,
@@ -269,8 +268,7 @@ final class GHCA_ACD_Redesign {
 		$bleed = function_exists( 'apply_filters' ) ? (bool) apply_filters( 'ghca_acd_ui_full_bleed', true ) : true;
 		$html  = '<div class="ghca-ui' . ( $bleed ? ' ghca-ui--bleed' : '' ) . '">';
 		$html .= '<div class="gh-app ghca-acd ghca-acd--v2" data-theme="' . $theme . '"' . ( '' !== $style ? ' style="' . esc_attr( $style ) . '"' : '' ) . '>';
-		$html .= '<div class="gh-chrome">' . GHCA_ODP_UI::appbar( isset( $model['chrome'] ) && is_array( $model['chrome'] ) ? $model['chrome'] : array() );
-		$html .= '<div class="gh-container">' . self::pagehead_html( $model ) . self::tabs_html( (array) ( $model['tabs'] ?? array() ) ) . '</div></div>';
+		$html .= '<div class="gh-chrome"><div class="gh-container">' . self::pagehead_html( $model ) . self::tabs_html( (array) ( $model['tabs'] ?? array() ) ) . '</div></div>';
 		$html .= '<main class="gh-container gh-main">';
 		$html .= '<div id="ghca-tab-overview" class="gh-ov ghca-acd__tab-content is-active" role="tabpanel" aria-labelledby="ghca-tab-overview-tab" tabindex="0">';
 		$html .= self::kpi_html( (array) ( $model['kpis'] ?? array() ) );
@@ -288,7 +286,6 @@ final class GHCA_ACD_Redesign {
 			$html .= $panel; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- existing dashboard renderers escape their own markup.
 			$html .= '</div>';
 		}
-		$html .= self::footer_html( $model );
 		$html .= '</main>';
 		$html .= (string) ( $model['drawer_html'] ?? '' );
 		return $html . '</div></div>';
@@ -298,7 +295,7 @@ final class GHCA_ACD_Redesign {
 	private static function pagehead_html( array $model ): string {
 		$html  = '<div class="gh-pagehead"><div class="gh-pagehead-main"><span class="gh-eyebrow">' . esc_html__( 'Compliance center', 'ghca-acd' ) . '</span>';
 		$html .= '<h1 class="gh-h1">' . esc_html__( 'Compliance dashboard', 'ghca-acd' ) . '</h1>';
-		$html .= '<div class="gh-meta"><span class="gh-scope">' . self::icon( 'filter', 'sm' ) . esc_html( (string) ( $model['scope'] ?? '' ) ) . '</span>';
+		$html .= '<div class="gh-meta"><span class="gh-btn gh-btn--secondary gh-btn--sm gh-btn--native gh-btn--static">' . self::icon( 'filter', 'sm' ) . esc_html( (string) ( $model['scope'] ?? '' ) ) . '</span>';
 		$html .= '<span>' . self::icon( 'clock', 'sm' ) . esc_html( (string) ( $model['as_of'] ?? '' ) ) . '</span>';
 		$html .= '<span>' . self::icon( 'users', 'sm' ) . esc_html( (string) ( $model['active'] ?? '' ) ) . '</span></div>';
 		if ( ! empty( $model['scope_note'] ) ) {
@@ -310,8 +307,9 @@ final class GHCA_ACD_Redesign {
 			if ( empty( $action['url'] ) ) {
 				continue;
 			}
-			$icon  = $icons[ (string) ( $action['key'] ?? '' ) ] ?? '';
-			$html .= '<a class="gh-btn gh-btn--' . esc_attr( (string) ( $action['variant'] ?? 'secondary' ) ) . '" href="' . esc_url( (string) $action['url'] ) . '"';
+			$key   = (string) ( $action['key'] ?? '' );
+			$icon  = $icons[ $key ] ?? '';
+			$html .= '<a class="gh-btn gh-btn--' . esc_attr( (string) ( $action['variant'] ?? 'secondary' ) ) . ( in_array( $key, array( 'sync', 'export' ), true ) ? ' gh-btn--native' : '' ) . '" href="' . esc_url( (string) $action['url'] ) . '"';
 			$html .= ! empty( $action['tab'] ) ? ' data-ghca-tab-jump="' . esc_attr( (string) $action['tab'] ) . '"' : '';
 			$html .= '>' . ( '' !== $icon ? self::icon( $icon ) : '' ) . esc_html( (string) $action['label'] ) . '</a>';
 		}
@@ -356,9 +354,9 @@ final class GHCA_ACD_Redesign {
 		$slices = isset( $health['slices'] ) && is_array( $health['slices'] ) ? $health['slices'] : array();
 		$total  = (int) ( $health['total'] ?? 0 );
 		$aria   = $total > 0
-			? sprintf( /* translators: %s: percent */ __( '%s existing compliance rate', 'ghca-acd' ), (string) ( $health['center'] ?? '' ) )
+			? sprintf( /* translators: %s: percent */ __( '%s compliant: completed or expiring soon', 'ghca-acd' ), (string) ( $health['center'] ?? '' ) )
 			: __( 'No employees in scope', 'ghca-acd' );
-		$html   = '<div class="gh-card" aria-labelledby="gh-health-h"><div class="gh-card-hd gh-card-hd--plain"><div><h2 class="gh-h3" id="gh-health-h">' . esc_html__( 'Compliance health', 'ghca-acd' ) . '</h2>';
+		$html   = '<div class="gh-card" aria-labelledby="gh-health-h"><div class="gh-card-hd gh-card-hd--rule"><div><h2 class="gh-h3" id="gh-health-h">' . esc_html__( 'Compliance health', 'ghca-acd' ) . '</h2>';
 		$html  .= '<span class="gh-small gh-muted">' . esc_html__( 'Where every employee in this view stands', 'ghca-acd' ) . '</span></div></div>';
 		$html  .= '<div class="gh-ovp-bd"><div class="gh-health"><div class="gh-donut">' . self::donut_svg( $slices, $total, $aria );
 		$html  .= '<div class="gh-donut-c"><strong>' . esc_html( (string) ( $health['center'] ?? '—' ) ) . '</strong><span>' . esc_html( (string) ( $health['caption'] ?? '' ) ) . '</span></div></div>';
@@ -379,8 +377,7 @@ final class GHCA_ACD_Redesign {
 		if ( $overdue > 0 ) {
 			$html .= '<a class="gh-health-od" href="#ghca-tab-overdue" data-ghca-tab-jump="ghca-tab-overdue">' . esc_html( sprintf( /* translators: %d: overdue employees */ __( '%d overdue', 'ghca-acd' ), $overdue ) ) . ' →</a>';
 		}
-		$html .= '</div><p class="gh-small gh-muted gh-health-note">' . esc_html__( 'The percent is the existing compliance rate: completed plus expiring soon.', 'ghca-acd' ) . '</p>';
-		return $html . '</div></div>';
+		return $html . '</div></div></div>';
 	}
 
 	/** @return array<string,string> */
@@ -416,7 +413,7 @@ final class GHCA_ACD_Redesign {
 
 	/** @param array<int,array<string,mixed>> $groups */
 	private static function groups_html( array $groups ): string {
-		$html  = '<div class="gh-card" aria-labelledby="gh-groups-h"><div class="gh-card-hd gh-card-hd--plain"><div><h2 class="gh-h3" id="gh-groups-h">' . esc_html__( 'Compliance by group', 'ghca-acd' ) . '</h2>';
+		$html  = '<div class="gh-card" aria-labelledby="gh-groups-h"><div class="gh-card-hd gh-card-hd--rule"><div><h2 class="gh-h3" id="gh-groups-h">' . esc_html__( 'Compliance by group', 'ghca-acd' ) . '</h2>';
 		$html .= '<span class="gh-small gh-muted">' . esc_html__( 'Sorted by risk · completion of required courses', 'ghca-acd' ) . '</span></div>';
 		$html .= '<a class="gh-btn gh-btn--ghost gh-btn--sm" href="#ghca-tab-courses" data-ghca-tab-jump="ghca-tab-courses">' . esc_html__( 'Course detail', 'ghca-acd' ) . self::icon( 'arrow-right', 'sm' ) . '</a></div><div class="gh-ovp-bd">';
 		if ( ! $groups ) {
@@ -437,7 +434,7 @@ final class GHCA_ACD_Redesign {
 			if ( $overdue > 0 ) {
 				$meta .= ' · ' . sprintf( /* translators: %d: overdue employees */ __( '%d overdue', 'ghca-acd' ), $overdue );
 			}
-			$html .= '<li><div class="gh-grp-n"><strong>' . esc_html( (string) $row['label'] ) . '</strong><span>' . esc_html( $meta ) . '</span></div>';
+			$html .= '<li><div class="gh-grp-n"><a href="#ghca-tab-employees" data-ghca-tab-jump="ghca-tab-employees"><span>' . esc_html( (string) $row['label'] ) . '</span></a><span>' . esc_html( $meta ) . '</span></div>';
 			$html .= '<div class="gh-bar' . $bar . '" role="img" aria-label="' . esc_attr( $rate . '%' ) . '"><span style="width:' . esc_attr( (string) $rate ) . '%"></span></div>';
 			$html .= '<span class="gh-grp-pct">' . esc_html( (string) $rate ) . '%</span>';
 			$html .= '<span class="gh-grp-st"><span class="gh-st gh-st--' . esc_attr( $st ) . '">' . esc_html( $chip['label'] ) . '</span></span></li>';
@@ -469,7 +466,7 @@ final class GHCA_ACD_Redesign {
 		}
 		$html = '<section aria-labelledby="gh-ql-h"><div class="gh-card"><div class="gh-card-hd gh-card-hd--plain"><h2 class="gh-h3" id="gh-ql-h">' . esc_html__( 'Quick links', 'ghca-acd' ) . '</h2></div><div class="gh-card-bd gh-qlinks gh-qlinks--row">';
 		foreach ( $links as $link ) {
-			$html .= '<a class="gh-qlink" href="' . esc_url( $link['url'] ) . '">' . self::icon( $link['icon'] ) . '<span><strong>' . esc_html( $link['label'] ) . '</strong>';
+			$html .= '<a class="gh-qlink" href="' . esc_url( $link['url'] ) . '">' . self::icon( $link['icon'] ) . '<span><strong><span>' . esc_html( $link['label'] ) . '</span></strong>';
 			$html .= '' !== $link['subtitle'] ? '<span>' . esc_html( $link['subtitle'] ) . '</span>' : '';
 			$html .= '</span></a>';
 		}
@@ -484,13 +481,6 @@ final class GHCA_ACD_Redesign {
 			$html .= '<a class="gh-btn gh-btn--secondary" href="' . esc_url( 'mailto:' . $email ) . '">' . self::icon( 'mail' ) . esc_html__( 'Contact support', 'ghca-acd' ) . '</a>';
 		}
 		return $html . '</section>';
-	}
-
-	/** @param array<string,mixed> $model */
-	private static function footer_html( array $model ): string {
-		$org  = isset( $model['chrome']['org'] ) ? (string) $model['chrome']['org'] : '';
-		$year = function_exists( 'wp_date' ) ? wp_date( 'Y' ) : gmdate( 'Y' );
-		return '<footer class="gh-muted gh-foot"><span>© ' . esc_html( $year . ( '' !== $org ? ' ' . $org : '' ) ) . '</span><span>' . esc_html__( 'Powered by Gridhouse Digital', 'ghca-acd' ) . '</span></footer>';
 	}
 
 	/** @param array<string,mixed> $data @return array<int,array<string,mixed>> */
@@ -571,6 +561,70 @@ final class GHCA_ACD_Redesign {
 				'tab'     => 'ghca-tab-reports',
 			),
 		);
+	}
+
+	public static function brand_style(): string {
+		return implode( ';', array_filter( array( self::custom_brand_style(), self::agency_brand_style() ) ) );
+	}
+
+	/**
+	 * Agency primary from the plugin's Branding settings, for quick links and
+	 * primary buttons on every preset theme. Text colours are chosen to keep
+	 * WCAG AA (4.5:1) on white, on the hover tint, and on the button fill.
+	 */
+	public static function agency_brand_style( string $primary = '' ): string {
+		if ( '' === $primary && class_exists( 'GHCA_Dashboard_Branding' ) ) {
+			$primary = (string) ( GHCA_Dashboard_Branding::get()['primary'] ?? '' );
+		}
+		$primary = strtolower( trim( $primary ) );
+		if ( ! preg_match( '/^#[0-9a-f]{6}$/', $primary ) ) {
+			return '';
+		}
+		$soft = self::mix_hex( $primary, '#ffffff', 0.92 );
+		$ink  = $primary;
+		for ( $i = 0; $i < 20 && self::contrast( $ink, $soft ) < 4.5; $i++ ) {
+			$ink = self::mix_hex( $ink, '#000000', 0.08 );
+		}
+		$fill  = self::contrast( $primary, self::text_on( $primary ) ) >= 4.5 ? $primary : $ink;
+		$hover = self::mix_hex( $fill, '#000000', 0.18 );
+		$parts = array(
+			'--gh-agency:' . $fill,
+			'--gh-agency-hover:' . $hover,
+			'--gh-agency-on:' . self::text_on( $fill ),
+			'--gh-agency-on-hover:' . self::text_on( $hover ),
+			'--gh-agency-ink:' . $ink,
+			'--gh-agency-soft:' . $soft,
+		);
+		return implode( ';', $parts );
+	}
+
+	private static function text_on( string $hex ): string {
+		return self::contrast( $hex, '#ffffff' ) >= self::contrast( $hex, '#111827' ) ? '#ffffff' : '#111827';
+	}
+
+	public static function contrast( string $a, string $b ): float {
+		$la = self::luminance( $a );
+		$lb = self::luminance( $b );
+		return ( max( $la, $lb ) + 0.05 ) / ( min( $la, $lb ) + 0.05 );
+	}
+
+	private static function luminance( string $hex ): float {
+		$sum = 0.0;
+		foreach ( array( 0.2126, 0.7152, 0.0722 ) as $i => $weight ) {
+			$c    = hexdec( substr( $hex, 1 + 2 * $i, 2 ) ) / 255;
+			$sum += $weight * ( $c <= 0.03928 ? $c / 12.92 : ( ( $c + 0.055 ) / 1.055 ) ** 2.4 );
+		}
+		return $sum;
+	}
+
+	private static function mix_hex( string $hex, string $with, float $weight ): string {
+		$out = '#';
+		for ( $i = 0; $i < 3; $i++ ) {
+			$a    = hexdec( substr( $hex, 1 + 2 * $i, 2 ) );
+			$b    = hexdec( substr( $with, 1 + 2 * $i, 2 ) );
+			$out .= sprintf( '%02x', (int) round( $a * ( 1 - $weight ) + $b * $weight ) );
+		}
+		return $out;
 	}
 
 	public static function custom_brand_style(): string {

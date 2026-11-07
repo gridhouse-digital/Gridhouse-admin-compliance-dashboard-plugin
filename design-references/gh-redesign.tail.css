@@ -7,7 +7,6 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-main { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direction: column; gap: 24px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ov.is-active { display: flex; flex-direction: column; gap: 24px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ov:focus { box-shadow: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 8px; font-size: 12px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-help-row { padding: 18px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-help-row > .gh-stat-ico { width: 44px; height: 44px; background: var(--gh-surface-card); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-help-row > div { flex: 1 1 0%; min-width: 260px; }
@@ -16,12 +15,10 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-tabs .gh-tab { font-family: inherit; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-chrome { background: var(--gh-surface-page); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-pagehead-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-scope { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--gh-border-strong); border-radius: var(--gh-radius-md); background: var(--gh-surface-card); color: var(--gh-text); font-size: 13px; font-weight: 500; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-nav a[aria-current="true"] { color: var(--gh-color-primary); background: var(--gh-surface-brand-subtle); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ann-main { flex: 1 1 0%; min-width: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ann-acts { display: inline-flex; flex: none; gap: 2px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ann-link { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--gh-text-link); text-decoration: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-health-note { margin-top: 10px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-step button:disabled { opacity: .4; cursor: default; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-copy.is-copied { color: var(--gh-status-success-fg); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-main { padding-top: 28px; padding-bottom: 56px; display: flex; flex-direction: column; gap: 20px; }
@@ -50,7 +47,7 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-chiprow { margin-top: 12px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-tools form { display: contents; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bl-read { cursor: pointer; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-odp-about strong { font-weight: 600; color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-about strong { font-weight: 700; color: inherit; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-about > .gh-bul-chip { align-self: flex-start; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-body > p:last-child { margin-bottom: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns a { text-decoration: none; }
@@ -69,6 +66,10 @@ body.gh-ui-body { margin: 0; background: #F3EFEA; }
 
 /* Phone layouts from the board's 390 px frames (.gh-phone), applied by viewport width. */
 @media (max-width: 600px) {
+  /* The phone frames sit in a `.gh-app.gh-touch` whose base is 15px, with an inline-sized logo. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-odp { font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-mark { width: 30px; height: 30px; font-size: 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-name { font-size: 15px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-odp-hd h1 { font-size: 28px; line-height: 34px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-odp-intro { font-size: 15px; line-height: 23px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-odp-tools { flex-direction: column; align-items: stretch; }
@@ -89,5 +90,29 @@ body.gh-ui-body { margin: 0; background: #F3EFEA; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-bul-bd { padding: 20px 20px 24px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-bul-h { font-size: 24px; line-height: 30px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-bul-ft { flex-wrap: wrap; gap: 6px; padding: 12px 16px 24px; }
-  :is(.ghca-ui, #ghca-ui-scope) .gh-bul-ft .gh-btn { min-height: 48px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bul-ft .gh-btn { min-height: 48px; padding: 0 16px; font-size: var(--gh-text-sm); gap: 8px; }
 }
+
+/* The board's Sync, Export, and Scope are <button>s, so `.gh-app button { font: inherit }` sets their final weight and line height. These are links here. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--native { font: inherit; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--static { cursor: default; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--static:hover { background: var(--gh-surface-card); border-color: var(--gh-border-strong); }
+
+/* Card headers the user asked to separate from the body. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-card-hd--rule + .gh-ovp-bd { padding-top: 14px; }
+
+/* Themes paint link hovers and link children; links whose board rules set no background or child colour keep none. Zero added specificity, so every component rule still wins. */
+:is(.ghca-ui, #ghca-ui-scope) :where(.gh-app a:not(.gh-legacy *)) { background-color: transparent; }
+:is(.ghca-ui, #ghca-ui-scope) :where(.gh-app a:not(.gh-legacy *) :is(strong, b)) { color: inherit; }
+
+/* Agency brand (Branding settings) on quick links and primary buttons, on every preset theme. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:visited, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:focus, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:active { color: var(--gh-agency-ink, var(--gh-text)); text-decoration: none; box-shadow: none !important; background-color: var(--gh-surface-card); border-color: var(--gh-border); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:active { background-color: var(--gh-agency-soft, var(--gh-surface-hover)); border-color: var(--gh-agency-ink, var(--gh-border-strong)); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)) !important; outline-offset: 2px !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink strong, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink .gh-i { color: inherit; text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink strong span { color: inherit; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink > span > span { color: var(--gh-text-muted); text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:visited, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:active, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:visited, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:focus, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:active { background-color: var(--gh-agency, var(--gh-color-primary)); color: var(--gh-agency-on, var(--gh-color-on-primary)); border-color: transparent; text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:active, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:active { background-color: var(--gh-agency-hover, var(--gh-color-primary-hover)); color: var(--gh-agency-on-hover, var(--gh-color-on-primary)); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)) !important; outline-offset: 2px !important; box-shadow: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary .gh-i { color: inherit; }
