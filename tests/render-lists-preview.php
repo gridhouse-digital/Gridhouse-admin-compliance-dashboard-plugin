@@ -51,7 +51,7 @@ $model  = array(
 	'actions'      => array(),
 	'tabs'         => array(
 		array( 'id' => 'ghca-tab-overview', 'label' => 'Overview', 'badge' => null, 'active' => true ),
-		array( 'id' => 'ghca-tab-overdue', 'label' => 'Overdue', 'badge' => 3, 'tone' => 'danger', 'active' => false ),
+		array( 'id' => 'ghca-tab-overdue', 'label' => 'Overdue & at risk', 'badge' => 3, 'tone' => 'danger', 'active' => false ),
 		array( 'id' => 'ghca-tab-courses', 'label' => 'Courses', 'badge' => GHCA_ACD_Data_Provider::count_unique_tracked_courses( $agg['employees'] ), 'active' => false ),
 		array( 'id' => 'ghca-tab-certificates', 'label' => 'Certificates', 'badge' => null, 'active' => false ),
 	),

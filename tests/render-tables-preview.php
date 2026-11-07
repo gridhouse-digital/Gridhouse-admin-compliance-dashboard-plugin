@@ -51,7 +51,7 @@ $model     = array(
 	'tabs'         => array(
 		array( 'id' => 'ghca-tab-overview', 'label' => 'Overview', 'badge' => null, 'active' => true ),
 		array( 'id' => 'ghca-tab-employees', 'label' => 'Employees', 'badge' => $count, 'active' => false ),
-		array( 'id' => 'ghca-tab-overdue', 'label' => 'Overdue', 'badge' => 2, 'tone' => 'danger', 'active' => false ),
+		array( 'id' => 'ghca-tab-overdue', 'label' => 'Overdue & at risk', 'badge' => 2, 'tone' => 'danger', 'active' => false ),
 		array( 'id' => 'ghca-tab-inactive-employees', 'label' => 'Inactive', 'badge' => 2, 'active' => false ),
 	),
 	'kpis'         => GHCA_ACD_Redesign::kpis_from_aggregate( $aggregate, 6 ),

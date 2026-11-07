@@ -141,6 +141,7 @@ All proposed CSS goes into `design-references/gh-redesign.tail.css`, under the e
 | "Other" → **Not started** | `health_from_aggregate()` counts `not_started` from the aggregate's employee records, the status the Employees "Not Started" filter matches, and shows it as "Not started" in the neutral tone. Compliant, Expiring soon, In progress, Overdue and the compliance rate are unchanged. **"Status not recognised"** appears only when an employee's status is none of the mapped ones; none is today. The rows always add up to the employees in scope. No "No courses assigned" row. | `includes/class-redesign.php` |
 | In progress subtitle | "Includes new hires not started" | `includes/class-redesign.php` |
 | **Overdue KPI tile** (added request) | Always `gh-stat--danger`: the board's light-red surface with red label, number and icon, at any count including 0. The real count and the link to the Overdue tab are unchanged. The count-dependent condition was removed. | `includes/class-redesign.php` |
+| **Tab label** (added request) | The redesigned dashboard's Overdue tab reads **"Overdue & at risk"**: the button text, which is its accessible name, at every width. The id, panel, `aria-controls` / `aria-labelledby`, badge, tone, routing, filters and counts are unchanged. The legacy dashboard (redesign off) keeps its own tab label, so the legacy screens stay unchanged. | `includes/class-redesign.php` |
 | Phone Overview (≤ 719px) | Overview panel base 15px; two KPI columns; KPI value 24/30; KPI tile padding 12/14/14; card headers 14px top; plain card header 2px bottom; card titles −0.012em. The approved divided headers keep their divider. Re-checking the earlier "chip", "small text" and "h4 margin" pairs showed they compared different elements: the chip renders at the same 22px height on both sides. No change was made for those. | `design-references/gh-redesign.tail.css` |
 | Tablet (720–1023px) | Minimum 44px (`--gh-touch`) on buttons, inputs, selects, tabs, sub-tabs, menu items, checkbox labels, the pager's per-page select and pager buttons; icon buttons at least 44px wide. These are minimums only, so nothing shrinks. Desktop sizes return from 1024px. Inputs and selects are 44px too: the tablet board's note says "every control is 44px tall", although the board's own CSS renders them at 38px. | `design-references/gh-redesign.tail.css` |
 | Menu links (drawer More menu, Overdue row menu) | Agency brand ink (`--gh-agency-ink`, which `agency_brand_style()` darkens to 4.5:1 on white and on the hover tint), falling back to the theme's link token, never a fixed blue. Hover: agency tint plus underline. Keyboard focus: agency tint plus a 2px ring in the agency ink. Menu buttons keep the text colour. | `design-references/gh-redesign.tail.css` |
@@ -150,13 +151,16 @@ All CSS stays under `:is(.ghca-ui, #ghca-ui-scope)` and is rebuilt into `assets/
 
 ### Verification (synthetic; not the Akansoh site)
 
-- **`node tests/browser-corrections.cjs` (15 checks), Akansoh theme with an agency colour (`#2f5d3a`):**
+- **`node tests/browser-corrections.cjs` (17 checks), Akansoh theme with an agency colour (`#2f5d3a`):**
   - The health legend reads Compliant, Expiring soon, In progress, Overdue, Not started, and adds up to the 12 in scope; the rate is unchanged.
   - The Overdue tile has identical danger styling at 2 and at 0 (danger tokens, number contrast ≥ 4.5:1), the real count, and a link that opens the Overdue tab.
   - The phone Overview values are as listed above, with no sideways scroll; desktop is unchanged.
   - At 720, 834 and 1023px every control is ≥ 44px on the Employees, Overdue, Courses and Certificates tabs (12–25 controls each) and in the drawer. None is smaller than on desktop, and desktop sizes return at 1024px.
   - Menu links in the drawer and the Overdue row: agency ink `rgb(47, 93, 58)`, not `rgb(60, 88, 116)`; AA on white and on the hover tint; hover tint and underline; keyboard focus ring 2px in the agency ink (≥ 3:1). Menu buttons keep the text colour.
   - The disclaimer keeps 13.5px below it.
+- **Tab rename:**
+  - `tests/test-redesign-lists.php`: the real `tabs()` and `tabs_html()` give the new label with the same id, target, controls, badge and tone, at 3 and at 0 overdue; no plain "Overdue" tab remains; the legacy tab label is unchanged.
+  - `tests/browser-corrections.cjs` (17 checks in all): at 1440 and 390, the tab's accessible name is "Overdue & at risk" and it selects the same panel.
 - **`php tests/test-odp-bulletins.php` (112 checks):**
   - the health rows with every status, the rows summing to the total, the unmapped row only for an unknown status, and the rate unchanged;
   - the new subtitle;
@@ -167,6 +171,6 @@ All CSS stays under `:is(.ghca-ui, #ghca-ui-scope)` and is rebuilt into `assets/
   - the golden checksums of the legacy Overdue, Courses and Certificates output still match;
   - the Employees and Inactive legacy markup tests pass;
   - the page-background test confirms the legacy `#eceff3` body.
-- **All suites:** 75 PHP scripts, the JS and Playwright tests, and every browser suite (lists 51, tables 53, drawer 159, themed bulletin 34, page background 18, bulletin pages 24, corrections 15).
+- **All suites:** 75 PHP scripts, the JS and Playwright tests, and every browser suite (lists 51, tables 53, drawer 159, themed bulletin 34, page background 18, bulletin pages 24, corrections 17). There are 75 PHP scripts; the list test now has 165 checks.
 
 Not verified: the real Akansoh site, its real agency colour, real devices (touch tablets) and the Purple theme. Hover and focus were checked on the menus; other components' hover states were not re-audited.

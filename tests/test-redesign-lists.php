@@ -369,6 +369,26 @@ GHCA_ACD_Redesign_Lists::$now = strtotime( '2026-11-01 23:30:00 UTC' );
 check( 1 === GHCA_ACD_Redesign_Lists::days_from_today( strtotime( '2026-11-02 00:10:00 UTC' ) ), 'tomorrow is one day, whatever the hour' );
 check( -7 === GHCA_ACD_Redesign_Lists::days_from_today( strtotime( '2026-10-25 08:00:00 UTC' ) ), 'seven days ago' );
 
+// ---- 7. The redesigned dashboard's tab is named "Overdue & at risk" (label only; id, panel, badge and tone unchanged).
+require_once __DIR__ . '/../includes/odp/class-odp-contract.php';
+require_once __DIR__ . '/../includes/odp/class-odp-ui.php';
+require_once __DIR__ . '/../includes/class-redesign.php';
+reset_env();
+$tabs_m = new ReflectionMethod( 'GHCA_ACD_Redesign', 'tabs' );
+$tabs_m->setAccessible( true );
+$tabs   = $tabs_m->invoke( null, array( 'overdue_employees' => 3, 'total_employees' => 6, 'employees' => array() ) );
+$od     = array_values( array_filter( $tabs, static function ( $t ) { return 'ghca-tab-overdue' === $t['id']; } ) );
+check( 1 === count( $od ) && 'Overdue & at risk' === $od[0]['label'] && 3 === $od[0]['badge'] && 'danger' === $od[0]['tone'], 'Overdue tab: label "Overdue & at risk", same id, badge and tone' );
+check( ! in_array( 'Overdue', array_column( $tabs, 'label' ), true ), 'no tab is still labelled plain "Overdue"' );
+$html_m = new ReflectionMethod( 'GHCA_ACD_Redesign', 'tabs_html' );
+$html_m->setAccessible( true );
+$tab_html = $html_m->invoke( null, $tabs );
+check( 1 === preg_match( '#<button type="button" role="tab" id="ghca-tab-overdue-tab" class="gh-tab" data-ghca-tab-target="ghca-tab-overdue" aria-controls="ghca-tab-overdue"[^>]*>Overdue &amp; at risk<span class="gh-count gh-count--danger">3</span></button>#', $tab_html ), 'tab button: escaped label as its accessible name, same target, controls and count' );
+$zero_tabs = $tabs_m->invoke( null, array( 'overdue_employees' => 0, 'employees' => array() ) );
+check( 'Overdue & at risk' === $zero_tabs[2]['label'] && null === $zero_tabs[2]['badge'], 'zero overdue: same label, no badge (unchanged behaviour)' );
+$legacy_src = (string) file_get_contents( __DIR__ . '/../includes/class-shortcodes.php' );
+check( false !== strpos( $legacy_src, "array( 'target' => 'ghca-tab-overdue',             'label' => __( 'Overdue', 'ghca-acd' )," ), 'legacy dashboard (redesign off) keeps its own tab label' );
+
 if ( $failed ) {
 	fwrite( STDERR, "FAILED: $failed of $checks redesigned list checks\n" );
 	exit( 1 );

@@ -112,6 +112,21 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
     await ctx.close();
   }
 
+  // ---- Tab renamed "Overdue & at risk": accessible name, desktop and phone, same routing.
+  for (const w of [1440, 390]) {
+    const { ctx, page } = await open(browser, w, 'main/lists.html');
+    const tabEl = page.getByRole('tab', { name: /^Overdue & at risk/ });
+    assert.equal(await tabEl.count(), 1);
+    assert.equal(await page.getByRole('tab', { name: /^Overdue$|^Overdue \d/ }).count(), 0);
+    await tabEl.click();
+    assert.equal(await tabEl.getAttribute('aria-selected'), 'true');
+    assert.equal(await tabEl.getAttribute('aria-controls'), 'ghca-tab-overdue');
+    assert.ok(await page.locator('#ghca-tab-overdue').isVisible());
+    assert.equal(await page.locator('#ghca-tab-overdue').getAttribute('aria-labelledby'), 'ghca-tab-overdue-tab');
+    ok('@' + w + ': tab "Overdue & at risk" (accessible name) selects and shows the same Overdue panel');
+    await ctx.close();
+  }
+
   // ---- Phone Overview (M-Admin-Overview values).
   {
     const { ctx, page } = await open(browser, 390, 'main/overview.html');

@@ -77,6 +77,7 @@ final class GHCA_ACD_Roles {
 	public static function user_can_send_reminders(): bool { return $GLOBALS['ghca_env']['can_remind'] ?? false; }
 	public static function user_can_view_communication_history(): bool { return $GLOBALS['ghca_env']['can_comms'] ?? false; }
 	public static function user_can_view_employee_documents(): bool { return $GLOBALS['ghca_env']['can_docs'] ?? false; }
+	public static function user_can_review_external_training(): bool { return $GLOBALS['ghca_env']['can_review_ext'] ?? false; }
 }
 final class GHCA_ACD_User_Report {
 	public static function can_view_user( int $id ): bool { return $GLOBALS['ghca_env']['can_view_user'] ?? true; }

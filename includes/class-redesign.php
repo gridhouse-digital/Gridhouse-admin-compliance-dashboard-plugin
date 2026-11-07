@@ -535,7 +535,7 @@ final class GHCA_ACD_Redesign {
 		$tabs    = array(
 			array( 'id' => 'ghca-tab-overview', 'label' => __( 'Overview', 'ghca-acd' ), 'badge' => null, 'active' => true ),
 			array( 'id' => 'ghca-tab-employees', 'label' => __( 'Employees', 'ghca-acd' ), 'badge' => (int) ( $data['total_employees'] ?? 0 ), 'active' => false ),
-			array( 'id' => 'ghca-tab-overdue', 'label' => __( 'Overdue', 'ghca-acd' ), 'badge' => $overdue > 0 ? $overdue : null, 'tone' => 'danger', 'active' => false ),
+			array( 'id' => 'ghca-tab-overdue', 'label' => __( 'Overdue & at risk', 'ghca-acd' ), 'badge' => $overdue > 0 ? $overdue : null, 'tone' => 'danger', 'active' => false ),
 		);
 		if ( GHCA_ACD_Roles::user_can_review_external_training() ) {
 			$tabs[] = array( 'id' => 'ghca-tab-external-training', 'label' => __( 'External training', 'ghca-acd' ), 'badge' => null, 'active' => false );
