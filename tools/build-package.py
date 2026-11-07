@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Builds the cumulative GHCA plugin ZIP from one exact commit. Never overwrites an existing file.
 
-Usage: python3 tools/build-package.py <repo> <commit> <branch> <output-dir>
+Usage: python3 tools/build-package.py <repo> <commit> <branch> <output-dir> ["contents"] ["previous staging"]
 The ZIP root is Gridhouse-admin-compliance-dashboard-plugin-main/ (the folder staging uses). BUILD.txt
 records the build time, so a rebuild has the same 139 runtime files but a different ZIP checksum."""
 import hashlib, io, os, subprocess, sys, tarfile, zipfile, datetime
 
 repo, commit, branch, outdir = sys.argv[1:5]
+contents = sys.argv[5] if len(sys.argv) > 5 else 'Cumulative dashboard redesign, phase 1 and phase 2 slices 2-4 (Slices 1-4), on top of 1.7.3-rc.8'
+previous = sys.argv[6] if len(sys.argv) > 6 else 'Slice 3, commit a890189'
 ROOT = 'Gridhouse-admin-compliance-dashboard-plugin-main'
 PATHS = ['gridhouse-admin-compliance-dashboard.php', 'includes', 'assets', 'README.md', 'TESTING.md']
 git = lambda *a: subprocess.check_output(['git', '-C', repo, *a])
@@ -42,8 +44,8 @@ Commit:           {full}
 Short commit:     {short}
 Commit date:      {cdate}
 Built (UTC):      {built}
-Contents:         Cumulative dashboard redesign, phase 1 and phase 2 slices 2-4 (Slices 1-4), on top of 1.7.3-rc.8
-Previous staging: Slice 3, commit a890189
+Contents:         {contents}
+Previous staging: {previous}
 
 Root folder:      {ROOT}/
 Install path:     wp-content/plugins/{ROOT}/gridhouse-admin-compliance-dashboard.php
