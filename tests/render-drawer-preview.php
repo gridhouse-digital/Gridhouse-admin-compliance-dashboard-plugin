@@ -11,6 +11,13 @@ require __DIR__ . '/fixtures/redesign-drawer-env.php';
 
 $mode = $argv[1] ?? 'page';
 
+if ( 'card' === $mode ) {
+	// The upload response: the redesigned outside-certificate card.
+	ghca_env_reset( array_merge( array( 'base' => 'https://preview.test', 'jotform' => true ), json_decode( $argv[2] ?? '{}', true ) ?: array() ) );
+	echo json_encode( array( 'success' => true, 'data' => array( 'html' => GHCA_ACD_Redesign_Drawer::manual_entry_html( 42 ) ) ) );
+	exit( 0 );
+}
+
 if ( 'ajax' === $mode ) {
 	ghca_env_reset( array_merge( array( 'base' => 'https://preview.test' ), json_decode( $argv[3] ?? '{}', true ) ?: array() ) );
 	$r = ghca_env_drawer( json_decode( $argv[2] ?? '{}', true ) ?: array() );

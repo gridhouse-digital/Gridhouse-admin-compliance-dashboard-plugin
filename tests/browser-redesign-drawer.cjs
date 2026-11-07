@@ -30,13 +30,26 @@ function origin(file, state) {
   return async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/ajax') {
-      const params = Object.fromEntries(new URLSearchParams(route.request().postData() || ''));
+      const body = route.request().postData() || '';
+      const params = Object.fromEntries(new URLSearchParams(body));
+      // The upload is multipart, so its action name is read from the body.
+      if (!params.action) { const m = body.match(/name="action"\r\n\r\n([^\r]+)/); if (m) { params.action = m[1]; } }
       state.calls.push(params.action);
       if (params.action === 'ghca_acd_get_employee_drawer') {
         if (state.fail) { return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: false, data: { message: 'Employee not found.' } }) }); }
         delete params.action;
         const out = execFileSync('php', [preview, 'ajax', JSON.stringify(params), JSON.stringify(state.env || {})]).toString();
         return route.fulfill({ contentType: 'application/json', body: out });
+      }
+      if (params.action === 'ghca_acd_jotform_manual_upload') {
+        // Nothing is stored. The request body proves the form asked for board markup.
+        state.upload = route.request().postData() || '';
+        const out = execFileSync('php', [preview, 'card', JSON.stringify(state.env || {})]).toString();
+        return route.fulfill({ contentType: 'application/json', body: out });
+      }
+      if (params.action === 'ghca_acd_retry_reminder') {
+        state.retried = params.delivery_id;
+        return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: { message: 'The delivery was queued for retry.' } }) });
       }
       if (params.action === 'ghca_acd_mark_reviewed') {
         return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: { line: 'Reviewed on Nov 1, 2026 by Synthetic Admin', badge: 'Reviewed Nov 1', message: 'Marked as reviewed.' } }) });
@@ -253,6 +266,123 @@ const metrics = (page) => page.evaluate(() => {
     assert.equal(m, true); ok('phone: the More menu stays on screen');
     await page.keyboard.press('Escape');
     if (shots) { await page.screenshot({ path: path.join(shots, 'drawer-training-390.png') }); }
+    await context.close();
+  }
+
+
+  // ---------- Documents and Communications ----------
+  {
+    const history = [
+      { communication_id: 5, delivery_id: 321, channel: 'email', delivery_state: 'accepted', actor_user_id: 3, urgency: 'normal', created_at: '2026-10-27 16:42:00', subject: 'Your Fatal Five course is due', message: 'Hi Jordan,\nstart with Fatal Five.', last_error_code: '', last_error_summary: '', attempt_count: 1, provider_ref: '' },
+      { communication_id: 5, delivery_id: 322, channel: 'sms', delivery_state: 'failed', actor_user_id: 3, urgency: 'normal', created_at: '2026-10-27 16:42:00', subject: 'Your Fatal Five course is due', message: 'Hi Jordan,\nstart with Fatal Five.', last_error_code: 'no_phone', last_error_summary: 'No mobile number on file.', attempt_count: 1, provider_ref: '' },
+      { communication_id: 4, delivery_id: 300, channel: 'sms', delivery_state: 'delivered', actor_user_id: 0, urgency: 'high', created_at: '2026-10-20 09:00:00', subject: '', message: 'Welcome.', last_error_code: '', last_error_summary: '', attempt_count: 1, provider_ref: 'SM1' },
+    ];
+    const state = { calls: [], env: { jotform: true, messaging: true, history, hist_total: 4 } };
+    const file = build(path.join(dir, 'f'), { env: state.env });
+    const { context, page, errors } = await open(browser, file, { width: 1440, height: 900 }, state);
+    await page.click('#open-drawer'); await drawerOpen(page);
+    assert.match(await page.locator('#ghca-acd-drawer-tab-documents').innerText(), /Documents\s+5/); ok('the Documents tab shows the record count');
+    assert.match(await page.locator('#ghca-acd-drawer-tab-communications').innerText(), /Communications\s+4/); ok('the Communications tab shows the communication count');
+
+    await page.click('#ghca-acd-drawer-tab-documents');
+    assert.equal(await page.locator('.gh-file').count(), 3); ok('documents: three records');
+    const f = await page.evaluate(() => { const r = document.querySelector('.gh-file').getBoundingClientRect(); const ico = document.querySelector('.gh-file-ico').getBoundingClientRect(); return { ico: Math.round(ico.width) + 'x' + Math.round(ico.height), fits: r.right <= document.querySelector('.gh-drawer-bd').getBoundingClientRect().right }; });
+    assert.deepEqual(f, { ico: '38x44', fits: true }); ok('documents: file rows use the board icon size and fit the drawer');
+    assert.equal(await page.locator('[data-ghca-document-open]').count(), 1);
+    assert.equal(await page.locator('[data-ghca-manual-open]').count(), 1); ok('documents: preview buttons keep the hooks the documents script binds to');
+
+    // Upload: the form posts through the existing script and the card is replaced in place by a board card.
+    const form = page.locator('[data-ghca-manual-form]');
+    await form.locator('select[name="catalog_id"]').selectOption('11');
+    await form.locator('input[name="completion_date"]').fill('2026-10-30');
+    await form.locator('textarea[name="entry_reason"]').fill('Red Cross card brought to the office');
+    await form.locator('input[type="file"]').setInputFiles({ name: 'card.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic') });
+    await form.locator('button[type="submit"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('[data-ghca-toasts] .gh-toast--success').length > 0);
+    assert.match(state.upload, /name="ghca_ui"\r\n\r\nboard/); ok('upload: the form asks for board markup');
+    assert.match(state.upload, /name="employee_id"\r\n\r\n42/); assert.match(state.upload, /name="action"\r\n\r\nghca_acd_jotform_manual_upload/); ok('upload: it posts to the existing action for this employee');
+    assert.equal(await page.locator('[data-ghca-manual-entry] [data-ghca-manual-form]').count(), 1);
+    assert.equal(await page.locator('[data-ghca-manual-entry] .ghca-acd__manual-entry-form').count(), 0); ok('upload: the replacement card is the board card, not the legacy one');
+    assert.equal(await page.locator('[data-ghca-manual-form] input[name="completion_date"]').inputValue(), ''); ok('upload: the form is clean for the next certificate');
+
+    // Required fields block an empty submit without any request.
+    state.upload = '';
+    await page.locator('[data-ghca-manual-form] button[type="submit"]').click();
+    assert.equal(state.upload, ''); ok('upload: an empty form is stopped by the browser before any request');
+
+    // Communications.
+    await page.click('#ghca-acd-drawer-tab-communications');
+    assert.equal(await page.locator('.gh-tl > li').count(), 2); ok('communications: one entry per message');
+    assert.equal(await page.locator('.gh-tl-dot--danger').count(), 1); ok('communications: the failed one is marked');
+    assert.equal(await page.locator('.gh-dr-comm details[open]').count(), 2); ok('communications: messages are readable without a click');
+    assert.match(await page.locator('.gh-dr-comm').first().innerText(), /Email \+ SMS/); ok('communications: combined channels read as one');
+    // Retry's click handler lives with the reminder and history modals, which the next step moves to board markup;
+    // its end-to-end check is added there. Here: the button carries the hook the handler binds to.
+    assert.equal(await page.locator('[data-ghca-reminder-retry="322"]').count(), 1); ok('communications: Retry is offered for the failed SMS and carries the delivery id');
+    assert.equal(await page.locator('.ghca-acd__history-item').count(), 0); ok('communications: no legacy history markup anywhere');
+
+    // Fonts on the new elements.
+    await page.click('#ghca-acd-drawer-tab-documents');
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('DOM.enable'); await cdp.send('CSS.enable');
+    const doc = await cdp.send('DOM.getDocument', { depth: -1 });
+    for (const sel of ['[data-ghca-documents-section] .gh-h4', '.gh-file-n', '.gh-file .gh-small', '.gh-file .gh-st', '[data-ghca-manual-form] .gh-label', '[data-ghca-manual-form] .gh-alert-body', '[data-ghca-manual-form] .gh-btn--primary']) {
+      const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: doc.root.nodeId, selector: sel });
+      const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
+      assert.ok(fonts.length > 0 && fonts.every((x) => /Wix Madefor/.test(x.familyName)), 'rendered font for ' + sel + ': ' + JSON.stringify(fonts));
+    }
+    ok('documents: the rendered font is Wix Madefor on every element checked');
+    await page.click('#ghca-acd-drawer-tab-communications');
+    for (const sel of ['.gh-dr-comm-t', '.gh-dr-comm .gh-small', '.gh-dr-comm .gh-st', '.gh-dr-comm-sum', '.gh-dr-comm-msg']) {
+      const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: doc.root.nodeId, selector: sel });
+      const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
+      assert.ok(fonts.length > 0 && fonts.every((x) => /Wix Madefor/.test(x.familyName)), 'rendered font for ' + sel + ': ' + JSON.stringify(fonts));
+    }
+    ok('communications: the rendered font is Wix Madefor on every element checked');
+    if (shots) { await page.screenshot({ path: path.join(shots, 'drawer-comms-1440.png') }); await page.click('#ghca-acd-drawer-tab-documents'); await page.screenshot({ path: path.join(shots, 'drawer-docs-1440.png') }); }
+    assert.equal(errors.length, 0, 'console errors: ' + errors.join(' | ')); ok('no console or page errors');
+    await context.close();
+  }
+
+  // ---------- Hostile theme on Documents and Communications ----------
+  {
+    const history = [{ communication_id: 5, delivery_id: 322, channel: 'sms', delivery_state: 'failed', actor_user_id: 3, urgency: 'normal', created_at: '2026-10-27 16:42:00', subject: 'Due', message: 'Hi.', last_error_code: 'no_phone', last_error_summary: 'No mobile number.', attempt_count: 1, provider_ref: '' }];
+    const env = { jotform: true, messaging: true, history, hist_total: 1 };
+    const grab = async (opts) => {
+      const state = { calls: [], env };
+      const { context, page } = await open(browser, build(path.join(dir, opts.dir), { env, hostile: opts.hostile }), { width: 1440, height: 900 }, state);
+      await page.click('#open-drawer'); await drawerOpen(page);
+      const m = async (sel) => page.evaluate((s) => { const e = document.querySelector(s); if (!e) { return 'missing'; } const c = getComputedStyle(e); return [c.fontFamily, c.fontSize, c.fontWeight, c.lineHeight, c.textTransform, c.color, c.backgroundColor, c.paddingLeft, c.borderTopWidth, c.listStyleType, Math.round(e.getBoundingClientRect().height)].join('|'); }, sel);
+      await page.click('#ghca-acd-drawer-tab-documents');
+      const docs = { h4: await m('[data-ghca-documents-section] .gh-h4'), name: await m('.gh-file-n'), file: await m('.gh-file'), label: await m('[data-ghca-manual-form] .gh-label'), select: await m('[data-ghca-manual-form] .gh-select'), area: await m('[data-ghca-manual-form] .gh-textarea'), save: await m('[data-ghca-manual-form] .gh-btn--primary'), all: await m('[data-ghca-documents-all]') };
+      await page.click('#ghca-acd-drawer-tab-communications');
+      const comms = { t: await m('.gh-dr-comm-t'), sum: await m('.gh-dr-comm-sum'), msg: await m('.gh-dr-comm-msg'), retry: await m('.gh-dr-retry'), link: await m('.gh-linkbtn'), card: await m('.gh-dr-comm') };
+      await context.close();
+      return { docs, comms };
+    };
+    const clean = await grab({ dir: 'g1', hostile: false });
+    const hostile = await grab({ dir: 'g2', hostile: true });
+    const drift = [];
+    for (const group of Object.keys(clean)) { for (const key of Object.keys(clean[group])) { if (clean[group][key] !== hostile[group][key]) { drift.push(group + '.' + key + ': ' + clean[group][key] + '  vs  ' + hostile[group][key]); } } }
+    assert.deepEqual(drift, []); ok('documents and communications measure the same under a hostile theme');
+  }
+
+  // ---------- Phone: Documents and Communications ----------
+  {
+    const history = [{ communication_id: 5, delivery_id: 321, channel: 'email', delivery_state: 'accepted', actor_user_id: 3, urgency: 'normal', created_at: '2026-10-27 16:42:00', subject: 'A subject that is long enough to wrap onto a second line on a phone', message: 'Hi Jordan, start with Fatal Five.', last_error_code: '', last_error_summary: '', attempt_count: 1, provider_ref: '' }];
+    const env = { jotform: true, messaging: true, history, hist_total: 1 };
+    const state = { calls: [], env };
+    const { context, page } = await open(browser, build(path.join(dir, 'h'), { env }), { width: 390, height: 844 }, state);
+    await page.click('#open-drawer'); await drawerOpen(page);
+    await page.click('#ghca-acd-drawer-tab-documents');
+    let m = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, win: window.innerWidth, over: Array.from(document.querySelectorAll('[data-ghca-tabpanel="documents"] *')).filter((e) => e.getBoundingClientRect().right > document.querySelector('.gh-drawer--emp').getBoundingClientRect().right + 1).length }));
+    assert.ok(m.doc <= m.win + 1); assert.equal(m.over, 0); ok('phone: Documents has no sideways overflow');
+    const inputs = await page.evaluate(() => Array.from(document.querySelectorAll('[data-ghca-manual-form] .gh-select, [data-ghca-manual-form] .gh-input, [data-ghca-manual-form] .gh-btn')).map((e) => Math.round(e.getBoundingClientRect().height)));
+    assert.ok(inputs.every((h) => h >= 42), 'form controls: ' + inputs.join(',')); ok('phone: form controls are at least 42px tall');
+    await page.click('#ghca-acd-drawer-tab-communications');
+    m = await page.evaluate(() => ({ over: Array.from(document.querySelectorAll('[data-ghca-tabpanel="communications"] *')).filter((e) => e.getBoundingClientRect().right > document.querySelector('.gh-drawer--emp').getBoundingClientRect().right + 1).length }));
+    assert.equal(m.over, 0); ok('phone: Communications has no sideways overflow');
+    if (shots) { await page.screenshot({ path: path.join(shots, 'drawer-comms-390.png') }); }
     await context.close();
   }
 

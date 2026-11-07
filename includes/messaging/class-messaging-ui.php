@@ -521,6 +521,11 @@ final class GHCA_ACD_Messaging_UI {
 		return (string) ob_get_clean();
 	}
 
+	/** The wording the history uses for a delivery state; shared with the redesigned drawer. */
+	public static function delivery_label( string $state, string $channel = 'email' ): string {
+		return self::delivery_status_label( $state, $channel );
+	}
+
 	private static function delivery_status_label( string $state, string $channel = 'email' ): string {
 		$labels = array(
 			'queued'     => __( 'Queued', 'ghca-acd' ),

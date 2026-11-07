@@ -2264,11 +2264,11 @@
 
   function initManualEntry() {
     document.addEventListener('submit', function(e) {
-      var form = e.target.closest('.ghca-acd__manual-entry-form');
+      var form = e.target.closest('.ghca-acd__manual-entry-form, [data-ghca-manual-form]');
       if (!form) return;
       e.preventDefault();
       var button = form.querySelector('button[type="submit"]');
-      var status = form.querySelector('.ghca-acd__manual-entry-status');
+      var status = form.querySelector('.ghca-acd__manual-entry-status, [data-ghca-manual-status]');
       if (button) button.disabled = true;
       if (status) status.textContent = 'Uploading…';
       fetch(window.ghcaAcd.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: new FormData(form) })

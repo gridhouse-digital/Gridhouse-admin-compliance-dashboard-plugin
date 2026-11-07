@@ -23,7 +23,7 @@ BARE = {'.gh-app a', '.gh-app a:hover', '.gh-app button', '.gh-app :focus-visibl
 # children, and button hovers with !important, which plain board rules cannot
 # beat, so these properties are marked !important on every rule for them and
 # on every rule that targets an `a` element.
-GUARD = re.compile(r'\.gh-(qlink|btn|stat|certl|ticker-item|ticker-all|ann|health-ft|tab|grp-n|bul-all|bul-x|bul-step|crumbs|bl-h|bl-read|bp-src|copy|nav|logo|skip|health-od|table|pager-btns)(?![a-z0-9_])')
+GUARD = re.compile(r'\.gh-(qlink|btn|stat|certl|ticker-item|ticker-all|ann|health-ft|tab|grp-n|bul-all|bul-x|bul-step|crumbs|bl-h|bl-read|bp-src|copy|nav|logo|skip|health-od|table|pager-btns|linkbtn)(?![a-z0-9_])')
 GUARD_A = re.compile(r'(?:^|[\s>+~(,])a(?=[.:\[\s,)>]|$)')
 GUARD_PROPS = {'color', 'background', 'background-color', 'border-color',
                'text-decoration', 'text-decoration-line', 'text-decoration-color'}

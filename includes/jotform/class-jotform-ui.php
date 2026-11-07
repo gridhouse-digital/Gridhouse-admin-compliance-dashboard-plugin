@@ -208,7 +208,8 @@ final class GHCA_ACD_Jotform_UI {
 			GHCA_ACD_Jotform_Repository::delete_unfinished_manual_training( $training_id );
 			wp_send_json_error( array( 'message' => __( 'The manual entry could not be finalized or audited. Nothing was saved; retry later.', 'ghca-acd' ) ), 500 );
 		}
-		wp_send_json_success( array( 'html' => self::render_manual_entry_form( $employee_id ) ) );
+		// The redesigned drawer asks for its own card; the choice is markup only, every gate above has already passed.
+		wp_send_json_success( array( 'html' => GHCA_ACD_Redesign_Tables::board_requested() ? GHCA_ACD_Redesign_Drawer::manual_entry_html( $employee_id ) : self::render_manual_entry_form( $employee_id ) ) );
 	}
 
 	public static function render_settings(): void {
@@ -770,6 +771,22 @@ final class GHCA_ACD_Jotform_UI {
 			&& hash_equals( (string) ( $training['form_id'] ?? '' ), (string) ( $document['form_id'] ?? '' ) )
 			&& hash_equals( (string) ( $training['submission_id'] ?? '' ), (string) ( $document['submission_id'] ?? '' ) )
 			&& hash_equals( (string) ( $training['source_fingerprint'] ?? '' ), (string) ( $document['source_fingerprint'] ?? '' ) );
+	}
+
+	/**
+	 * Gates for the redesigned drawer. Each is the same condition the legacy renderer of the same name applies
+	 * (render_recent_documents, render_manual_entry_form); tests/test-redesign-drawer.php fails if one drifts.
+	 */
+	public static function can_show_documents( int $employee_id ): bool {
+		return self::secure_transport() && GHCA_ACD_Roles::user_can_view_employee_documents() && self::employee_in_scope( $employee_id );
+	}
+
+	public static function can_show_manual_entry( int $employee_id ): bool {
+		return self::secure_transport() && GHCA_ACD_Roles::user_can_review_external_training() && $employee_id > 0 && self::employee_in_scope( $employee_id ) && GHCA_ACD_Jotform_Schema::tables_exist();
+	}
+
+	public static function external_training_summary( int $employee_id ): string {
+		return self::external_training_summary_label( $employee_id );
 	}
 
 	private static function secure_transport(): bool { return function_exists( 'is_ssl' ) && is_ssl(); }

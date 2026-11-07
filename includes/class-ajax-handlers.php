@@ -109,9 +109,10 @@ final class GHCA_ACD_AJAX {
       wp_send_json_error( array( 'message' => __( 'Employee not found.', 'ghca-acd' ) ) );
     }
 
-    $m = self::drawer_model( $user_id, $employee );
     // The redesigned dashboard asks for board markup; the choice is markup only, every gate above has already passed.
-    $html = GHCA_ACD_Redesign_Tables::board_requested() ? GHCA_ACD_Redesign_Drawer::render( $m ) : self::render_legacy_drawer( $m );
+    $board = GHCA_ACD_Redesign_Tables::board_requested();
+    $m     = self::drawer_model( $user_id, $employee, $board );
+    $html  = $board ? GHCA_ACD_Redesign_Drawer::render( $m ) : self::render_legacy_drawer( $m );
     wp_send_json_success( array( 'html' => $html, 'name' => $m['employee_name'] ) );
   }
 
@@ -120,9 +121,11 @@ final class GHCA_ACD_AJAX {
    * markup. Nothing here is new: it is the data preparation that used to sit inline in the handler.
    *
    * @param array<string,mixed> $employee Record from GHCA_ACD_Data_Provider::get_employee_record().
+   * @param bool                $board    True for the redesigned drawer, which takes structured data for the Documents and
+   *                                      Communications fragments instead of the legacy markup.
    * @return array<string,mixed>
    */
-  public static function drawer_model( int $user_id, array $employee ): array {
+  public static function drawer_model( int $user_id, array $employee, bool $board = false ): array {
     $employee_name = (string) ( $employee['name'] ?? '' );
     $employee_email = (string) ( $employee['email'] ?? '' );
     $group_label = (string) ( $employee['group'] ?? '' );
@@ -264,9 +267,12 @@ final class GHCA_ACD_AJAX {
     if ( $can_documents && class_exists( 'GHCA_ACD_Jotform_Schema' ) && class_exists( 'GHCA_ACD_Jotform_Repository' ) && GHCA_ACD_Jotform_Schema::tables_exist() ) {
       $document_count = GHCA_ACD_Jotform_Repository::employee_record_count( $user_id );
     }
-    $documents_html = $can_documents ? (string) GHCA_ACD_Jotform_UI::render_recent_documents( $user_id ) : '';
-    $manual_html    = $can_documents && class_exists( 'GHCA_ACD_Jotform_UI' ) && method_exists( 'GHCA_ACD_Jotform_UI', 'render_manual_entry_form' ) ? (string) GHCA_ACD_Jotform_UI::render_manual_entry_form( $user_id ) : '';
-    $history_html   = $can_communications ? (string) GHCA_ACD_Messaging_UI::render_history_section( $user_id ) : '';
+    $documents_html = ! $board && $can_documents ? (string) GHCA_ACD_Jotform_UI::render_recent_documents( $user_id ) : '';
+    $manual_html    = ! $board && $can_documents && class_exists( 'GHCA_ACD_Jotform_UI' ) && method_exists( 'GHCA_ACD_Jotform_UI', 'render_manual_entry_form' ) ? (string) GHCA_ACD_Jotform_UI::render_manual_entry_form( $user_id ) : '';
+    $history_html   = ! $board && $can_communications ? (string) GHCA_ACD_Messaging_UI::render_history_section( $user_id ) : '';
+    $documents_data = $board && $can_documents ? GHCA_ACD_Redesign_Drawer::documents_data( $user_id ) : null;
+    $manual_data    = $board && $can_documents ? GHCA_ACD_Redesign_Drawer::manual_entry_data( $user_id ) : null;
+    $history_data   = $board && $can_communications && $history_schema_ready ? GHCA_ACD_Redesign_Drawer::history_data( $user_id ) : null;
 	$oltl_html      = class_exists( 'GHCA_ACD_OLTL_UI' ) ? GHCA_ACD_OLTL_UI::render_employee_card( $user_id ) : '';
 
     $report_url = GHCA_ACD_Data_Provider::get_user_report_url( $user_id );
@@ -369,6 +375,9 @@ final class GHCA_ACD_AJAX {
       'employee_email' => $employee_email,
       'employment_type_label' => $employment_type_label,
       'verified_start_ts' => $verified_start_ts,
+      'documents_data' => $documents_data,
+      'manual_data' => $manual_data,
+      'history_data' => $history_data,
       'first_due_ts' => $first_due_ts,
       'due_timestamp' => $due_timestamp,
       'remaining_count' => $remaining_count,

@@ -264,3 +264,28 @@ body.gh-ui-body { margin: 0; background: #F3EFEA; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn { align-items: flex-start; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn-act { flex: 0 0 100%; }
 }
+
+/* Drawer: Documents and Communications. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-files { margin: 0; padding: 16px 20px 18px; list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-empty { padding: 24px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-foot { margin: 0; padding: 0 20px 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-form { display: flex; flex-direction: column; gap: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drop-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drop-input { width: 100%; font: inherit; font-size: 13px; color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-status { margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-status:empty { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-hist { display: flex; flex-direction: column; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-hist .gh-tl { margin-top: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm.is-failed { border-color: var(--gh-status-danger-border); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm-st { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm-t { font-size: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm-sum { font-size: 13px; font-weight: 600; color: var(--gh-text-link); cursor: pointer; list-style: revert; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm-msg { margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--gh-surface-sunken); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-retry { align-self: flex-start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-linkbtn { display: inline; padding: 0; border: 0; background: none; color: var(--gh-text-link); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-file-n { display: block; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-alert.gh-alert--tight { padding: 10px 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-form .gh-textarea { min-height: 72px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm details { font-size: 13px; }

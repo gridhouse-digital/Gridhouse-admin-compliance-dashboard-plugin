@@ -210,15 +210,247 @@ final class GHCA_ACD_Redesign_Drawer {
 		return $h . '</details>';
 	}
 
+	/**
+	 * Documents tab data. The gate is the legacy renderer's own, so nothing shows that did not before.
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	public static function documents_data( int $user_id ): ?array {
+		if ( ! GHCA_ACD_Jotform_UI::can_show_documents( $user_id ) ) {
+			return null;
+		}
+		$employee = get_userdata( $user_id );
+		$training = GHCA_ACD_Jotform_Repository::training_for_employee( $user_id, 3 );
+		return array(
+			'user_id'          => $user_id,
+			'name'             => $employee ? (string) $employee->display_name : '',
+			'rows'             => array_slice( GHCA_ACD_Jotform_UI::employee_record_rows( $user_id ), 0, 3 ),
+			'total'            => (int) GHCA_ACD_Jotform_Repository::employee_record_count( $user_id ),
+			'training_summary' => ! empty( $training ) ? GHCA_ACD_Jotform_UI::external_training_summary( $user_id ) : '',
+		);
+	}
+
+	/**
+	 * Outside-certificate form data. Same gate as the legacy form; the upload itself is unchanged.
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	public static function manual_entry_data( int $user_id ): ?array {
+		if ( ! GHCA_ACD_Jotform_UI::can_show_manual_entry( $user_id ) ) {
+			return null;
+		}
+		$ready = GHCA_ACD_External_Evidence_Store::readiness();
+		$error = is_wp_error( $ready ) ? $ready->get_error_message() : '';
+		return array(
+			'user_id' => $user_id,
+			'error'   => $error,
+			'catalog' => '' === $error ? (array) GHCA_ACD_Jotform_Repository::catalog( true ) : array(),
+			'entries' => count( (array) GHCA_ACD_Jotform_Repository::manual_training_for_employee( $user_id, 20 ) ),
+			'nonce'   => wp_create_nonce( 'ghca_acd_table' ),
+		);
+	}
+
+	/** The card on its own, for the upload response that replaces it in place. */
+	public static function manual_entry_html( int $user_id ): string {
+		$data = self::manual_entry_data( $user_id );
+		return $data ? self::manual_card_html( $data ) : '';
+	}
+
+	/**
+	 * The three most recent communications, grouped as the legacy drawer groups them (one per message, with
+	 * every delivery under it). Retry is offered only where the legacy rule offers it.
+	 *
+	 * @return array<string,mixed>
+	 */
+	public static function history_data( int $user_id ): array {
+		$rows  = (array) GHCA_ACD_Messaging_Repository::history_for_employee( $user_id, 1, 3 );
+		$total = (int) GHCA_ACD_Messaging_Repository::history_count( $user_id );
+		$group = array();
+		foreach ( $rows as $row ) {
+			$id = (int) $row['communication_id'];
+			if ( ! isset( $group[ $id ] ) ) {
+				$actor      = get_userdata( (int) $row['actor_user_id'] );
+				$created_ts = strtotime( (string) $row['created_at'] . ' UTC' );
+				$group[ $id ] = array(
+					'id'         => $id,
+					'actor'      => $actor ? (string) $actor->display_name : __( 'Former administrator', 'ghca-acd' ),
+					'urgency'    => GHCA_ACD_Message_Template_Renderer::normalize_urgency( (string) $row['urgency'] ),
+					'created_ts' => (int) $created_ts,
+					'created'    => $created_ts ? wp_date( 'M j, Y g:i a', $created_ts ) : (string) $row['created_at'],
+					'subject'    => '' !== trim( (string) $row['subject'] ) ? (string) $row['subject'] : __( 'SMS reminder', 'ghca-acd' ),
+					'message'    => (string) $row['message'],
+					'deliveries' => array(),
+				);
+			}
+			$state   = sanitize_key( (string) $row['delivery_state'] );
+			$channel = sanitize_key( (string) $row['channel'] );
+			$group[ $id ]['deliveries'][] = array(
+				'id'      => (int) $row['delivery_id'],
+				'channel' => $channel,
+				'state'   => $state,
+				'label'   => GHCA_ACD_Messaging_UI::delivery_label( $state, $channel ),
+				'error'   => 'failed' === $state ? (string) ( $row['last_error_summary'] ?? '' ) : '',
+				'retry'   => self::can_retry( $row, $state, $channel ),
+			);
+		}
+		return array( 'user_id' => $user_id, 'total' => $total, 'items' => array_values( $group ), 'can_remind' => (bool) GHCA_ACD_Roles::user_can_send_reminders() );
+	}
+
+	/**
+	 * The legacy retry rule: only a failed delivery, never an SMS whose outcome is uncertain or that already has a
+	 * provider reference, never past the attempt limit, and only for someone who can send reminders.
+	 *
+	 * @param array<string,mixed> $delivery
+	 */
+	public static function can_retry( array $delivery, string $state, string $channel ): bool {
+		$uncertain = 'sms' === $channel && in_array( (string) ( $delivery['last_error_code'] ?? '' ), array( 'twilio_transport_error', 'twilio_response_invalid', 'sms_outcome_unknown' ), true );
+		return 'failed' === $state && ! $uncertain && ( 'sms' !== $channel || empty( $delivery['provider_ref'] ) ) && (int) ( $delivery['attempt_count'] ?? 0 ) < GHCA_ACD_Messaging_Repository::MAX_DELIVERY_ATTEMPTS && GHCA_ACD_Roles::user_can_send_reminders();
+	}
+
+	/** Review state of an indexed document or manual entry, as a board chip tone. */
+	private static function review_tone( string $key ): string {
+		switch ( $key ) {
+			case 'approved':
+				return 'approved';
+			case 'pending':
+				return 'review';
+			case 'rejected':
+			case 'revoked':
+				return 'rejected';
+		}
+		return 'na';
+	}
+
 	/** @param array<string,mixed> $m */
 	private static function documents_html( array $m ): string {
-		// Filled in by the Documents and Communications step; until then the existing fragments render as they did.
-		return '<div class="gh-legacy gh-dr-frag">' . ( '' !== (string) $m['documents_html'] ? $m['documents_html'] : '<p>' . esc_html__( 'No employee documents found.', 'ghca-acd' ) . '</p>' ) . $m['manual_html'] . '</div>';
+		$d = $m['documents_data'] ?? null;
+		if ( ! is_array( $d ) ) {
+			$h = '<section class="gh-card"><div class="gh-empty gh-dr-empty"><span class="gh-empty-ico">' . self::icon( 'folder', 'xl' ) . '</span><strong>' . esc_html__( 'No employee documents found.', 'ghca-acd' ) . '</strong></div></section>';
+		} else {
+			$id  = (int) $d['user_id'];
+			$h   = '<section class="gh-card" data-ghca-documents-section="' . esc_attr( (string) $id ) . '"><div class="gh-card-hd"><div><h3 class="gh-h4">' . esc_html__( 'Records on file', 'ghca-acd' ) . '</h3><span class="gh-small gh-muted">' . esc_html( sprintf( /* translators: %d: number of records */ _n( '%d item', '%d items', (int) $d['total'], 'ghca-acd' ), (int) $d['total'] ) ) . '</span></div>';
+			$h  .= '<button type="button" class="gh-btn gh-btn--ghost gh-btn--sm gh-btn--lnk" data-ghca-documents-all="' . esc_attr( (string) $id ) . '" data-ghca-documents-name="' . esc_attr( (string) $d['name'] ) . '">' . esc_html__( 'View all documents', 'ghca-acd' ) . self::icon( 'arrow-right', 'sm' ) . '</button></div>';
+			if ( empty( $d['rows'] ) ) {
+				$h .= '<div class="gh-empty gh-dr-empty"><span class="gh-empty-ico">' . self::icon( 'folder', 'xl' ) . '</span><strong>' . esc_html__( 'No employee documents found.', 'ghca-acd' ) . '</strong></div>';
+			} else {
+				$h .= '<ul class="gh-files">';
+				foreach ( $d['rows'] as $row ) {
+					$h .= self::file_row_html( (array) $row );
+				}
+				$h .= '</ul>';
+			}
+			if ( '' !== (string) $d['training_summary'] ) {
+				$h .= '<p class="gh-small gh-muted gh-dr-foot"><strong>' . esc_html__( 'External training', 'ghca-acd' ) . '</strong> ' . esc_html( (string) $d['training_summary'] ) . '</p>';
+			}
+			$h .= '</section>';
+		}
+		$manual = $m['manual_data'] ?? null;
+		return $h . ( is_array( $manual ) ? self::manual_card_html( $manual ) : '' );
+	}
+
+	/** @param array<string,mixed> $row A row of GHCA_ACD_Jotform_UI::employee_record_rows(). */
+	private static function file_row_html( array $row ): string {
+		$manual = 'manual' === (string) $row['kind'];
+		$attr   = $manual ? 'data-ghca-manual-open' : 'data-ghca-document-open';
+		$label  = 'application/pdf' === (string) $row['media_type'] ? 'PDF' : 'FILE';
+		$date   = (int) $row['timestamp'] > 0 ? mysql2date( get_option( 'date_format' ), gmdate( 'Y-m-d H:i:s', (int) $row['timestamp'] ), false ) : '';
+		$sub    = array_filter( array( (string) $row['context'], $date, $manual ? __( 'Manual entry', 'ghca-acd' ) : '' ), static function ( $v ): bool {
+			return '' !== $v;
+		} );
+		// The scripts read the title from the <strong> inside this <li>.
+		$h  = '<li class="gh-file"><span class="gh-file-ico" aria-hidden="true">' . esc_html( $label ) . '</span><div class="gh-file-main"><strong class="gh-file-n">' . esc_html( (string) $row['name'] ) . '</strong><div class="gh-small gh-muted">' . esc_html( implode( ' · ', $sub ) ) . '</div></div>';
+		$h .= '<span class="gh-st gh-st--' . esc_attr( self::review_tone( (string) ( $row['status_key'] ?? '' ) ) ) . '">' . esc_html( (string) $row['status'] ) . '</span>';
+		if ( ! empty( $row['viewable'] ) ) {
+			$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" ' . $attr . '="' . (int) $row['id'] . '" data-action="preview">' . esc_html__( 'Preview', 'ghca-acd' ) . '</button>';
+		}
+		return $h . '</li>';
+	}
+
+	/** @param array<string,mixed> $d Result of manual_entry_data(). */
+	private static function manual_card_html( array $d ): string {
+		$id = (int) $d['user_id'];
+		$h  = '<section class="gh-card" data-ghca-manual-entry="' . esc_attr( (string) $id ) . '"><div class="gh-card-hd"><div><h3 class="gh-h4">' . esc_html__( 'Add an outside certificate', 'ghca-acd' ) . '</h3>';
+		$h .= '<span class="gh-small gh-muted">' . esc_html__( 'For certificates received outside Jotform (email, paper scan, shared drive).', 'ghca-acd' ) . '</span></div></div>';
+		if ( '' !== (string) $d['error'] ) {
+			return $h . '<div class="gh-card-bd"><div class="gh-alert gh-alert--warning" role="status">' . self::icon( 'alert' ) . '<div class="gh-alert-body">' . esc_html( (string) $d['error'] ) . '</div></div></div></section>';
+		}
+		if ( empty( $d['catalog'] ) ) {
+			return $h . '<div class="gh-card-bd"><div class="gh-alert gh-alert--neutral" role="status">' . self::icon( 'info' ) . '<div class="gh-alert-body">' . esc_html__( 'No active catalog lessons exist. Add lessons under Gridhouse Compliance → Training Catalog first.', 'ghca-acd' ) . '</div></div></div></section>';
+		}
+		$f  = 'ghca-manual-' . $id;
+		$h .= '<form data-ghca-manual-form enctype="multipart/form-data"><div class="gh-card-bd gh-dr-form">';
+		$h .= '<input type="hidden" name="action" value="ghca_acd_jotform_manual_upload" /><input type="hidden" name="nonce" value="' . esc_attr( (string) $d['nonce'] ) . '" /><input type="hidden" name="employee_id" value="' . $id . '" /><input type="hidden" name="ghca_ui" value="board" />';
+		$h .= '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $f ) . '-lesson">' . esc_html__( 'Counts toward', 'ghca-acd' ) . ' <span class="gh-req">*</span></label><select id="' . esc_attr( $f ) . '-lesson" class="gh-select" required name="catalog_id"><option value="">' . esc_html__( 'Select lesson', 'ghca-acd' ) . '</option>';
+		foreach ( $d['catalog'] as $item ) {
+			$h .= '<option value="' . (int) $item['id'] . '">' . esc_html( $item['title'] . ' (' . $item['credit_hours'] . ' hrs)' ) . '</option>';
+		}
+		$h .= '</select></div>';
+		$h .= '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $f ) . '-date">' . esc_html__( 'Completion date', 'ghca-acd' ) . ' <span class="gh-req">*</span></label><input id="' . esc_attr( $f ) . '-date" class="gh-input" required type="date" name="completion_date" /></div>';
+		$h .= '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $f ) . '-why">' . esc_html__( 'Where did it come from?', 'ghca-acd' ) . ' <span class="gh-req">*</span></label><textarea id="' . esc_attr( $f ) . '-why" class="gh-textarea" required maxlength="1000" name="entry_reason"></textarea><span class="gh-help">' . esc_html__( 'The reason for the manual entry, e.g. where the certificate came from.', 'ghca-acd' ) . '</span></div>';
+		$h .= '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $f ) . '-file">' . esc_html__( 'Certificate file', 'ghca-acd' ) . ' <span class="gh-req">*</span></label><div class="gh-drop">' . self::icon( 'upload', 'lg' ) . '<div class="gh-drop-main"><input id="' . esc_attr( $f ) . '-file" class="gh-drop-input" required type="file" name="certificate_file" accept="application/pdf,image/jpeg,image/png" /><div class="gh-small gh-muted">' . esc_html__( 'PDF, JPEG or PNG · stored encrypted', 'ghca-acd' ) . '</div></div></div></div>';
+		$h .= '<div class="gh-alert gh-alert--info gh-alert--tight">' . self::icon( 'eye' ) . '<div class="gh-alert-body">' . esc_html__( 'It stays pending until it is approved in External Training Review. Only then does it count toward annual compliance.', 'ghca-acd' ) . '</div></div>';
+		$h .= '<p class="gh-small gh-dr-status" data-ghca-manual-status aria-live="polite"></p>';
+		if ( (int) $d['entries'] > 0 ) {
+			$h .= '<p class="gh-small gh-muted">' . esc_html( sprintf( /* translators: %d: number of certificates */ _n( '%d manually entered certificate is listed under Records on file above.', '%d manually entered certificates are listed under Records on file above.', (int) $d['entries'], 'ghca-acd' ), (int) $d['entries'] ) ) . '</p>';
+		}
+		return $h . '</div><div class="gh-card-ft"><button type="submit" class="gh-btn gh-btn--primary">' . esc_html__( 'Save for review', 'ghca-acd' ) . '</button></div></form></section>';
 	}
 
 	/** @param array<string,mixed> $m */
 	private static function communications_html( array $m ): string {
-		return '<div class="gh-legacy gh-dr-frag">' . ( '' !== (string) $m['history_html'] ? $m['history_html'] : '<p>' . esc_html__( 'Communication history is not available.', 'ghca-acd' ) . '</p>' ) . '</div>';
+		$d = $m['history_data'] ?? null;
+		if ( ! is_array( $d ) ) {
+			return '<div class="gh-card"><div class="gh-empty gh-dr-empty"><span class="gh-empty-ico">' . self::icon( 'mail', 'xl' ) . '</span><strong>' . esc_html__( 'Communication history is not available.', 'ghca-acd' ) . '</strong></div></div>';
+		}
+		$id    = (int) $d['user_id'];
+		$total = (int) $d['total'];
+		$h     = '<div class="gh-dr-hist" data-ghca-history-user="' . esc_attr( (string) $id ) . '"><div class="gh-toolbar"><span class="gh-small gh-muted">' . esc_html( $total > 0 ? sprintf( /* translators: %d: number of communications */ _n( '%d communication', '%d communications', $total, 'ghca-acd' ), $total ) : __( 'No communications yet', 'ghca-acd' ) ) . '</span>';
+		if ( $d['can_remind'] ) {
+			$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm gh-btn--lnk" data-ghca-reminder="' . esc_attr( (string) $id ) . '" data-ghca-reminder-name="' . esc_attr( (string) $m['employee_name'] ) . '">' . self::icon( 'plus', 'sm' ) . esc_html__( 'New reminder', 'ghca-acd' ) . '</button>';
+		}
+		$h .= '</div><div data-ghca-history-list>';
+		if ( empty( $d['items'] ) ) {
+			$h .= '<div class="gh-card"><div class="gh-empty gh-dr-empty"><span class="gh-empty-ico">' . self::icon( 'mail', 'xl' ) . '</span><strong>' . esc_html__( 'No reminders have been recorded for this employee.', 'ghca-acd' ) . '</strong></div></div>';
+		} else {
+			$h .= '<ol class="gh-tl">';
+			foreach ( $d['items'] as $item ) {
+				$h .= self::history_item_html( (array) $item );
+			}
+			$h .= '</ol>';
+		}
+		$h .= '</div>';
+		if ( $total > 0 ) {
+			$h .= '<p class="gh-small gh-muted gh-dr-foot">' . esc_html( sprintf( /* translators: 1: total communications, 2: number shown */ __( '%1$d communications - %2$d shown', 'ghca-acd' ), $total, min( 3, $total ) ) ) . ' · <button type="button" class="gh-linkbtn" data-ghca-history-open data-user-id="' . esc_attr( (string) $id ) . '">' . esc_html__( 'View all communication history', 'ghca-acd' ) . '</button></p>';
+		}
+		return $h . '</div>';
+	}
+
+	/** @param array<string,mixed> $item */
+	private static function history_item_html( array $item ): string {
+		$channels = array();
+		$failed   = false;
+		foreach ( $item['deliveries'] as $delivery ) {
+			$channels[ $delivery['channel'] ] = 'sms' === $delivery['channel'] ? 'SMS' : __( 'Email', 'ghca-acd' );
+			$failed                           = $failed || in_array( $delivery['state'], array( 'failed', 'undelivered' ), true );
+		}
+		$lead = (string) ( $item['deliveries'][0]['channel'] ?? 'email' );
+		$h    = '<li><span class="gh-tl-dot ' . ( $failed ? 'gh-tl-dot--danger' : 'gh-tl-dot--brand' ) . '">' . self::icon( 'sms' === $lead ? 'sms' : 'mail', 'sm' ) . '</span><div class="gh-card gh-dr-comm' . ( $failed ? ' is-failed' : '' ) . '">';
+		$h   .= '<div class="gh-dr-comm-top"><span class="gh-small gh-muted"><strong>' . esc_html( implode( ' + ', array_values( $channels ) ) ) . '</strong> · <time' . ( $item['created_ts'] ? ' datetime="' . esc_attr( gmdate( 'c', (int) $item['created_ts'] ) ) . '"' : '' ) . '>' . esc_html( (string) $item['created'] ) . '</time> · ' . esc_html( sprintf( /* translators: %s: name of the administrator who sent it */ __( 'by %s', 'ghca-acd' ), (string) $item['actor'] ) ) . '</span><span class="gh-dr-comm-st">';
+		foreach ( $item['deliveries'] as $delivery ) {
+			$tone = in_array( $delivery['state'], array( 'failed', 'undelivered', 'suppressed' ), true ) ? 'failed' : ( in_array( $delivery['state'], array( 'queued', 'processing' ), true ) ? 'progress' : 'sent' );
+			$h   .= '<span class="gh-st gh-st--' . esc_attr( $tone ) . '">' . esc_html( (string) $delivery['label'] ) . '</span>';
+		}
+		$h .= '</span></div><h4 class="gh-h4 gh-dr-comm-t">' . esc_html( (string) $item['subject'] ) . '</h4>';
+		$h .= '<details open><summary class="gh-dr-comm-sum">' . esc_html__( 'Message', 'ghca-acd' ) . '</summary><p class="gh-p gh-secondary gh-dr-comm-msg">' . nl2br( esc_html( (string) $item['message'] ) ) . '</p></details>';
+		foreach ( $item['deliveries'] as $delivery ) {
+			if ( '' !== (string) $delivery['error'] ) {
+				$h .= '<span class="gh-small gh-due--danger">' . esc_html( (string) $delivery['error'] ) . '</span>';
+			}
+			if ( $delivery['retry'] ) {
+				$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm gh-dr-retry" data-ghca-reminder-retry="' . esc_attr( (string) $delivery['id'] ) . '">' . esc_html( sprintf( /* translators: %s: EMAIL or SMS */ __( 'Retry %s', 'ghca-acd' ), strtoupper( (string) $delivery['channel'] ) ) ) . '</button>';
+			}
+		}
+		return $h . '<span class="gh-small gh-muted">' . esc_html( sprintf( /* translators: %s: urgency level */ __( 'Urgency: %s', 'ghca-acd' ), ucfirst( (string) $item['urgency'] ) ) ) . '</span></div></li>';
 	}
 
 	/** @param array<string,mixed> $m */
