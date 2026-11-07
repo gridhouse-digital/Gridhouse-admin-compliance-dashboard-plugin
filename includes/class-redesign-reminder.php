@@ -36,7 +36,7 @@ final class GHCA_ACD_Redesign_Reminder {
 
 		// Step 1: compose.
 		$h .= '<div class="gh-modal gh-mod gh-mod--compose" role="dialog" aria-modal="true" aria-labelledby="ghca-acd-reminder-title" data-ghca-reminder-dialog>';
-		$h .= '<div class="gh-modal-hd"><span class="gh-stat-ico gh-mod-ico" aria-hidden="true">' . self::icon( 'send', 'lg' ) . '</span><div class="gh-mod-hd-t"><h2 class="gh-h3" id="ghca-acd-reminder-title">' . esc_html__( 'Send training reminder', 'ghca-acd' ) . '</h2><p class="gh-p gh-secondary gh-small">' . esc_html__( 'Logged in Communications when sent.', 'ghca-acd' ) . '</p></div>';
+		$h .= '<div class="gh-modal-hd"><span class="gh-stat-ico gh-mod-ico" aria-hidden="true">' . self::icon( 'send', 'lg' ) . '</span><div class="gh-mod-hd-t"><h2 class="gh-h3" id="ghca-acd-reminder-title">' . esc_html__( 'Send training reminder', 'ghca-acd' ) . '</h2><p class="gh-p gh-secondary">' . esc_html__( 'Logged in Communications when sent.', 'ghca-acd' ) . '</p></div>';
 		$h .= '<button type="button" class="gh-btn gh-btn--ghost gh-btn--icon" data-ghca-reminder-close data-ghca-reminder-x aria-label="' . esc_attr__( 'Close reminder form', 'ghca-acd' ) . '">' . self::icon( 'x' ) . '</button></div>';
 
 		$h .= '<div class="gh-modal-bd">';
@@ -65,7 +65,7 @@ final class GHCA_ACD_Redesign_Reminder {
 		$h .= '</div>';
 
 		$h .= '<div class="gh-field"><label class="gh-label" for="ghca-rm-subject">' . esc_html__( 'Subject', 'ghca-acd' ) . '</label><input id="ghca-rm-subject" class="gh-input" type="text" maxlength="200" data-ghca-reminder-subject required /></div>';
-		$h .= '<div class="gh-field"><label class="gh-label" for="ghca-rm-message">' . esc_html__( 'Message', 'ghca-acd' ) . '</label><textarea id="ghca-rm-message" class="gh-textarea" rows="5" maxlength="4000" data-ghca-reminder-message required></textarea><div class="gh-mod-count"><span class="gh-help">' . esc_html__( 'Text messages are limited to 480 characters.', 'ghca-acd' ) . '</span><span class="gh-help gh-num"><span data-ghca-reminder-count>0</span> / 4000</span></div></div>';
+		$h .= '<div class="gh-field"><label class="gh-label" for="ghca-rm-message">' . esc_html__( 'Message', 'ghca-acd' ) . '</label><textarea id="ghca-rm-message" class="gh-textarea" rows="3" maxlength="4000" data-ghca-reminder-message required></textarea><div class="gh-mod-count"><span class="gh-help">' . esc_html__( 'Text messages are limited to 480 characters.', 'ghca-acd' ) . '</span><span class="gh-help gh-num"><span data-ghca-reminder-count>0</span> / 4000</span></div></div>';
 
 		// Preview: produced by the same code that builds the outgoing message, including the urgency prefix.
 		$h .= '<details class="gh-mod-pv" open><summary class="gh-mod-pv-hd"><span class="gh-linkbtn-t">' . esc_html__( 'Preview', 'ghca-acd' ) . '</span> <span class="gh-small gh-muted" data-ghca-reminder-preview-channel>' . esc_html__( 'Email', 'ghca-acd' ) . '</span></summary>';
@@ -81,7 +81,7 @@ final class GHCA_ACD_Redesign_Reminder {
 		$h .= '<p class="gh-small gh-muted">' . esc_html__( 'SMS providers may truncate long messages. Every reminder is recorded in this employee’s Communication History with its delivery status.', 'ghca-acd' ) . '</p>';
 		$h .= '</form></div>';
 
-		$h .= '<div class="gh-modal-ft gh-mod-ft"><span class="gh-small gh-muted">' . sprintf( /* translators: %s: the acting administrator's display name. */ esc_html__( 'Sent and logged as %s in Communication History.', 'ghca-acd' ), '<strong>' . esc_html( $who ) . '</strong>' ) . '</span>';
+		$h .= '<div class="gh-modal-ft gh-mod-ft"><span class="gh-small gh-muted">' . sprintf( /* translators: %s: the acting administrator's display name. */ esc_html__( 'Sends as %s', 'ghca-acd' ), '<strong>' . esc_html( $who ) . '</strong>' ) . '</span>';
 		$h .= '<div class="gh-actions"><button type="button" class="gh-btn gh-btn--secondary" data-ghca-reminder-close>' . esc_html__( 'Cancel', 'ghca-acd' ) . '</button><button type="submit" class="gh-btn gh-btn--primary" form="ghca-rm-form" data-ghca-reminder-submit>' . esc_html__( 'Review & send', 'ghca-acd' ) . self::icon( 'arrow-right' ) . '</button></div></div>';
 		$h .= '</div>';
 
