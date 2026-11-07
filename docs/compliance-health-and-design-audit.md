@@ -174,3 +174,16 @@ All CSS stays under `:is(.ghca-ui, #ghca-ui-scope)` and is rebuilt into `assets/
 - **All suites:** 75 PHP scripts, the JS and Playwright tests, and every browser suite (lists 51, tables 53, drawer 159, themed bulletin 34, page background 18, bulletin pages 24, corrections 17). There are 75 PHP scripts; the list test now has 165 checks.
 
 Not verified: the real Akansoh site, its real agency colour, real devices (touch tablets) and the Purple theme. Hover and focus were checked on the menus; other components' hover states were not re-audited.
+
+## Date-picker selection colour (follow-up)
+
+All date fields in the redesign are the browser's native `input[type=date]` / `datetime-local`; there is no custom picker. Fields covered: Edit Records (registration, employment, first service, worked alone, each course completion date), packet audit start/end, the outside-certificate date, agency-delivered training dates.
+
+Change: one scoped rule in `gh-redesign.tail.css` sets `accent-color` to the active agency's brand (`--gh-agency`, falling back to the primary token) on those fields, excluding `.gh-legacy` panels. No markup, value format, `required`/validation or save path changed. Legacy screens (redesign off) never load this stylesheet.
+
+What it does not do (synthetic Chromium 153 checks, Linux, headed under a virtual display; not a real-site check):
+- Chromium's popup calendar still marks the selected day in system blue: screenshots with and without the agency `accent-color` were pixel-identical.
+- The highlighted segment while typing (e.g. the month) stays system blue; Chromium ignores author CSS on the `::-webkit-datetime-edit-*-field` focus state, so an attempted rule for it was removed.
+- Firefox and Safari draw their own popups and were not tested; `accent-color` may or may not be used there.
+
+So `accent-color` is kept as a harmless, standards-based hint, but it does not brand the native picker in Chromium. Brand-coloured selection everywhere would need a custom picker (a JS calendar replacing the native popup while still writing ISO `yyyy-mm-dd` / `yyyy-mm-ddThh:mm` values). Not built; needs approval first.

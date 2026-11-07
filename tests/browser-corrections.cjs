@@ -45,6 +45,8 @@ async function route(r) {
     const body = r.request().postData() || ''; const params = Object.fromEntries(new URLSearchParams(body));
     if (!params.action) { const mm = body.match(/name="action"\r\n\r\n([^\r]+)/); if (mm) { params.action = mm[1]; } }
     if (params.action === 'ghca_acd_get_employee_drawer') { delete params.action; return r.fulfill({ contentType: 'application/json', body: execFileSync('php', [path.join(__dirname, 'render-drawer-preview.php'), 'ajax', JSON.stringify(params), '{}']).toString() }); }
+    if (params.action === 'ghca_acd_get_edit_records_form') { delete params.action; delete params.nonce; return r.fulfill({ contentType: 'application/json', body: execFileSync('php', [path.join(__dirname, 'render-drawer-preview.php'), 'edit', JSON.stringify(params), '{}']).toString() }); }
+    if (params.action === 'ghca_acd_agency_training') { return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: { html: '<p class="gh-small">Synthetic agency confirmation list.</p>', message: 'Saved records loaded.' } }) }); }
     if (params.action === 'ghca_acd_filter_table') { const t = /employees/.test(params.ghca_table) ? 'tables' : 'lists'; return r.fulfill({ contentType: 'application/json', body: execFileSync('php', [path.join(__dirname, 'render-' + t + '-preview.php'), 'ajax', JSON.stringify(params)]).toString() }); }
     return r.fulfill({ contentType: 'application/json', body: '{"success":false,"data":{}}' });
   }
@@ -206,6 +208,54 @@ const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y
   {
     const { ctx, page } = await open(browser, 1440, 'main/lists.html', async (p) => { await p.click('[data-ghca-tab-target="ghca-tab-overdue"]'); });
     await menuCheck(page, '#ghca-tab-overdue tbody tr:first-child .gh-row-more > summary', 'Overdue row menu link');
+    await ctx.close();
+  }
+
+  // ---- Native date fields: agency accent-color set; keyboard entry, ISO values and validation unchanged. Chromium draws the
+  //      focused segment and its popup in system colours whatever accent-color says, so neither is asserted here.
+  {
+    const { ctx, page, errors } = await open(browser, 1440, 'main/drawer.html', async (p) => {
+      await p.click('[data-ghca-tab-target="ghca-tab-employees"]'); await p.click('#open-drawer');
+      await p.waitForSelector('.gh-drawer--emp .gh-drh-tabs', { state: 'visible' });
+      await p.click('#ghca-acd-drawer-tab-administration');
+      await p.locator('[data-ghca-edit-records]').first().click();
+      await p.waitForSelector('[data-ghca-edit-form]', { state: 'visible' });
+      await p.selectOption('#ghca-pk-mode', 'custom');
+    });
+    const fill = await page.evaluate(() => { const i = document.createElement('i'); i.style.color = getComputedStyle(document.querySelector('.gh-app')).getPropertyValue('--gh-agency'); document.querySelector('.gh-app').appendChild(i); return getComputedStyle(i).color; });
+    assert.equal(fill, 'rgb(47, 93, 58)');
+    const fields = await page.$$eval('.gh-drawer--emp :is(input[type="date"], input[type="datetime-local"])', (els) => els.filter((e) => e.getBoundingClientRect().width > 0).map((e) => ({ id: e.id || e.name, type: e.type, accent: getComputedStyle(e).accentColor })));
+    const ids = fields.map((f) => f.id);
+    for (const want of ['ghca-edit-employment-date', 'ghca-edit-first-service', 'ghca-edit-worked-alone', 'ghca-pk-start', 'ghca-pk-end']) { assert.ok(ids.includes(want), want + ' present'); }
+    assert.ok(fields.some((f) => f.type === 'datetime-local' && /ghca-edit-c\d+-date/.test(f.id)), 'a course completion date field');
+    for (const f of fields) { assert.equal(f.accent, fill, f.id + ' accent ' + f.accent); }
+    ok('date fields (' + fields.length + ': employment, first service, worked alone, registration, course completion, packet start/end): accent-color is the agency fill');
+
+    // Keyboard: Tab into the packet start date and type a date.
+    const start = page.locator('#ghca-pk-start');
+    await page.locator('#ghca-pk-mode').focus();
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'ghca-pk-start');
+    if (shots) { await start.screenshot({ path: path.join(shots, 'date-field-focus.png') }); }
+    await page.keyboard.type('03152026');
+    assert.equal(await start.inputValue(), '2026-03-15');
+    // Tab walks the remaining native segments, then leaves for the end date: keyboard only, no pointer.
+    for (let i = 0; i < 4 && await page.evaluate(() => document.activeElement.id) !== 'ghca-pk-end'; i++) { await page.keyboard.press('Tab'); }
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'ghca-pk-end');
+    await page.keyboard.type('03312026');
+    assert.equal(await page.locator('#ghca-pk-end').inputValue(), '2026-03-31');
+    ok('typed dates are stored as ISO yyyy-mm-dd (2026-03-15 to 2026-03-31), as before');
+    const req = await page.evaluate(() => { const s = document.querySelector('#ghca-pk-start'); const v = s.value; s.value = ''; const r = { required: s.required, valid: s.checkValidity() }; s.value = v; return r; });
+    assert.deepEqual(req, { required: true, valid: false });
+    ok('packet start date is still required (empty is invalid)');
+    const course = page.locator('.gh-drawer--emp input[type="datetime-local"][id^="ghca-edit-c"]').first();
+    const before = await course.inputValue();
+    await course.focus();
+    await page.keyboard.type('04012026');
+    const after = await course.inputValue();
+    assert.ok(after === '' || /^2026-04-01T\d{2}:\d{2}$/.test(after) || after === before, 'course completion value: ' + after);
+    ok('course completion field accepts keyboard entry in the existing datetime-local format');
+    assert.deepEqual(errors, []);
     await ctx.close();
   }
 

@@ -498,3 +498,12 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-ovp .gh-card-hd--plain { padding-bottom: 2px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-ovp .gh-h3 { letter-spacing: -0.012em; }
 }
+
+/* Native date and time fields (Edit Records dates, course completion dates, packet audit period, outside-certificate
+   date, agency-delivered training dates): accent-color set to the active agency's brand colour instead of the
+   browser's or theme's default. Browsers apply accent-color to the native picker inconsistently: Chromium-based
+   browsers may use it for parts of their popup, while Firefox and Safari draw their own popup and may ignore it.
+   The highlighted segment while typing in Chromium stays the system highlight colour; author CSS cannot change it.
+   Legacy panels inside the redesign (.gh-legacy) keep their existing look. !important against themes that set
+   accent-color globally. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app :is(input[type="date"], input[type="datetime-local"], input[type="month"], input[type="week"], input[type="time"]):not(.gh-legacy *) { accent-color: var(--gh-agency, var(--gh-color-primary)) !important; }

@@ -1331,3 +1331,4 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-ovp .gh-card-hd--plain { padding-bottom: 2px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-ovp .gh-h3 { letter-spacing: -0.012em !important; }
 }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app :is(input[type="date"], input[type="datetime-local"], input[type="month"], input[type="week"], input[type="time"]):not(.gh-legacy *) { accent-color: var(--gh-agency, var(--gh-color-primary)) !important; }
