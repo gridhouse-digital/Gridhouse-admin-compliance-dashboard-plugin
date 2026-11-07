@@ -2,7 +2,7 @@
 
 Opt-in, behind `ghca_acd_ui_redesign`. Unchecking it restores the previous tabs. Training math, certificate counts, group scope, capabilities, messaging and certificate downloads are unchanged. Rows, filters and paging come from the same `GHCA_ACD_Data_Provider` and `GHCA_ACD_Table_UI` calls the legacy tabs use. The legacy renderers in `class-shortcodes.php` were not edited.
 
-Boards: `Admin-Overdue`, `Admin-Courses`, `Admin-Certificates`, from the design canvas "Gridhouse Compliance — Phase 2 Dashboards", version `1793995837-628a`. Commits, oldest first: `3ebfd91` (legacy goldens, taken before any change), `87d0cb6` (implementation and tests), `3b06039` (this document, the browser suite and fidelity fixes), `e1370cb` (review changes: Courses default sort, date-only certificate sort, phone tab focus), then this update with the package and rollback notes. The package's exact commit is in its `BUILD.txt` and under [Package](#package).
+Boards: `Admin-Overdue`, `Admin-Courses`, `Admin-Certificates`, from the design canvas "Gridhouse Compliance — Phase 2 Dashboards", version `1793995837-628a`. Commits, oldest first (the bulletin-page correction after the staging review is `c422dc2`, see below): `3ebfd91` (legacy goldens, taken before any change), `87d0cb6` (implementation and tests), `3b06039` (this document, the browser suite and fidelity fixes), `e1370cb` (review changes: Courses default sort, date-only certificate sort, phone tab focus), then this update with the package and rollback notes. The package's exact commit is in its `BUILD.txt` and under [Package](#package).
 
 ## What shipped
 
@@ -115,6 +115,56 @@ Still open, carried over from slices 2 and 3: phone tab height, column drop, the
 | Phone tab bars | Found while verifying: on a phone, keyboard selection could leave the chosen tab partly off-screen in the drawer's tab bar and in the dashboard's main tab bar. The drawer focused the tab before the other tabs lost their bolder selected state, so the scroll was computed for a width that then changed. Now every tab gets its state first and focus comes after. The redesigned drawer and main tab bars also call `scrollIntoView({ inline: 'nearest' })`. The legacy tab bars end in the same state as before, and the scroll call is not applied to them. |
 | Tests | Course, Overdue-only and combined filters; empty states and reset; the new defaults; phone tab scrolling and keyboard access in both tab bars. See [Tests](#tests). |
 
+## Correction after staging review: bulletin pages inside the theme (`c422dc2`)
+
+Taz's review of Slices 1–4 on Akanso staging (build `d93f640`) found that the ODP bulletin library (`/odp-bulletins/`) and each bulletin page (`/odp-bulletins/<id>/`) did not use the site's theme. They were sent as standalone documents with the plugin's own app bar (logo, navigation, avatar), so the theme header and footer were missing and the plugin header duplicated them.
+
+| | Before | After |
+| --- | --- | --- |
+| Page around the content | A standalone HTML document from the plugin | The active theme's header and footer. Classic themes (BuddyBoss, Hello with Elementor Pro header/footer locations, and others) through `get_header()` / `get_footer()`; block themes through their `header` and `footer` template parts in core's canvas, rendered before `wp_head()` as core does. |
+| Plugin app bar, logo, site nav, avatar, second skip link | Shown | Removed. The theme supplies them. |
+| Bulletin content, drawer, breadcrumb back to the dashboard | — | Unchanged markup (`GHCA_ODP_UI::library()` / `single()` / `drawer()`). |
+| Background | `#F3EFEA` page body | `#F3EFEA` from the board's page surface, full width between the theme's header and footer (the dashboard's own full-bleed wrapper). |
+| Branding | Agency brand style on the app wrapper | Same. The theme header shows the site's own logo. |
+| Routing, login redirect, audience (agency or employee), HTTP status, `Cache-Control: private, no-store`, `X-Robots-Tag: noindex` | — | Unchanged, decided before the page is printed. Also `noindex, nofollow` through `wp_robots`, a document title, and a `gh-odp-page` body class. |
+| Assets | Printed by the document | `gh-redesign.css` and `gh-bulletins.js` enqueued under the dashboard's handles (`ghca-redesign`, `ghca-bulletins`). |
+| Feed | — | Untouched. The staging feed is blocked by the outbound guard, as expected; the library shows its existing "unavailable" state inside the theme. Nothing in this change weakens the guard or adds a request. |
+
+Inside a theme the page now meets theme CSS it never met before. Two leaks found by the hostile-theme test were fixed:
+
+- **The `<main>` box.** It is pinned to the board values (28 / 32 / 56 px padding, 16 px sides on phones, centred, 1320 px max) with `!important`, against rules such as `main { padding: 40px !important }`.
+- **The ODP headings.** The bulletin, card and library headings (`.gh-bp-h`, `.gh-bul-h`, `.gh-bl-h`, `.gh-odp-hd h1`) are added to the build's heading guard, so their font family and letter spacing hold. `text-transform: none` and `font-style: normal` are declared for them as well.
+
+The theme's own header and footer are not restyled: their computed styles are identical with and without the plugin stylesheet. `GHCA_ODP_UI::document()` is no longer sent by the site; it is kept for the phase-1 synthetic previews.
+
+Files: `includes/odp/class-odp-bulletins.php` (`send_document()`, new `prepare_theme_page()` and `themed_page()`), `includes/odp/class-odp-ui.php` (new `themed()`), `design-references/gh-redesign.tail.css`, `design-references/scope-board-css.py`, rebuilt `assets/gh-redesign.css`. No dashboard, Slice 2–4 or legacy file changed.
+
+Verified (synthetic):
+- `php tests/test-odp-themed.php` (28 checks): the fragment has no document, app bar, logo, nav or skip link; it keeps the wrapper, surface, brand style, main, breadcrumb and drawer. Classic theme: `get_header` then `get_footer`, exactly one header. Block theme: parts before `wp_head`, then `wp_body_open` and `wp_footer`, one document. Assets, title and robots. The source order of route match, owner, login redirect and audience, and the status and no-store headers, are unchanged.
+- `node tests/browser-odp-themed.cjs` (34 checks), in Chromium at 1440 and 390, inside a stand-in classic theme with its own header, footer and 1100 px container:
+  - only the theme header;
+  - `#F3EFEA` at full viewport width, with no sideways scroll;
+  - content between the header and footer, with one `<main>`;
+  - Wix Madefor in the content while the theme keeps its own font;
+  - the breadcrumb to the dashboard;
+  - the theme header and footer unchanged by the plugin CSS;
+  - the drawer opens over the page, pinned to the viewport, and closes with Escape;
+  - library and bulletin components unchanged under hostile theme rules.
+- Phase-1 regression (overview, library, empty library, bulletin; 1440 and 390): 0 of 1,026 element/viewport combinations changed against the `d93f640` stylesheet. Every other suite passes: 73 PHP scripts, JS, Playwright, and the list (51), table (53) and drawer (159) browser suites.
+
+Not verified: the real Akanso theme, BuddyBoss or Elementor Pro header and footer, real roles, or the live bulletin feed. Staging must confirm the bulletin pages show the site header and footer once, with no plugin header.
+
+## Remaining gaps after the staging review
+
+| Item | Classification | Detail |
+| --- | --- | --- |
+| No certificate sort control visible on staging | **Not a plugin defect: by design**, with one display condition to check | The only certificate sort is the **Completed** column header: a header button with a small arrow, newest first by default, toggled by clicking. There is no separate Sort select, and none is added, as agreed. It is absent in three cases: below 720 px, where the list is cards (no table, no headers); when the current view has no rows (the empty state replaces the table); and in the Missing view when nothing is missing. If Taz saw a desktop table with rows and no clickable Completed header, that would be a defect; a screenshot would settle it. |
+| Certificate PDF downloads unverified | **Unverified, not known to be broken.** Likely blocked on staging by the environment | The plugin side is tested synthetically: the button sends ids only to `ghca_acd_certificate_download`, the endpoint keeps its permission and scope checks, and only a real PDF is saved, otherwise an error toast. On the server the endpoint fetches the certificate with an **HTTP request from the site to itself**: `wp_safe_remote_post` to its own `admin-ajax.php` for the broker, or `wp_safe_remote_get` of the certificate link for LearnDash admins. If staging's outbound guard, HTTP authentication or firewall blocks self-requests, every download fails with "The certificate could not be downloaded. Nothing was saved." That would be the environment, not a new defect, and the guard must not be weakened for it. Read-only check first: Tools → Site Health → "loopback request" status, and the PHP log entry at the time of a failed download. A same-host allowance in the guard is the owner's decision, not part of this change. The drawer's certificate download (Slice 3) uses the same endpoint and is subject to the same condition. |
+| Elementor editor stuck on "Loading" | **Unresolved; no evidence it is a GHCA defect** | No new evidence since the last package. The code review and the approval-gated plan in `docs/staging-elementor-loading-diagnostics.md` stand. The bulletin correction does not touch the editor. Its only effect near Elementor is that bulletin pages now render the theme's header and footer, which on an Elementor Pro site are Elementor's header and footer templates; that is the intended result. |
+| Blocked bulletin feed on staging | **Expected** (outbound guard) | The library shows the "unavailable" state, now inside the theme. Not changed. |
+
+Confirmed plugin defects fixed in this round: the bulletin pages' missing theme header and footer, and the duplicate plugin header. Two theme-CSS leaks were found and fixed at the same time (above). No other defect is confirmed.
+
 ## Known gaps
 
 - Remind opening the reminder modal is covered by the slice-3 suite, which binds `[data-ghca-reminder]` document-wide. The slice-4 preview does not load the modal; its browser test checks the hook and the permission gate.
@@ -155,6 +205,8 @@ Suggested staging checks for Taz, after the package is approved for staging (fic
 6. PDF download of a real certificate through the broker, as a non-LearnDash-admin dashboard role.
 7. Redesign off: the legacy Overdue, Courses and Certificates tabs are as before.
 8. Elementor editor: follow `docs/staging-elementor-loading-diagnostics.md`; do not disable plugins or change settings without approval.
+9. Bulletin pages (correction build): `/odp-bulletins/` and one bulletin open with the site's own header and footer, once, and no plugin app bar. The background between them is `#F3EFEA`. Check the breadcrumb back to the dashboard, the drawer from a library card, a phone width, and that signed-out visitors are sent to log in. With the feed blocked, the library shows the "unavailable" state; that is expected.
+10. Certificate sort: on a desktop width with rows in the list, the Completed header is clickable and toggles oldest/newest. Before judging PDF downloads, check Site Health's loopback status (see Remaining gaps).
 
 ## Package
 
@@ -192,7 +244,7 @@ Verification of the archive (synthetic, in this environment):
 **Rollback, fastest first:**
 
 1. **Switch the redesign off** (GHCA Settings → the redesign setting, `ghca_acd_ui_redesign`). The legacy dashboard returns at once, with no file change. The legacy screens are byte-identical to before (golden checks). This is a setting change, so it needs the owner's approval on staging.
-2. **Reinstall the previous build** (the Slice 3 package staging runs now, commit `a890189`) the same way, Replace current with uploaded. Keep that package and the existing private rollback copies; this package does not replace them.
+2. **Reinstall the previous build** the same way, Replace current with uploaded. For the correction build, that is the Slice 1–4 package staging runs now, `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-d93f640.zip`; before that, the Slice 3 package (`a890189`). Only the bulletin pages differ between `d93f640` and the correction build. Keep that package and the existing private rollback copies; this package does not replace them.
 3. After either step, clear any page cache or CDN for the dashboard pages. Asset URLs carry the file time, so browsers need no action.
 
 No data rollback is needed: Slice 4 writes nothing.
