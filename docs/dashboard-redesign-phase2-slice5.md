@@ -89,4 +89,14 @@ Uncheck the redesign option: the legacy tabs return, unchanged. To go back to th
 
 ## Package
 
-Recorded in the build commit that follows this one.
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-ce36016.zip` |
+| Source commit | `ce360169c635b1c7e0f569cb62733e838defd890` (branch `gridhouse-overview-odp-bulletins-af45`) |
+| Byte size | 661,159 |
+| SHA-256 | `b940b15488ab661e4a3342673028e535f621e3c12aa39bdfd6d2c4fc8c751c0e` |
+| Root folder / entry file | `Gridhouse-admin-compliance-dashboard-plugin-main/gridhouse-admin-compliance-dashboard.php` (same as staging; updates in place) |
+| Contents | Cumulative Slices 1-5 on top of 1.7.3-rc.8. 140 runtime files, each byte-identical to the commit; `BUILD.txt` inside lists every file's SHA-256 |
+| Checks on the archive | `unzip -t` clean; every file compared with `git show ce36016:<path>`; `php -l` on every PHP file |
+
+Not installed anywhere. Older builds are kept unchanged.
