@@ -37,8 +37,8 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-app { font-family: var(--gh-font-body); font-size: var(--gh-text-sm); line-height: var(--gh-lh-sm); color: var(--gh-text); background: var(--gh-surface-page); -webkit-font-smoothing: antialiased; box-sizing: border-box; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-app *, :is(.ghca-ui, #ghca-ui-scope) .gh-app *::before, :is(.ghca-ui, #ghca-ui-scope) .gh-app *::after { box-sizing: border-box; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-app :focus-visible:where(:not(.gh-legacy, .gh-legacy *)) { outline: none; box-shadow: var(--gh-focus-ring); border-radius: var(--gh-radius-sm); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a:where(:not(.gh-legacy, .gh-legacy *)) { color: var(--gh-text-link); text-underline-offset: 2px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a:hover:where(:not(.gh-legacy, .gh-legacy *)) { color: var(--gh-color-primary-hover); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a:where(:not(.gh-legacy, .gh-legacy *)) { color: var(--gh-text-link) !important; text-underline-offset: 2px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a:hover:where(:not(.gh-legacy, .gh-legacy *)) { color: var(--gh-color-primary-hover) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-app button:where(:not(.gh-legacy, .gh-legacy *)) { font: inherit; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-container { width: 100%; max-width: 1320px; margin: 0 auto; padding: 0 32px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -178,15 +178,15 @@
 :is(.ghca-ui, #ghca-ui-scope) .i-zoom-in { --i:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='black'><path d='M152,112a8,8,0,0,1-8,8H120v24a8,8,0,0,1-16,0V120H80a8,8,0,0,1,0-16h24V80a8,8,0,0,1,16,0v24h24A8,8,0,0,1,152,112Zm77.66,117.66a8,8,0,0,1-11.32,0l-50.06-50.07a88.11,88.11,0,1,1,11.31-11.31l50.07,50.06A8,8,0,0,1,229.66,229.66ZM112,184a72,72,0,1,0-72-72A72.08,72.08,0,0,0,112,184Z'/></svg>");--ib:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='black'><path d='M156,112a12,12,0,0,1-12,12H124v20a12,12,0,0,1-24,0V124H80a12,12,0,0,1,0-24h20V80a12,12,0,0,1,24,0v20h20A12,12,0,0,1,156,112Zm76.49,120.49a12,12,0,0,1-17,0L168,185a92.12,92.12,0,1,1,17-17l47.54,47.53A12,12,0,0,1,232.49,232.49ZM112,180a68,68,0,1,0-68-68A68.08,68.08,0,0,0,112,180Z'/></svg>") }
 :is(.ghca-ui, #ghca-ui-scope) .gh-appbar { background: var(--gh-surface-card); border-bottom: 1px solid var(--gh-border); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-appbar-in { display: flex; align-items: center; gap: 24px; min-height: 64px; flex-wrap: wrap; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--gh-text); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-logo-mark { width: 36px; height: 36px; border-radius: 10px; background: var(--gh-color-primary); color: var(--gh-color-on-primary); display: grid; place-items: center; font-family: var(--gh-font-heading); font-weight: 600; font-size: 19px; position: relative; overflow: hidden; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-logo-mark::after { content: ""; position: absolute; left: 7px; right: 7px; bottom: 6px; height: 3px; border-radius: 2px; background: var(--gh-color-accent); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-logo { display: flex; align-items: center; gap: 10px; text-decoration: none !important; color: var(--gh-text) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-logo-mark { width: 36px; height: 36px; border-radius: 10px; background: var(--gh-color-primary) !important; color: var(--gh-color-on-primary) !important; display: grid; place-items: center; font-family: var(--gh-font-heading); font-weight: 600; font-size: 19px; position: relative; overflow: hidden; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-logo-mark::after { content: ""; position: absolute; left: 7px; right: 7px; bottom: 6px; height: 3px; border-radius: 2px; background: var(--gh-color-accent) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-logo-name { font-family: var(--gh-font-heading); font-weight: var(--gh-heading-weight); font-size: 17px; line-height: 20px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-logo-sub { display: block; font-family: var(--gh-font-body); font-weight: 500; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-logo-sub { display: block; font-family: var(--gh-font-body); font-weight: 500; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--gh-text-muted) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-nav a { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border-radius: var(--gh-radius-sm); color: var(--gh-text-secondary); text-decoration: none; font-weight: 500; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-nav a:hover { background: var(--gh-surface-hover); color: var(--gh-text); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-nav a[aria-current="page"] { color: var(--gh-color-primary); background: var(--gh-surface-brand-subtle); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-nav a { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border-radius: var(--gh-radius-sm); color: var(--gh-text-secondary) !important; text-decoration: none !important; font-weight: 500; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-nav a:hover { background: var(--gh-surface-hover) !important; color: var(--gh-text) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-nav a[aria-current="page"] { color: var(--gh-color-primary) !important; background: var(--gh-surface-brand-subtle) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-appbar-tools { display: flex; align-items: center; gap: 4px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-avatar { width: 36px; height: 36px; border-radius: 50%; display: inline-grid; place-items: center; flex: none; background: var(--gh-primary-100); color: var(--gh-primary-800); font-weight: 600; font-size: 13px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-avatar--lg { width: 52px; height: 52px; font-size: 18px; }
@@ -196,22 +196,22 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--gh-text-secondary); font-size: var(--gh-text-sm); align-items: center; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-meta span { display: inline-flex; align-items: center; gap: 6px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--gh-control-h); padding: 0 16px; border-radius: var(--gh-radius-sm); border: 1px solid transparent; font-weight: 600; font-size: var(--gh-text-sm); line-height: 1; cursor: pointer; text-decoration: none; white-space: nowrap; transition: background var(--gh-dur) var(--gh-ease), border-color var(--gh-dur); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn { text-decoration: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--primary { background: var(--gh-color-primary); color: var(--gh-color-on-primary); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary { color: var(--gh-color-on-primary); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-btn--primary.is-hover { background: var(--gh-color-primary-hover); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--primary.is-active { background: var(--gh-color-primary-active); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary { background: var(--gh-surface-card); color: var(--gh-text); border-color: var(--gh-border-strong); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--secondary { color: var(--gh-text); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary.is-hover { background: var(--gh-surface-hover); border-color: var(--gh-neutral-300); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--ghost { background: transparent; color: var(--gh-text-link); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--ghost { color: var(--gh-text-link); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--ghost:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-btn--ghost.is-hover { background: var(--gh-surface-brand-subtle); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--accent { background: var(--gh-color-accent); color: var(--gh-color-on-accent); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--danger { background: var(--gh-status-danger-solid); color: #FFFFFF; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--danger-quiet { background: var(--gh-surface-card); color: var(--gh-status-danger-fg); border-color: var(--gh-status-danger-border); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--on-brand { background: rgba(255,255,255,.12); color: var(--gh-color-on-primary); border-color: rgba(255,255,255,.28); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--gh-control-h); padding: 0 16px; border-radius: var(--gh-radius-sm); border: 1px solid transparent; font-weight: 600; font-size: var(--gh-text-sm); line-height: 1; cursor: pointer; text-decoration: none !important; white-space: nowrap; transition: background var(--gh-dur) var(--gh-ease), border-color var(--gh-dur); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn { text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--primary { background: var(--gh-color-primary) !important; color: var(--gh-color-on-primary) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary { color: var(--gh-color-on-primary) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-btn--primary.is-hover { background: var(--gh-color-primary-hover) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--primary.is-active { background: var(--gh-color-primary-active) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary { background: var(--gh-surface-card) !important; color: var(--gh-text) !important; border-color: var(--gh-border-strong) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--secondary { color: var(--gh-text) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary.is-hover { background: var(--gh-surface-hover) !important; border-color: var(--gh-neutral-300) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--ghost { background: transparent !important; color: var(--gh-text-link) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--ghost { color: var(--gh-text-link) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--ghost:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-btn--ghost.is-hover { background: var(--gh-surface-brand-subtle) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--accent { background: var(--gh-color-accent) !important; color: var(--gh-color-on-accent) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--danger { background: var(--gh-status-danger-solid) !important; color: #FFFFFF !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--danger-quiet { background: var(--gh-surface-card) !important; color: var(--gh-status-danger-fg) !important; border-color: var(--gh-status-danger-border) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--on-brand { background: rgba(255,255,255,.12) !important; color: var(--gh-color-on-primary) !important; border-color: rgba(255,255,255,.28) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-btn--sm { min-height: 32px; padding: 0 12px; font-size: var(--gh-text-xs); gap: 6px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-btn--lg { min-height: var(--gh-control-h-lg); padding: 0 22px; font-size: var(--gh-text-md); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-btn--block { width: 100%; }
@@ -278,21 +278,21 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-stack { display: flex; flex-direction: column; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-row { display: flex; align-items: center; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-wrap { flex-wrap: wrap; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat { background: var(--gh-surface-card); border: 1px solid var(--gh-border); border-radius: var(--gh-radius-lg); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-stat { color: inherit; text-decoration: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat:hover { border-color: var(--gh-border-strong); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat-top { display: flex; align-items: center; justify-content: space-between; color: var(--gh-text-secondary); font-weight: 500; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat-val { font-size: 30px; line-height: 36px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--gh-text); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat-sub { font-size: var(--gh-text-xs); color: var(--gh-text-muted); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat-ico { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: var(--gh-surface-brand-subtle); color: var(--gh-primary-800); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat--danger { border-color: var(--gh-status-danger-border); background: var(--gh-status-danger-bg); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat--danger .gh-stat-val, :is(.ghca-ui, #ghca-ui-scope) .gh-stat--danger .gh-stat-top { color: var(--gh-status-danger-fg); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat--warning { border-color: var(--gh-status-warning-border); background: var(--gh-status-warning-bg); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat--warning .gh-stat-val, :is(.ghca-ui, #ghca-ui-scope) .gh-stat--warning .gh-stat-top { color: var(--gh-status-warning-fg); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat--zero .gh-stat-val { color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat { background: var(--gh-surface-card) !important; border: 1px solid var(--gh-border); border-radius: var(--gh-radius-lg); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; text-decoration: none !important; color: inherit !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-stat { color: inherit !important; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat:hover { border-color: var(--gh-border-strong) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat-top { display: flex; align-items: center; justify-content: space-between; color: var(--gh-text-secondary) !important; font-weight: 500; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat-val { font-size: 30px; line-height: 36px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--gh-text) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat-sub { font-size: var(--gh-text-xs); color: var(--gh-text-muted) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat-ico { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: var(--gh-surface-brand-subtle) !important; color: var(--gh-primary-800) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat--danger { border-color: var(--gh-status-danger-border) !important; background: var(--gh-status-danger-bg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat--danger .gh-stat-val, :is(.ghca-ui, #ghca-ui-scope) .gh-stat--danger .gh-stat-top { color: var(--gh-status-danger-fg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat--warning { border-color: var(--gh-status-warning-border) !important; background: var(--gh-status-warning-bg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat--warning .gh-stat-val, :is(.ghca-ui, #ghca-ui-scope) .gh-stat--warning .gh-stat-top { color: var(--gh-status-warning-fg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat--zero .gh-stat-val { color: var(--gh-text-muted) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-attn { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0; border: 1px solid var(--gh-border); border-radius: var(--gh-radius-lg); background: var(--gh-surface-card); overflow: hidden; box-shadow: var(--gh-shadow-1); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-attn-item { display: flex; gap: 14px; align-items: center; padding: 16px 18px; border-left: 1px solid var(--gh-border); text-decoration: none; color: inherit; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-attn-item { color: inherit; text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-attn-item { color: inherit !important; text-decoration: none !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-attn-item:first-child { border-left: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-attn-item:hover { background: var(--gh-surface-hover); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-attn-n { font-size: 28px; line-height: 32px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -351,14 +351,14 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-cal-grid .due { position: relative; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-cal-grid .due::after { content: ""; position: absolute; bottom: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--gh-status-danger-solid); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--gh-border-strong); overflow-x: auto; scrollbar-width: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-tab { display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 14px; color: var(--gh-text-secondary); font-weight: 600; text-decoration: none; border-bottom: 2.5px solid transparent; margin-bottom: -1px; white-space: nowrap; background: transparent; border-top: 0; border-left: 0; border-right: 0; cursor: pointer; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-tab { color: var(--gh-text-secondary); text-decoration: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-tab:hover { color: var(--gh-text); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-tab[aria-selected="true"], :is(.ghca-ui, #ghca-ui-scope) .gh-tab[aria-selected="true"] { color: var(--gh-color-primary); border-bottom-color: var(--gh-color-primary); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tab { display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 14px; color: var(--gh-text-secondary) !important; font-weight: 600; text-decoration: none !important; border-bottom: 2.5px solid transparent; margin-bottom: -1px; white-space: nowrap; background: transparent !important; border-top: 0; border-left: 0; border-right: 0; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-tab { color: var(--gh-text-secondary) !important; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tab:hover { color: var(--gh-text) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-tab[aria-selected="true"], :is(.ghca-ui, #ghca-ui-scope) .gh-tab[aria-selected="true"] { color: var(--gh-color-primary) !important; border-bottom-color: var(--gh-color-primary); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-subtabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--gh-radius-md); background: var(--gh-surface-sunken); flex-wrap: wrap; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-subtab { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: 8px; color: var(--gh-text-secondary); font-weight: 600; font-size: 13px; text-decoration: none; border: 0; background: transparent; cursor: pointer; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-subtab { color: var(--gh-text-secondary); text-decoration: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-subtab[aria-selected="true"], :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-subtab[aria-selected="true"] { background: var(--gh-surface-card); color: var(--gh-text); box-shadow: var(--gh-shadow-1); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-subtab { color: var(--gh-text-secondary) !important; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-subtab[aria-selected="true"], :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-subtab[aria-selected="true"] { background: var(--gh-surface-card) !important; color: var(--gh-text) !important; box-shadow: var(--gh-shadow-1); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-table-wrap { isolation: isolate; overflow: auto; border: 1px solid var(--gh-border); border-radius: var(--gh-radius-md); background: var(--gh-surface-card); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-table-wrap--tall { max-height: 560px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--gh-text-sm); }
@@ -375,13 +375,13 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-table .c-act { text-align: right; white-space: nowrap; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-person { display: flex; align-items: center; gap: 12px; min-width: 200px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-person-n { font-weight: 600; color: var(--gh-text); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-person-n { color: var(--gh-text); text-decoration: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-person-n:hover { text-decoration: underline; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-person-n { color: var(--gh-text) !important; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-person-n:hover { text-decoration: underline !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-person-s { font-size: 12px; color: var(--gh-text-muted); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; background: var(--gh-color-primary); color: var(--gh-color-on-primary); border-radius: var(--gh-radius-md); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 4px 0; color: var(--gh-text-secondary); font-size: 13px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns { display: flex; gap: 4px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns button, :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns a { min-width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--gh-border-strong); background: var(--gh-surface-card); display: grid; place-items: center; font-weight: 600; color: var(--gh-text); padding: 0 8px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns button, :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns a { min-width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--gh-border-strong); background: var(--gh-surface-card) !important; display: grid; place-items: center; font-weight: 600; color: var(--gh-text) !important; padding: 0 8px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns [aria-current="page"] { background: var(--gh-color-primary); border-color: var(--gh-color-primary); color: var(--gh-color-on-primary); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-mcard { background: var(--gh-surface-card); border: 1px solid var(--gh-border); border-radius: var(--gh-radius-lg); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
@@ -422,13 +422,13 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-ann { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--gh-border); align-items: flex-start; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ann:last-child { border-bottom: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ann-ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ann-ico--alert { background: var(--gh-status-danger-bg); color: var(--gh-status-danger-fg); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ann-ico--reminder { background: var(--gh-status-warning-bg); color: var(--gh-status-warning-fg); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ann-ico--update { background: var(--gh-surface-brand-subtle); color: var(--gh-primary-800); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ann-ico--system { background: var(--gh-status-neutral-bg); color: var(--gh-status-neutral-fg); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ann-t { font-weight: 650; color: var(--gh-text); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ann-m { color: var(--gh-text-secondary); margin: 2px 0 0; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ann-meta { font-size: 12px; color: var(--gh-text-muted); display: flex; gap: 10px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-ico--alert { background: var(--gh-status-danger-bg) !important; color: var(--gh-status-danger-fg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-ico--reminder { background: var(--gh-status-warning-bg) !important; color: var(--gh-status-warning-fg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-ico--update { background: var(--gh-surface-brand-subtle) !important; color: var(--gh-primary-800) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-ico--system { background: var(--gh-status-neutral-bg) !important; color: var(--gh-status-neutral-fg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-t { font-weight: 650; color: var(--gh-text) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-m { color: var(--gh-text-secondary) !important; margin: 2px 0 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-meta { font-size: 12px; color: var(--gh-text-muted) !important; display: flex; gap: 10px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-tl { list-style: none; margin: 0; padding: 0; position: relative; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-tl li { position: relative; padding: 0 0 20px 32px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-tl li::before { content: ""; position: absolute; left: 9px; top: 22px; bottom: 0; width: 2px; background: var(--gh-border-strong); }
@@ -477,11 +477,11 @@
 }
 :is(.ghca-ui, #ghca-ui-scope) .gh-appbar { background: var(--gh-surface-page); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-card, :is(.ghca-ui, #ghca-ui-scope) .gh-stat, :is(.ghca-ui, #ghca-ui-scope) .gh-attn { box-shadow: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat:hover { border-color: var(--gh-border-strong); background: var(--gh-surface-card); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-stat-ico { background: transparent; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat:hover { border-color: var(--gh-border-strong) !important; background: var(--gh-surface-card) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-stat-ico { background: transparent !important; color: var(--gh-text-muted) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-stat-val { font-weight: 600; letter-spacing: -0.022em; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary { background: transparent; border-color: var(--gh-border); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary.is-hover { background: var(--gh-surface-hover); border-color: var(--gh-border-strong); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary { background: transparent !important; border-color: var(--gh-border) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-btn--secondary.is-hover { background: var(--gh-surface-hover) !important; border-color: var(--gh-border-strong) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-table-wrap { border-radius: var(--gh-radius-md); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-table th { background: var(--gh-surface-card); color: var(--gh-text-muted); border-bottom: 1px solid var(--gh-border); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-tabs { border-bottom-color: var(--gh-border); }
@@ -489,19 +489,19 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-tab[aria-selected="true"] { font-weight: 600; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-eyebrow { color: var(--gh-text-muted); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi { gap: 0; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); background: var(--gh-surface-card); border: 1px solid var(--gh-border); border-radius: var(--gh-radius-lg); overflow: hidden; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi > .gh-stat { border: 0; border-radius: 0; background: transparent; padding: 16px 20px 18px; gap: 4px; box-shadow: 1px 0 0 0 var(--gh-border), 0 1px 0 0 var(--gh-border); min-width: 0; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi > a.gh-stat:hover { background: var(--gh-surface-hover); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi > .gh-stat { border: 0; border-radius: 0; background: transparent !important; padding: 16px 20px 18px; gap: 4px; box-shadow: 1px 0 0 0 var(--gh-border), 0 1px 0 0 var(--gh-border); min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi > a.gh-stat:hover { background: var(--gh-surface-hover) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi > .gh-stat:focus-visible { outline: 2px solid var(--gh-focus-ring, var(--gh-primary-600)); outline-offset: -2px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat-top { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--gh-text-muted); gap: 8px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat-ico { width: auto; height: auto; background: none; color: var(--gh-text-muted); opacity: .8; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat-top { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--gh-text-muted) !important; gap: 8px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat-ico { width: auto; height: auto; background: none !important; color: var(--gh-text-muted) !important; opacity: .8; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat-ico svg, :is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat-ico .gh-i { width: 16px; height: 16px; font-size: 16px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat-val { font-family: var(--gh-font-heading); font-size: 28px; line-height: 34px; font-weight: 600; letter-spacing: -0.025em; margin-top: 2px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat-sub { font-size: 12.5px; line-height: 17px; color: var(--gh-text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--danger, :is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--warning { background: transparent; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--danger .gh-stat-top { color: var(--gh-status-danger-fg); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--danger .gh-stat-top::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--gh-status-danger-solid); order: -1; flex: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat-sub { font-size: 12.5px; line-height: 17px; color: var(--gh-text-muted) !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--danger, :is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--warning { background: transparent !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--danger .gh-stat-top { color: var(--gh-status-danger-fg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--danger .gh-stat-top::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--gh-status-danger-solid) !important; order: -1; flex: none; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--danger .gh-stat-top { justify-content: flex-start; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--danger .gh-stat-ico { margin-left: auto; color: var(--gh-status-danger-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi .gh-stat--danger .gh-stat-ico { margin-left: auto; color: var(--gh-status-danger-fg) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ovp { display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 900px) {
   :is(.ghca-ui, #ghca-ui-scope) .gh-ovp { grid-template-columns: minmax(0, 1fr); }
@@ -524,14 +524,14 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-legend li + li { border-top: 1px solid var(--gh-border); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-legend i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-legend strong { margin-left: auto; color: var(--gh-text); font-weight: 600; font-variant-numeric: tabular-nums; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-health-ft { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gh-border); display: flex; justify-content: space-between; font-size: 12.5px; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-health-ft { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gh-border); display: flex; justify-content: space-between; font-size: 12.5px; color: var(--gh-text-muted) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grp { list-style: none; margin: 0; padding: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grp li { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(80px, 1fr) 40px 92px; align-items: center; gap: 14px; padding: 9px 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grp li + li { border-top: 1px solid var(--gh-border); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grp-n { min-width: 0; display: flex; flex-direction: column; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grp-n a, :is(.ghca-ui, #ghca-ui-scope) .gh-grp-n strong { font-size: 13.5px; line-height: 19px; font-weight: 500; color: var(--gh-text); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grp-n a:hover { text-decoration: underline; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grp-n span { font-size: 12px; line-height: 16px; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grp-n a, :is(.ghca-ui, #ghca-ui-scope) .gh-grp-n strong { font-size: 13.5px; line-height: 19px; font-weight: 500; color: var(--gh-text) !important; text-decoration: none !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grp-n a:hover { text-decoration: underline !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grp-n span { font-size: 12px; line-height: 16px; color: var(--gh-text-muted) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grp .gh-bar { height: 6px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grp-pct { font-size: 13px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grp-st { display: flex; justify-content: flex-end; }
@@ -598,11 +598,11 @@
 @media (max-width: 560px) {
   :is(.ghca-ui, #ghca-ui-scope) .gh-qlinks { grid-template-columns: 1fr 1fr; }
 }
-:is(.ghca-ui, #ghca-ui-scope) .gh-qlink { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--gh-border); border-radius: var(--gh-radius-md); text-decoration: none; color: var(--gh-text); min-width: 0; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-qlink:hover { background: var(--gh-surface-hover); border-color: var(--gh-border-strong); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-qlink .gh-i { color: var(--gh-text-muted); flex: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-qlink { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--gh-border); border-radius: var(--gh-radius-md); text-decoration: none !important; color: var(--gh-text) !important; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-qlink:hover { background: var(--gh-surface-hover) !important; border-color: var(--gh-border-strong) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-qlink .gh-i { color: var(--gh-text-muted) !important; flex: none; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-qlink strong { display: block; font-size: 13.5px; line-height: 18px; font-weight: 600; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-qlink span span, :is(.ghca-ui, #ghca-ui-scope) .gh-qlink small { display: block; font-size: 12px; line-height: 16px; color: var(--gh-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-qlink span span, :is(.ghca-ui, #ghca-ui-scope) .gh-qlink small { display: block; font-size: 12px; line-height: 16px; color: var(--gh-text-muted) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-qlink > span:last-child { min-width: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi.gh-grid--kpi2 { grid-template-columns: 1fr 1fr; border-radius: var(--gh-radius-md); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-grid--kpi2 > .gh-stat { padding: 12px 16px 14px; }
@@ -620,24 +620,24 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-ovp .gh-ann-meta .gh-badge { margin-right: 2px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-certl { list-style: none; margin: 0; padding: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-certl li + li { border-top: 1px solid var(--gh-border); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-certl a { display: flex; align-items: center; gap: 8px; padding: 8px 0; text-decoration: none; color: var(--gh-text-secondary); font-size: 13px; line-height: 18px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-certl a:hover { color: var(--gh-text); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-certl small { color: var(--gh-text-muted); font-size: 12px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-certl strong { margin-left: auto; font-family: var(--gh-font-heading); font-size: 18px; line-height: 22px; font-weight: 600; color: var(--gh-text); font-variant-numeric: tabular-nums; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-certl .is-zero strong { color: var(--gh-text-muted); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-certl .is-warning strong { color: var(--gh-status-warning-fg); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-certl .is-danger, :is(.ghca-ui, #ghca-ui-scope) .gh-certl .is-danger strong { color: var(--gh-status-danger-fg); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-certl .is-danger::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--gh-status-danger-solid); flex: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-certl a { display: flex; align-items: center; gap: 8px; padding: 8px 0; text-decoration: none !important; color: var(--gh-text-secondary) !important; font-size: 13px; line-height: 18px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-certl a:hover { color: var(--gh-text) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-certl small { color: var(--gh-text-muted) !important; font-size: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-certl strong { margin-left: auto; font-family: var(--gh-font-heading); font-size: 18px; line-height: 22px; font-weight: 600; color: var(--gh-text) !important; font-variant-numeric: tabular-nums; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-certl .is-zero strong { color: var(--gh-text-muted) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-certl .is-warning strong { color: var(--gh-status-warning-fg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-certl .is-danger, :is(.ghca-ui, #ghca-ui-scope) .gh-certl .is-danger strong { color: var(--gh-status-danger-fg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-certl .is-danger::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--gh-status-danger-solid) !important; flex: none; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ovp-col > .gh-card:last-child { flex: 1; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp li { padding: 13px 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp li:first-child { padding-top: 2px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--on-brand, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--on-brand, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--on-brand:visited { color: var(--gh-color-on-primary); background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.5); text-decoration: none; font-weight: 600; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--on-brand:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--on-brand:hover { color: var(--gh-color-on-primary); background: rgba(255,255,255,.26); border-color: rgba(255,255,255,.7); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--on-brand, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--on-brand, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--on-brand:visited { color: var(--gh-color-on-primary) !important; background: rgba(255,255,255,.16) !important; border-color: rgba(255,255,255,.5) !important; text-decoration: none !important; font-weight: 600; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--on-brand:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--on-brand:hover { color: var(--gh-color-on-primary) !important; background: rgba(255,255,255,.26) !important; border-color: rgba(255,255,255,.7) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--on-brand:focus-visible { outline: 2px solid var(--gh-color-on-primary); outline-offset: 2px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-btn--on-brand.is-primary { background: var(--gh-color-on-primary); color: var(--gh-color-primary); border-color: var(--gh-color-on-primary); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-btn--on-brand.is-primary:hover { background: rgba(255,255,255,.88); color: var(--gh-color-primary); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-kpi--overview > .gh-stat:first-child, :is(.ghca-ui, #ghca-ui-scope) .gh-kpi--overview > .gh-stat:first-child:hover { background: var(--gh-surface-hover); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-kpi--overview > .gh-stat--danger, :is(.ghca-ui, #ghca-ui-scope) .gh-kpi--overview > .gh-stat--danger:hover { background: var(--gh-status-danger-bg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-btn--on-brand.is-primary { background: var(--gh-color-on-primary) !important; color: var(--gh-color-primary) !important; border-color: var(--gh-color-on-primary) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-btn--on-brand.is-primary:hover { background: rgba(255,255,255,.88) !important; color: var(--gh-color-primary) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-kpi--overview > .gh-stat:first-child, :is(.ghca-ui, #ghca-ui-scope) .gh-kpi--overview > .gh-stat:first-child:hover { background: var(--gh-surface-hover) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-kpi--overview > .gh-stat--danger, :is(.ghca-ui, #ghca-ui-scope) .gh-kpi--overview > .gh-stat--danger:hover { background: var(--gh-status-danger-bg) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ehome3 { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ehome3 > * { min-width: 0; }
 @media (max-width: 1180px) {
@@ -652,13 +652,13 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-ticker-vp { flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 32px), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 32px), transparent 100%); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ticker-track { display: inline-flex; align-items: center; gap: 0; white-space: nowrap; padding-left: 20px; animation: gh-tick 60s linear infinite; will-change: transform; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ticker:hover .gh-ticker-track, :is(.ghca-ui, #ghca-ui-scope) .gh-ticker:focus-within .gh-ticker-track, :is(.ghca-ui, #ghca-ui-scope) .gh-ticker.is-paused .gh-ticker-track { animation-play-state: paused; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ticker-item { display: inline-flex; align-items: center; gap: 8px; padding-right: 28px; font-size: 13px; line-height: 18px; color: var(--gh-text-secondary); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ticker-item time { color: var(--gh-text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-ticker-item a { color: var(--gh-text); font-weight: 500; text-decoration: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-ticker-item a:hover { text-decoration: underline; color: var(--gh-text); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ticker-item::after { content: ""; width: 4px; height: 4px; border-radius: 50%; background: var(--gh-border-strong); margin-left: 20px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ticker-item { display: inline-flex; align-items: center; gap: 8px; padding-right: 28px; font-size: 13px; line-height: 18px; color: var(--gh-text-secondary) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ticker-item time { color: var(--gh-text-muted) !important; font-size: 12px; font-variant-numeric: tabular-nums; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-ticker-item a { color: var(--gh-text) !important; font-weight: 500; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-ticker-item a:hover { text-decoration: underline !important; color: var(--gh-text) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ticker-item::after { content: ""; width: 4px; height: 4px; border-radius: 50%; background: var(--gh-border-strong) !important; margin-left: 20px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ticker-ctl { flex: none; display: flex; align-items: center; gap: 2px; padding: 0 6px 0 4px; border-left: 1px solid var(--gh-border); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-ticker-ctl a { font-size: 12.5px; font-weight: 600; padding: 0 8px; white-space: nowrap; text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-ticker-ctl a { font-size: 12.5px; font-weight: 600; padding: 0 8px; white-space: nowrap; text-decoration: none !important; }
 @keyframes gh-tick {from { transform: translateX(0); } to { transform: translateX(-50%); }}
 @media (prefers-reduced-motion: reduce) {
   :is(.ghca-ui, #ghca-ui-scope) .gh-ticker-track { animation: none; }
@@ -673,8 +673,8 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 10px; border-radius: 999px; background: var(--gh-color-primary); color: var(--gh-color-on-primary); font-size: 13px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-chip .gh-i { width: 16px; height: 16px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-pos { margin-left: auto; font-size: 12.5px; color: var(--gh-text-muted); font-variant-numeric: tabular-nums; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-bul-x { width: 44px; height: 44px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--gh-text-secondary); cursor: pointer; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-bul-x:hover { background: var(--gh-surface-hover); color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bul-x { width: 44px; height: 44px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent !important; color: var(--gh-text-secondary) !important; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bul-x:hover { background: var(--gh-surface-hover) !important; color: var(--gh-text) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-x .gh-i { width: 20px; height: 20px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-bd { flex: 1; overflow: auto; padding: 28px 32px 32px 24px; display: flex; flex-direction: column; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-date { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: var(--gh-text-muted); font-variant-numeric: tabular-nums; }
@@ -693,10 +693,10 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-note { margin-top: 24px; display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 18px; color: var(--gh-text-muted); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-note .gh-i { width: 14px; height: 14px; margin-top: 2px; flex: none; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-ft { flex: none; display: flex; align-items: center; gap: 4px; min-height: 60px; padding: 8px 12px 8px 24px; border-top: 1px solid var(--gh-border); background: var(--gh-surface-card); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bul-all { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 14px; font-weight: 600; color: var(--gh-color-primary); text-decoration: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bul-all:hover { text-decoration: underline; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bul-all { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 14px; font-weight: 600; color: var(--gh-color-primary) !important; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bul-all:hover { text-decoration: underline !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-step { margin-left: auto; display: flex; gap: 4px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-bul-step button { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--gh-border); background: var(--gh-surface-card); color: var(--gh-text-secondary); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bul-step button { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--gh-border); background: var(--gh-surface-card) !important; color: var(--gh-text-secondary) !important; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-step button:disabled { opacity: .45; cursor: default; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-skel { display: block; height: 14px; border-radius: 7px; background: var(--gh-neutral-50); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-msg { margin-top: 24px; padding: 20px; border-radius: var(--gh-radius-md); background: var(--gh-surface-sunken); border: 1px solid var(--gh-border); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
@@ -710,12 +710,12 @@
 :is(.ghca-ui, #ghca-ui-scope) .i-link { --i:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='black'><path d='M117.18,188.74a12,12,0,0,1,0,17l-5.12,5.12A58.26,58.26,0,0,1,70.6,228h0A58.62,58.62,0,0,1,29.14,127.92L63.89,93.17a58.64,58.64,0,0,1,98.56,28.11,12,12,0,1,1-23.37,5.44,34.65,34.65,0,0,0-58.22-16.58L46.11,144.89A34.62,34.62,0,0,0,70.57,204h0a34.41,34.41,0,0,0,24.49-10.14l5.11-5.12A12,12,0,0,1,117.18,188.74ZM226.83,45.17a58.65,58.65,0,0,0-82.93,0l-5.11,5.11a12,12,0,0,0,17,17l5.12-5.12a34.63,34.63,0,1,1,49,49L175.1,145.86A34.39,34.39,0,0,1,150.61,156h0a34.63,34.63,0,0,1-33.69-26.72,12,12,0,0,0-23.38,5.44A58.64,58.64,0,0,0,150.56,180h.05a58.28,58.28,0,0,0,41.47-17.17l34.75-34.75a58.62,58.62,0,0,0,0-82.91Z'/></svg>") }
 :is(.ghca-ui, #ghca-ui-scope) .i-arrow-left { --i:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='black'><path d='M224,128a8,8,0,0,1-8,8H59.31l58.35,58.34a8,8,0,0,1-11.32,11.32l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L59.31,120H216A8,8,0,0,1,224,128Z'/></svg>") }
 :is(.ghca-ui, #ghca-ui-scope) .i-article { --i:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='black'><path d='M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,160H40V56H216V200ZM184,96a8,8,0,0,1-8,8H80a8,8,0,0,1,0-16h96A8,8,0,0,1,184,96Zm0,32a8,8,0,0,1-8,8H80a8,8,0,0,1,0-16h96A8,8,0,0,1,184,128Zm0,32a8,8,0,0,1-8,8H80a8,8,0,0,1,0-16h96A8,8,0,0,1,184,160Z'/></svg>") }
-:is(.ghca-ui, #ghca-ui-scope) .gh-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: var(--gh-text-muted); margin: 0; padding: 0; list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: var(--gh-text-muted) !important; margin: 0; padding: 0; list-style: none; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-crumbs li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-crumbs li + li::before { content: "/"; color: var(--gh-border-strong); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-crumbs a { color: var(--gh-color-primary); font-weight: 500; text-decoration: none; border-radius: 4px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-crumbs a:hover { text-decoration: underline; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-crumbs [aria-current] { color: var(--gh-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-crumbs li + li::before { content: "/"; color: var(--gh-border-strong) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-crumbs a { color: var(--gh-color-primary) !important; font-weight: 500; text-decoration: none !important; border-radius: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-crumbs a:hover { text-decoration: underline !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-crumbs [aria-current] { color: var(--gh-text-secondary) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bl a:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bp a:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-crumbs a:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-bl-read:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-copy:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bul-ft a:focus-visible { outline: 2px solid var(--gh-color-primary); outline-offset: 2px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp { display: grid; grid-template-columns: minmax(0, 760px) minmax(260px, 320px); gap: 48px; align-items: start; justify-content: space-between; }
 @media (max-width: 1080px) {
@@ -735,12 +735,12 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-bl-date strong { display: block; color: var(--gh-text-secondary); font-weight: 600; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bl-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bl-h { margin: 0; font-family: var(--gh-font-heading); font-size: 18px; line-height: 24px; font-weight: 600; letter-spacing: -0.01em; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bl-h a { color: var(--gh-text); text-decoration: none; border-radius: 4px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bl-h a:hover { text-decoration: underline; text-underline-offset: 3px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bl-h a { color: var(--gh-text) !important; text-decoration: none !important; border-radius: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bl-h a:hover { text-decoration: underline !important; text-underline-offset: 3px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bl-p { margin: 0; font-size: 14.5px; line-height: 22px; color: var(--gh-text-secondary); max-width: 62ch; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bl-ft { display: flex; align-items: center; gap: 14px; margin-top: 6px; flex-wrap: wrap; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bl-read { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px 0 0; font-size: 14px; font-weight: 600; color: var(--gh-color-primary); text-decoration: none; border-radius: 6px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bl-read:hover { text-decoration: underline; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bl-read { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px 0 0; font-size: 14px; font-weight: 600; color: var(--gh-color-primary) !important; text-decoration: none !important; border-radius: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bl-read:hover { text-decoration: underline !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bl-meta { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--gh-text-muted); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bl-meta .gh-i { width: 14px; height: 14px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bl-skel { padding: 22px 24px; display: grid; grid-template-columns: 112px 1fr; gap: 20px; }
@@ -752,24 +752,24 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-stale { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: var(--gh-radius-md); background: var(--gh-surface-card); border: 1px solid var(--gh-border); border-left: 3px solid var(--gh-status-warning-solid); font-size: 14px; line-height: 20px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-stale strong { display: block; font-weight: 600; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-stale span { color: var(--gh-text-secondary); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-bl.is-stale .gh-bl-read { color: var(--gh-text-secondary); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bl.is-stale .gh-bl-read { color: var(--gh-text-secondary) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-aside { display: flex; flex-direction: column; gap: 16px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-about { padding: 20px; border-radius: var(--gh-radius-lg); background: var(--gh-surface-card); border: 1px solid var(--gh-border); display: flex; flex-direction: column; gap: 10px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-about h2 { margin: 0; font-size: 15px; line-height: 20px; font-weight: 600; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-about p { margin: 0; font-size: 13.5px; line-height: 20px; color: var(--gh-text-secondary); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-mini { list-style: none; margin: 0; padding: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-mini li + li { border-top: 1px solid var(--gh-border); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-odp-mini a { display: block; padding: 10px 0; text-decoration: none; color: var(--gh-text); font-size: 14px; line-height: 20px; font-weight: 500; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-odp-mini a:hover { text-decoration: underline; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-odp-mini a { display: block; padding: 10px 0; text-decoration: none !important; color: var(--gh-text) !important; font-size: 14px; line-height: 20px; font-weight: 500; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-odp-mini a:hover { text-decoration: underline !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-mini time { display: block; font-size: 12px; color: var(--gh-text-muted); font-weight: 400; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp { max-width: 760px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-h { margin: 14px 0 0; font-family: var(--gh-font-heading); font-size: 38px; line-height: 46px; font-weight: 500; letter-spacing: -0.024em; color: var(--gh-text); max-width: 24ch; text-wrap: balance; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-bottom: 20px; border-bottom: 1px solid var(--gh-border); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-copy { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--gh-text-secondary); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-copy:hover { background: var(--gh-surface-hover); color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-copy { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid transparent; background: transparent !important; color: var(--gh-text-secondary) !important; font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-copy:hover { background: var(--gh-surface-hover) !important; color: var(--gh-text) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-copy .gh-i { width: 16px; height: 16px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-copy.is-copied { color: var(--gh-status-success-fg); background: var(--gh-status-success-bg); border-color: var(--gh-status-success-border, transparent); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-copy.is-copied { color: var(--gh-status-success-fg) !important; background: var(--gh-status-success-bg) !important; border-color: var(--gh-status-success-border, transparent) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-body { margin-top: 28px; max-width: 68ch; font-size: 17px; line-height: 30px; color: var(--gh-text-secondary); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-body > p { margin: 0 0 18px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-body > p:first-child { color: var(--gh-text); font-size: 18px; line-height: 30px; }
@@ -777,83 +777,69 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-body ul { margin: 0 0 18px; padding-left: 22px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-body li { margin: 0 0 8px; padding-left: 4px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-body li::marker { color: var(--gh-color-primary); }
-:is(.ghca-ui, #ghca-ui-scope) .gh-bp-src { margin-top: 32px; padding: 20px; border: 1px solid var(--gh-border); border-radius: var(--gh-radius-lg); background: var(--gh-surface-card); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bp-src { margin-top: 32px; padding: 20px; border: 1px solid var(--gh-border); border-radius: var(--gh-radius-lg); background: var(--gh-surface-card) !important; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-src .gh-bul-srcmeta { flex: 1 1 220px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-note { margin-top: 24px; display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px; border-radius: var(--gh-radius-md); background: var(--gh-surface-sunken); font-size: 13.5px; line-height: 20px; color: var(--gh-text-secondary); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-note .gh-i { width: 16px; height: 16px; margin-top: 2px; flex: none; color: var(--gh-text-muted); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-nav { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--gh-border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-ft .gh-bul-open { margin-right: 6px; }
-
-/* Plugin adapter: page placement, real overlays, states the boards draw as static frames. */
 :is(.ghca-ui, #ghca-ui-scope) [hidden] { display: none !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-app { display: block; width: 100%; max-width: none; margin: 0; padding: 0; text-align: left; font-style: normal; font-weight: 400; letter-spacing: normal; text-transform: none; word-spacing: normal; }
 :is(.ghca-ui, #ghca-ui-scope).ghca-ui--bleed { position: relative; box-sizing: border-box; width: calc(100vw - var(--ghca-ui-sbw, 0px)) !important; max-width: calc(100vw - var(--ghca-ui-sbw, 0px)) !important; margin-left: calc(50% - 50vw + var(--ghca-ui-sbw, 0px) / 2) !important; margin-right: calc(50% - 50vw + var(--ghca-ui-sbw, 0px) / 2) !important; }
-/* WordPress block layouts and page builders pin children with !important auto margins and content-size max-widths; the bleed wrapper must escape them. */
 :is(.ghca-ui, #ghca-ui-scope) .gh-main { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direction: column; gap: 24px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ov.is-active { display: flex; flex-direction: column; gap: 24px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ov:focus { box-shadow: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 8px; font-size: 12px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-help-row { padding: 18px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-help-row > .gh-stat-ico { width: 44px; height: 44px; background: var(--gh-surface-card); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-help-row > .gh-stat-ico { width: 44px; height: 44px; background: var(--gh-surface-card) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-help-row > div { flex: 1 1 0%; min-width: 260px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-health-ft a { color: var(--gh-status-danger-fg); font-weight: 600; text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-health-ft a:is(:link, :visited, :hover, :focus, :active), :is(.ghca-ui, #ghca-ui-scope) .gh-health-ft a { color: var(--gh-status-danger-fg) !important; font-weight: 600; text-decoration: none !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-scope-note { margin-top: 2px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-tabs .gh-tab { font-family: inherit; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-chrome { background: var(--gh-surface-page); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-pagehead-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-scope { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--gh-border-strong); border-radius: var(--gh-radius-md); background: var(--gh-surface-card); color: var(--gh-text); font-size: 13px; font-weight: 500; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-nav a[aria-current="true"] { color: var(--gh-color-primary); background: var(--gh-surface-brand-subtle); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-nav a[aria-current="true"] { color: var(--gh-color-primary) !important; background: var(--gh-surface-brand-subtle) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ann-main { flex: 1 1 0%; min-width: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ann-acts { display: inline-flex; flex: none; gap: 2px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-ann-link { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--gh-text-link); text-decoration: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-health-note { margin-top: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-link { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--gh-text-link) !important; text-decoration: none !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-step button:disabled { opacity: .4; cursor: default; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-copy.is-copied { color: var(--gh-status-success-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-copy.is-copied { color: var(--gh-status-success-fg) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-main { padding-top: 28px; padding-bottom: 56px; display: flex; flex-direction: column; gap: 20px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ovp-empty { padding: 8px 0 4px; color: var(--gh-text-muted); font-size: 13px; line-height: 18px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-mark.has-img::after { display: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-mark.has-img { background: var(--gh-surface-card); }
-
-/* Ticker: the track only scrolls once JS has appended the aria-hidden copy. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-mark.has-img { background: var(--gh-surface-card) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ticker:not(.is-animated) .gh-ticker-track { animation: none; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ticker-item a { cursor: pointer; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ticker-msg { flex: 1; min-width: 0; display: flex; align-items: center; padding: 0 16px; font-size: 13px; line-height: 18px; color: var(--gh-text-secondary); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ticker-state { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 12px; color: var(--gh-status-warning-fg); border-left: 1px solid var(--gh-border); white-space: nowrap; }
-
-/* Drawer: the board frames are absolute inside a 1440 artboard; on a real page they are fixed to the viewport. */
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-layer { position: fixed; inset: 0; z-index: 100000; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-layer .gh-scrim { position: fixed; inset: 0; z-index: 0; cursor: pointer; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-layer .gh-drawer.gh-bul { position: fixed; z-index: 1; top: 0; right: 0; bottom: 0; height: 100%; width: min(480px, 100%); box-shadow: var(--gh-shadow-3); outline: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-sum p { white-space: pre-line; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-x, :is(.ghca-ui, #ghca-ui-scope) .gh-bul-step button { padding: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-note, :is(.ghca-ui, #ghca-ui-scope) .gh-bp-note { margin-bottom: 0; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-copy-status { margin-left: 4px; font-size: 12.5px; color: var(--gh-status-success-fg); }
-
-/* Library and full page. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-copy-status { margin-left: 4px; font-size: 12.5px; color: var(--gh-status-success-fg) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-chiprow { margin-top: 12px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-tools form { display: contents; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bl-read { cursor: pointer; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-odp-about strong { font-weight: 600; color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-about strong { font-weight: 700; color: inherit; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-about > .gh-bul-chip { align-self: flex-start; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bp-body > p:last-child { margin-bottom: 0; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns a { text-decoration: none; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-skip { position: absolute; left: 8px; top: -60px; z-index: 100001; padding: 8px 12px; border-radius: 8px; background: var(--gh-surface-card); color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns a { text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-skip { position: absolute; left: 8px; top: -60px; z-index: 100001; padding: 8px 12px; border-radius: 8px; background: var(--gh-surface-card) !important; color: var(--gh-text) !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-skip:focus { top: 8px; }
 body.gh-ui-body { margin: 0; background: #F3EFEA; }
-
-/* Legacy tabs keep their existing dashboard.css typography. */
 :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-legacy { font-family: var(--ent-font-sans); font-size: 16.1px; line-height: 1.5; color: var(--ent-text); letter-spacing: normal; }
-
 @media (max-width: 720px) {
   :is(.ghca-ui, #ghca-ui-scope) .gh-appbar-in { gap: 8px 16px; padding: 10px 0; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo { flex: 1 1 auto; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-nav { order: 3; flex: 1 1 100%; }
 }
-
-/* Phone layouts from the board's 390 px frames (.gh-phone), applied by viewport width. */
 @media (max-width: 600px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-odp { font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-mark { width: 30px; height: 30px; font-size: 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-name { font-size: 15px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-odp-hd h1 { font-size: 28px; line-height: 34px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-odp-intro { font-size: 15px; line-height: 23px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-odp-tools { flex-direction: column; align-items: stretch; }
@@ -874,5 +860,21 @@ body.gh-ui-body { margin: 0; background: #F3EFEA; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-bul-bd { padding: 20px 20px 24px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-bul-h { font-size: 24px; line-height: 30px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-bul-ft { flex-wrap: wrap; gap: 6px; padding: 12px 16px 24px; }
-  :is(.ghca-ui, #ghca-ui-scope) .gh-bul-ft .gh-btn { min-height: 48px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bul-ft .gh-btn { min-height: 48px; padding: 0 16px; font-size: var(--gh-text-sm); gap: 8px; }
 }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--native { font: inherit; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--static { cursor: default; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--static:hover { background: var(--gh-surface-card) !important; border-color: var(--gh-border-strong) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-card-hd--rule + .gh-ovp-bd { padding-top: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) :where(.gh-app a:not(.gh-legacy *)) { background-color: transparent !important; }
+:is(.ghca-ui, #ghca-ui-scope) :where(.gh-app a:not(.gh-legacy *) :is(strong, b)) { color: inherit !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:visited, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:focus, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:active { color: var(--gh-agency-ink, var(--gh-text)) !important; text-decoration: none !important; box-shadow: none !important; background-color: var(--gh-surface-card) !important; border-color: var(--gh-border) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:active { background-color: var(--gh-agency-soft, var(--gh-surface-hover)) !important; border-color: var(--gh-agency-ink, var(--gh-border-strong)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)) !important; outline-offset: 2px !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink strong, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink .gh-i { color: inherit !important; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink strong span { color: inherit !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink > span > span { color: var(--gh-text-muted) !important; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:visited, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:active, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:visited, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:focus, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:active { background-color: var(--gh-agency, var(--gh-color-primary)) !important; color: var(--gh-agency-on, var(--gh-color-on-primary)) !important; border-color: transparent !important; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:active, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:active { background-color: var(--gh-agency-hover, var(--gh-color-primary-hover)) !important; color: var(--gh-agency-on-hover, var(--gh-color-on-primary)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)) !important; outline-offset: 2px !important; box-shadow: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary .gh-i { color: inherit !important; }

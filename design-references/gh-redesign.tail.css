@@ -10,7 +10,7 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-help-row { padding: 18px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-help-row > .gh-stat-ico { width: 44px; height: 44px; background: var(--gh-surface-card); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-help-row > div { flex: 1 1 0%; min-width: 260px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-health-ft a { color: var(--gh-status-danger-fg); font-weight: 600; text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-health-ft a:is(:link, :visited, :hover, :focus, :active), :is(.ghca-ui, #ghca-ui-scope) .gh-health-ft a { color: var(--gh-status-danger-fg); font-weight: 600; text-decoration: none; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-scope-note { margin-top: 2px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-tabs .gh-tab { font-family: inherit; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-chrome { background: var(--gh-surface-page); }
