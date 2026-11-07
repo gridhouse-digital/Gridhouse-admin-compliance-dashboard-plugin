@@ -156,6 +156,33 @@ Suggested staging checks for Taz, after the package is approved for staging (fic
 7. Redesign off: the legacy Overdue, Courses and Certificates tabs are as before.
 8. Elementor editor: follow `docs/staging-elementor-loading-diagnostics.md`; do not disable plugins or change settings without approval.
 
+## Package
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-d93f640.zip` |
+| Size | 647,355 bytes |
+| SHA-256 | `556295da6a07f0e983d8861949216918ddaba11fb753bbf9da8edd505e115609` |
+| Built from | `d93f6404c85190d77419da2ea839d3099eab8538` on `gridhouse-overview-odp-bulletins-af45` (PR 19), plugin version `1.7.3-rc.8` |
+| Contents | Cumulative Slices 1–4. 161 entries: 139 runtime files, `BUILD.txt`, 21 folder entries, under one root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`. |
+| Included | `gridhouse-admin-compliance-dashboard.php`, `includes/`, `assets/` (with the self-hosted Wix Madefor fonts and `OFL.txt`), `README.md`, `TESTING.md`, `BUILD.txt` |
+| Excluded | `tests/`, `docs/`, `design-references/`, dotfiles. As in earlier packages, they stay in the repository. |
+| Built by | `tools/build-package.py` (added in the commit after the build). It refuses to overwrite an existing file. A rebuild gives the same 139 runtime files; the ZIP checksum differs because `BUILD.txt` records the build time. |
+
+The tested runtime commit `e1370cb` and the build commit `d93f640` have no runtime difference: the commit between them changed only `docs/`. Later commits on the branch change only `docs/` and `tools/`; `BUILD.txt` names the build commit.
+
+Verification of the archive (synthetic, in this environment):
+
+1. `unzip -t`: no errors.
+2. One root folder, and the main file at `Gridhouse-admin-compliance-dashboard-plugin-main/gridhouse-admin-compliance-dashboard.php`.
+3. The file list equals `git ls-tree` of the commit for the included paths (139 files), and every file is byte-identical to its git blob.
+4. The SHA-256 manifest inside `BUILD.txt` verifies against the extracted files.
+5. The four `woff2` fonts that `gh-redesign.css` references are present. All 71 `require` targets in the packaged PHP resolve inside the package. `php -l` passes on every PHP file and `node --check` on every script.
+6. Running the repository's tests against the extracted package (tests copied in next to it):
+   - all 72 PHP scripts and the JS tests pass;
+   - the Playwright tests pass: lists 51, tables 53, drawer 159, plus the settings and manage-users tests.
+7. Building again with the same name was refused.
+
 ## Install and rollback
 
 **Root folder.** The ZIP's single top-level folder is `Gridhouse-admin-compliance-dashboard-plugin-main/`, the folder staging already uses (`wp-content/plugins/Gridhouse-admin-compliance-dashboard-plugin-main/gridhouse-admin-compliance-dashboard.php`). Uploading it through Plugins → Add New → Upload Plugin makes WordPress offer **Replace current with uploaded**, which updates the existing plugin in place. A ZIP with a different root folder would install a second copy beside it; do not rename the folder.
