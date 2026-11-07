@@ -290,7 +290,25 @@ Suggested staging checks for Taz, after the package is approved for staging (fic
 
 ## Package
 
-### Bulletin-integration build (current)
+### Corrections build (current)
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-51d8679.zip`, with sidecar `…-51d8679.BUILD.txt` |
+| Size | 650,065 bytes |
+| SHA-256 | `28459cf30cd99844b07cbc41f9259f20d227483ebfcb3069f510d4542c6bb3b0` |
+| Built from | `51d8679b6ac670df546287157d25018a37ab9361` on `gridhouse-overview-odp-bulletins-af45`, plugin version `1.7.3-rc.8` |
+| Contents | Cumulative: everything in `c6bc947`, plus Compliance health "Not started", the always-danger Overdue tile, the "Overdue & at risk" tab label, the phone Overview and tablet touch-target corrections, agency-brand menu links and the bulletin disclaimer spacing (`docs/compliance-health-and-design-audit.md`, section 3). 161 entries, same root folder and entry file. |
+| Difference from `c6bc947` | `assets/gh-redesign.css`, `includes/class-redesign.php` |
+| Interim build | `…-680d12e.zip` (650,035 bytes, SHA-256 `6b9f85c8b7bf2b524b789dccc9e395f1a1eb17977f1028af6b7fa29e4e20f628`): the same corrections without the tab rename. Kept, but superseded by this build. |
+
+Verification:
+
+- **Archive:** `unzip -t` reports no errors, with one root folder and the entry file at its expected path. The 139 files are byte-identical to the commit, and the manifest verifies. The sidecar's size and SHA-256 match, and both records carry the commit. `php -l` and `node --check` pass.
+- **Tests against the extracted package:** 75 PHP scripts, the JS and Playwright tests, and every browser suite pass (lists 51, tables 53, drawer 159, themed bulletin 34, page background 18, bulletin pages 24, corrections 17).
+- **No overwrite:** building again with the same name was refused, and all earlier builds are kept.
+
+### Bulletin-integration build (prepared, not installed)
 
 | | |
 | --- | --- |
