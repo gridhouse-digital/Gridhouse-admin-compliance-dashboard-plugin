@@ -39,9 +39,20 @@ final class GHCA_ACD_Redesign {
 			array( 'key' => 'progress', 'label' => __( 'In progress', 'ghca-acd' ), 'count' => (int) ( $aggregate['in_progress_employees'] ?? 0 ), 'tone' => 'info' ),
 			array( 'key' => 'overdue', 'label' => __( 'Overdue', 'ghca-acd' ), 'count' => (int) ( $aggregate['overdue_employees'] ?? 0 ), 'tone' => 'danger' ),
 		);
-		$other = $total - array_sum( array_column( $slices, 'count' ) );
-		if ( $other > 0 ) {
-			$slices[] = array( 'key' => 'other', 'label' => __( 'Other', 'ghca-acd' ), 'count' => $other, 'tone' => 'neutral' );
+		// Not started: the employees the four counts above leave out, counted from the same records and the same
+		// status the Employees tab's "Not Started" filter matches. Not part of the compliance rate.
+		$not_started = 0;
+		foreach ( (array) ( $aggregate['employees'] ?? array() ) as $employee ) {
+			if ( 'not_started' === (string) ( $employee['status_slug'] ?? '' ) ) {
+				++$not_started;
+			}
+		}
+		$slices[] = array( 'key' => 'not_started', 'label' => __( 'Not started', 'ghca-acd' ), 'count' => $not_started, 'tone' => 'neutral' );
+		// Anyone left over has a status none of the rows maps. None does today; if one ever appears they stay visible
+		// and counted, under a label that says so, so the rows always add up to the employees in scope.
+		$unmapped = $total - array_sum( array_column( $slices, 'count' ) );
+		if ( $unmapped > 0 ) {
+			$slices[] = array( 'key' => 'unmapped', 'label' => __( 'Status not recognised', 'ghca-acd' ), 'count' => $unmapped, 'tone' => 'muted' );
 		}
 		$caption = $total < 1 ? __( 'No employees in scope', 'ghca-acd' ) : __( 'Compliant', 'ghca-acd' );
 		return array(
@@ -65,8 +76,8 @@ final class GHCA_ACD_Redesign {
 		return array(
 			array( 'label' => __( 'Employees', 'ghca-acd' ), 'value' => (string) $total, 'sub' => __( 'Active in this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-employees' ),
 			array( 'label' => __( 'Tracked courses', 'ghca-acd' ), 'value' => (string) $tracked_courses, 'sub' => __( 'In this view', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-courses' ),
-			array( 'label' => __( 'In progress', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['in_progress_employees'] ?? 0 ), 'sub' => __( 'Includes not started', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-employees' ),
-			array( 'label' => __( 'Overdue', 'ghca-acd' ), 'value' => (string) $overdue, 'sub' => __( 'Employees · view list', 'ghca-acd' ), 'tone' => $overdue > 0 ? 'danger' : '', 'tab' => 'ghca-tab-overdue' ),
+			array( 'label' => __( 'In progress', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['in_progress_employees'] ?? 0 ), 'sub' => __( 'Includes new hires not started', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-employees' ),
+			array( 'label' => __( 'Overdue', 'ghca-acd' ), 'value' => (string) $overdue, 'sub' => __( 'Employees · view list', 'ghca-acd' ), 'tone' => 'danger', 'tab' => 'ghca-tab-overdue' ), // Always the board's light-red Overdue tile, whatever the count.
 			array( 'label' => __( 'Certificates', 'ghca-acd' ), 'value' => (string) (int) ( $aggregate['certificates_issued'] ?? 0 ), 'sub' => __( 'Issued, active employees', 'ghca-acd' ), 'tone' => '', 'tab' => 'ghca-tab-certificates' ),
 			array(
 				'label' => __( 'Completion', 'ghca-acd' ),
@@ -422,6 +433,7 @@ final class GHCA_ACD_Redesign {
 			'info'    => 'var(--gh-status-info-solid)',
 			'danger'  => 'var(--gh-status-danger-solid)',
 			'neutral' => 'var(--gh-status-neutral-solid)',
+			'muted'   => 'var(--gh-border-strong)',
 		);
 	}
 

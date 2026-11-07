@@ -39,6 +39,7 @@ $js     = $assets . '/dashboard.js';
 $aggregate = array( 'total_employees' => $count, 'completed_employees' => 3, 'expiring_soon_employees' => 3, 'in_progress_employees' => 2, 'overdue_employees' => 2, 'compliance_rate' => 60, 'certificates_issued' => 8 );
 $model     = array(
 	'theme'        => $theme,
+	'brand_style'  => getenv( 'GHCA_PREVIEW_BRAND' ) ? GHCA_ACD_Redesign::agency_brand_style( (string) getenv( 'GHCA_PREVIEW_BRAND' ) ) : '',
 	'scope'        => 'Scope: all 3 groups',
 	'as_of'        => 'As of today, 1:24 PM',
 	'active'       => $count . ' active employees',

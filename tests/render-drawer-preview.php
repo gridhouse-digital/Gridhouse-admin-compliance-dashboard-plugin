@@ -51,6 +51,7 @@ $agg    = array( 'total_employees' => 10, 'completed_employees' => 3, 'expiring_
 $panel  = '<div class="gh-card gh-tcard"><p>Synthetic employee list.</p><a class="gh-btn gh-btn--secondary" id="open-drawer" href="https://example.test/user-report?user_id=42" data-ghca-employee-drawer="42">Open Jordan Ellis</a></div>';
 $page   = GHCA_ACD_Redesign::render_from_model( array(
 	'theme'           => $theme,
+	'brand_style'  => getenv( 'GHCA_PREVIEW_BRAND' ) ? GHCA_ACD_Redesign::agency_brand_style( (string) getenv( 'GHCA_PREVIEW_BRAND' ) ) : '',
 	'scope'           => 'Scope: all 3 groups',
 	'as_of'           => 'As of today, 1:24 PM',
 	'active'          => '10 active employees',

@@ -44,6 +44,7 @@ $agg = GHCA_ACD_Data_Provider::get_aggregate();
 $assets = getenv( 'GHCA_PREVIEW_ASSETS' ) ?: realpath( __DIR__ . '/../assets' );
 $model  = array(
 	'theme'        => $theme,
+	'brand_style'  => getenv( 'GHCA_PREVIEW_BRAND' ) ? GHCA_ACD_Redesign::agency_brand_style( (string) getenv( 'GHCA_PREVIEW_BRAND' ) ) : '',
 	'scope'        => 'Scope: all 3 groups',
 	'as_of'        => 'As of today, 1:24 PM',
 	'active'       => count( $agg['employees'] ) . ' active employees',

@@ -1,6 +1,6 @@
 # Compliance health "Other", and a rendered-style audit of Slices 1–4
 
-Findings and proposals only. **Nothing here has been implemented.** Each proposal waits for approval. Branch `gridhouse-overview-odp-bulletins-af45`; plugin code as of `c6bc947`.
+Branch `gridhouse-overview-odp-bulletins-af45`. Sections 1–2 are the findings as reported (plugin code as of `c6bc947`). **Section 3 records what was then approved and implemented**, and how it was verified.
 
 ## 1. What feeds "Other" in Compliance health
 
@@ -133,3 +133,40 @@ BOARDS_DIR=<canvas project folder> OUT_DIR=<out> node tools/design-audit/audit.c
 ### How the corrections would be made
 
 All proposed CSS goes into `design-references/gh-redesign.tail.css`, under the existing `:is(.ghca-ui, #ghca-ui-scope)` scope and the existing phone media query, using the board's tokens (`--gh-touch`, the status and text tokens). It would then be rebuilt into `assets/gh-redesign.css`, so nothing reaches the WordPress theme or the legacy screens. After implementation the audit would be rerun, and the new values added to the browser suites.
+
+## 3. Implemented after approval
+
+| Item | Change | Where |
+| --- | --- | --- |
+| "Other" → **Not started** | `health_from_aggregate()` counts `not_started` from the aggregate's employee records, the status the Employees "Not Started" filter matches, and shows it as "Not started" in the neutral tone. Compliant, Expiring soon, In progress, Overdue and the compliance rate are unchanged. **"Status not recognised"** appears only when an employee's status is none of the mapped ones; none is today. The rows always add up to the employees in scope. No "No courses assigned" row. | `includes/class-redesign.php` |
+| In progress subtitle | "Includes new hires not started" | `includes/class-redesign.php` |
+| **Overdue KPI tile** (added request) | Always `gh-stat--danger`: the board's light-red surface with red label, number and icon, at any count including 0. The real count and the link to the Overdue tab are unchanged. The count-dependent condition was removed. | `includes/class-redesign.php` |
+| Phone Overview (≤ 719px) | Overview panel base 15px; two KPI columns; KPI value 24/30; KPI tile padding 12/14/14; card headers 14px top; plain card header 2px bottom; card titles −0.012em. The approved divided headers keep their divider. Re-checking the earlier "chip", "small text" and "h4 margin" pairs showed they compared different elements: the chip renders at the same 22px height on both sides. No change was made for those. | `design-references/gh-redesign.tail.css` |
+| Tablet (720–1023px) | Minimum 44px (`--gh-touch`) on buttons, inputs, selects, tabs, sub-tabs, menu items, checkbox labels, the pager's per-page select and pager buttons; icon buttons at least 44px wide. These are minimums only, so nothing shrinks. Desktop sizes return from 1024px. Inputs and selects are 44px too: the tablet board's note says "every control is 44px tall", although the board's own CSS renders them at 38px. | `design-references/gh-redesign.tail.css` |
+| Menu links (drawer More menu, Overdue row menu) | Agency brand ink (`--gh-agency-ink`, which `agency_brand_style()` darkens to 4.5:1 on white and on the hover tint), falling back to the theme's link token, never a fixed blue. Hover: agency tint plus underline. Keyboard focus: agency tint plus a 2px ring in the agency ink. Menu buttons keep the text colour. | `design-references/gh-redesign.tail.css` |
+| Bulletin disclaimer | `.gh-bp-note` keeps its 1em (13.5px) bottom margin, as on the ODP-Page board. The bulletin drawer's note keeps 0. | `design-references/gh-redesign.tail.css` |
+
+All CSS stays under `:is(.ghca-ui, #ghca-ui-scope)` and is rebuilt into `assets/gh-redesign.css`. That file loads only with the redesign on, so it reaches neither the WordPress theme nor the legacy screens.
+
+### Verification (synthetic; not the Akansoh site)
+
+- **`node tests/browser-corrections.cjs` (15 checks), Akansoh theme with an agency colour (`#2f5d3a`):**
+  - The health legend reads Compliant, Expiring soon, In progress, Overdue, Not started, and adds up to the 12 in scope; the rate is unchanged.
+  - The Overdue tile has identical danger styling at 2 and at 0 (danger tokens, number contrast ≥ 4.5:1), the real count, and a link that opens the Overdue tab.
+  - The phone Overview values are as listed above, with no sideways scroll; desktop is unchanged.
+  - At 720, 834 and 1023px every control is ≥ 44px on the Employees, Overdue, Courses and Certificates tabs (12–25 controls each) and in the drawer. None is smaller than on desktop, and desktop sizes return at 1024px.
+  - Menu links in the drawer and the Overdue row: agency ink `rgb(47, 93, 58)`, not `rgb(60, 88, 116)`; AA on white and on the hover tint; hover tint and underline; keyboard focus ring 2px in the agency ink (≥ 3:1). Menu buttons keep the text colour.
+  - The disclaimer keeps 13.5px below it.
+- **`php tests/test-odp-bulletins.php` (112 checks):**
+  - the health rows with every status, the rows summing to the total, the unmapped row only for an unknown status, and the rate unchanged;
+  - the new subtitle;
+  - the Overdue tile tone at 1 and at 0, with its count and link.
+- **Rendered-style audit rerun in the Gridhouse and Akansoh themes:** 343 comparisons each, **324 identical** (was 315). Every approved correction now matches the board: phone KPI values and tiles, plain header padding, card title tracking, tablet buttons, menu link colour, disclaimer spacing. The 19 remaining are the explained items in section 2, plus tablet inputs and selects at 44px rather than the board render's 38px (see above).
+- **Regression against the previous stylesheet** (overview, library, empty library, bulletin at 1440 and 390): changes only on the phone Overview (the approved phone rules) and the bulletin disclaimer. Everything else is unchanged.
+- **Legacy screens with the redesign off:**
+  - the golden checksums of the legacy Overdue, Courses and Certificates output still match;
+  - the Employees and Inactive legacy markup tests pass;
+  - the page-background test confirms the legacy `#eceff3` body.
+- **All suites:** 75 PHP scripts, the JS and Playwright tests, and every browser suite (lists 51, tables 53, drawer 159, themed bulletin 34, page background 18, bulletin pages 24, corrections 15).
+
+Not verified: the real Akansoh site, its real agency colour, real devices (touch tablets) and the Purple theme. Hover and focus were checked on the menus; other components' hover states were not re-audited.

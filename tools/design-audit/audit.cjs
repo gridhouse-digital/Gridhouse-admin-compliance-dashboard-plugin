@@ -3,25 +3,27 @@
 // classes) on computed styles. Synthetic: the plugin side is the repository's preview scripts, not WordPress.
 //
 //   BOARDS_DIR=<folder with the canvas's project/*.dc.html> OUT_DIR=<output folder> node tools/design-audit/audit.cjs
+//   THEME=gridhouse|akansoh|purple (default gridhouse) renders both sides in that theme, without an agency colour.
 //   (SHOTS=1 also writes board and plugin screenshots per screen.) Results: $OUT_DIR/results.json
 const { chromium } = require('playwright'); const fs = require('fs'); const path = require('path'); const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '../..'); const A = process.env.OUT_DIR || path.join(require('os').tmpdir(), 'ghca-design-audit'); const B = process.env.BOARDS_DIR;
 if (!B) { console.error('Set BOARDS_DIR to the canvas project folder (…/project with *.dc.html).'); process.exit(2); }
 fs.mkdirSync(A, { recursive: true });
+const THEME = process.env.THEME || 'gridhouse';
 const MIME = { '.css': 'text/css', '.js': 'text/javascript', '.woff2': 'font/woff2' };
 const faces = fs.readFileSync(ROOT + '/design-references/gh-redesign.head.css', 'utf8').split('\n').filter((l) => l.startsWith('@font-face')).join('\n').replace(/url\('fonts\//g, "url('https://p.test/assets/fonts/");
 const boardCss = fs.readFileSync(ROOT + '/design-references/board-source.css', 'utf8');
 function boardPage(name) {
-  const body = execFileSync('node', [path.join(__dirname, 'expand.cjs'), B, name, 'gridhouse']).toString();
+  const body = execFileSync('node', [path.join(__dirname, 'expand.cjs'), B, name, THEME]).toString();
   return '<!doctype html><html><head><meta charset="utf-8"><style>' + faces + '\n' + boardCss + '\nbody{margin:0}</style></head><body>' + body + '</body></html>';
 }
 // Plugin pages, generated once.
 const P = path.join(A, 'plugin'); fs.mkdirSync(P, { recursive: true });
-const env = { ...process.env, GHCA_PREVIEW_ASSETS: 'https://p.test/assets' };
+const env = { ...process.env, GHCA_PREVIEW_ASSETS: 'https://p.test/assets', GHCA_PREVIEW_THEME: THEME, GHCA_PREVIEW_BRAND: '' };
 execFileSync('php', [ROOT + '/tests/render-redesign-preview.php', P], { env });
-execFileSync('php', [ROOT + '/tests/render-tables-preview.php', 'page', P], { env });
-execFileSync('php', [ROOT + '/tests/render-lists-preview.php', 'page', P], { env });
-execFileSync('php', [ROOT + '/tests/render-drawer-preview.php', 'page', P, 'gridhouse', ''], { env: { ...env, GHCA_PREVIEW_ENV: '{}' } });
+execFileSync('php', [ROOT + '/tests/render-tables-preview.php', 'page', P, THEME], { env });
+execFileSync('php', [ROOT + '/tests/render-lists-preview.php', 'page', P, THEME], { env });
+execFileSync('php', [ROOT + '/tests/render-drawer-preview.php', 'page', P, THEME, ''], { env: { ...env, GHCA_PREVIEW_ENV: '{}' } });
 for (const f of fs.readdirSync(P).filter((f) => f.endsWith('.html'))) { // phase-1 previews write absolute local paths
   fs.writeFileSync(path.join(P, f), fs.readFileSync(path.join(P, f), 'utf8').split(ROOT + '/assets').join('https://p.test/assets').replace(/https:\/\/(preview|example)\.test\/ajax/g, 'https://p.test/ajax'));
 }

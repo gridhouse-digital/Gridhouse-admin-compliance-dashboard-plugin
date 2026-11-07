@@ -17,6 +17,8 @@ require __DIR__ . '/../includes/odp/class-odp-ui.php';
 require __DIR__ . '/../includes/class-redesign.php';
 
 $out = $argv[1] ?? '/tmp/ghca-preview';
+$preview_theme = getenv( 'GHCA_PREVIEW_THEME' ) ?: 'gridhouse';
+$preview_brand = getenv( 'GHCA_PREVIEW_BRAND' ) ? GHCA_ACD_Redesign::agency_brand_style( (string) getenv( 'GHCA_PREVIEW_BRAND' ) ) : '';
 if ( ! is_dir( $out ) ) {
 	mkdir( $out, 0777, true );
 }
@@ -24,23 +26,22 @@ $css = realpath( __DIR__ . '/../assets/gh-redesign.css' );
 $js  = realpath( __DIR__ . '/../assets/gh-bulletins.js' );
 $banner = '<p class="gh-odp-status">SYNTHETIC PREVIEW. Not live compliance data and not a bulletin from the worker.</p>';
 
-$health = GHCA_ACD_Redesign::health_from_aggregate( array(
-	'total_employees' => 10,
-	'completed_employees' => 3,
+// Twelve synthetic employees: 3 compliant, 3 expiring soon, 2 in progress, 2 overdue, 2 not started.
+// GHCA_PREVIEW_ZERO_OVERDUE=1 moves the two overdue employees to in progress, to show the Overdue tile at zero.
+$zero_overdue = '1' === getenv( 'GHCA_PREVIEW_ZERO_OVERDUE' );
+$slugs        = array( 'completed', 'completed', 'completed', 'expiring_soon', 'expiring_soon', 'expiring_soon', 'in_progress', 'in_progress', $zero_overdue ? 'in_progress' : 'overdue', $zero_overdue ? 'in_progress' : 'overdue', 'not_started', 'not_started' );
+$agg          = array(
+	'employees'               => array_map( static function ( $slug ) { return array( 'status_slug' => $slug ); }, $slugs ),
+	'total_employees'         => 12,
+	'completed_employees'     => 3,
 	'expiring_soon_employees' => 3,
-	'in_progress_employees' => 2,
-	'overdue_employees' => 2,
-	'compliance_rate' => 60,
-) );
-$kpis = GHCA_ACD_Redesign::kpis_from_aggregate( array(
-	'total_employees' => 10,
-	'completed_employees' => 3,
-	'expiring_soon_employees' => 3,
-	'in_progress_employees' => 2,
-	'overdue_employees' => 2,
-	'compliance_rate' => 60,
-	'certificates_issued' => 8,
-), 6 );
+	'in_progress_employees'   => $zero_overdue ? 4 : 2,
+	'overdue_employees'       => $zero_overdue ? 0 : 2,
+	'compliance_rate'         => 50,
+	'certificates_issued'     => 8,
+);
+$health = GHCA_ACD_Redesign::health_from_aggregate( $agg );
+$kpis   = GHCA_ACD_Redesign::kpis_from_aggregate( $agg, 6 );
 $groups = GHCA_ACD_Redesign::sort_groups( array(
 	array( 'label' => 'Synthetic annual', 'risk' => 'high', 'rate' => 19, 'overdue' => 1, 'employees' => 2 ),
 	array( 'label' => 'Synthetic new hire', 'risk' => 'high', 'rate' => 33, 'overdue' => 1, 'employees' => 2 ),
@@ -48,7 +49,8 @@ $groups = GHCA_ACD_Redesign::sort_groups( array(
 	array( 'label' => 'Synthetic LPN', 'risk' => 'medium', 'rate' => 44, 'overdue' => 0, 'employees' => 1 ),
 ) );
 $overview = GHCA_ACD_Redesign::render_from_model( array(
-	'theme' => 'gridhouse',
+	'theme' => $preview_theme,
+	'brand_style' => $preview_brand,
 	'scope' => 'Scope: all 4 groups',
 	'as_of' => 'As of today, 1:24 PM',
 	'active' => '10 active employees',
@@ -132,14 +134,15 @@ $single = GHCA_ODP_UI::single( array(
 		'source_url' => 'https://example.test/source',
 	),
 ) );
-$shell = static function ( $title, $body ) use ( $css, $js, $banner ) {
+$shell = static function ( $title, $body ) use ( $css, $js, $banner, $preview_theme, $preview_brand ) {
 	return GHCA_ODP_UI::document( array(
 		'title' => $title,
 		'lang' => 'en',
 		'css' => $css,
 		'js' => $js,
 		'context' => 'admin',
-		'theme' => 'gridhouse',
+		'theme' => $preview_theme,
+	'brand_style' => $preview_brand,
 		'home_url' => 'overview.html',
 		'home_label' => 'Compliance dashboard',
 		'context_label' => 'Agency view',
@@ -183,8 +186,8 @@ $themed_single = GHCA_ODP_UI::single( array(
 $hostile_theme = getenv( 'GHCA_PREVIEW_HOSTILE' ) === '1';
 $theme_css     = 'body{margin:0;background:#fff;font-family:Georgia,serif;font-size:17px;line-height:1.7;color:#222}.site-header{background:#123;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center}.site-header a{color:#fff}.site-content{max-width:1100px;margin:0 auto;padding:0 20px}.site-footer{background:#222;color:#ddd;padding:24px}'
 	. ( $hostile_theme ? 'a{color:#0645ad!important;text-decoration:underline!important}h1,h2,h3{font-family:Georgia,serif!important;text-transform:uppercase!important}main{padding:40px!important;background:#fffbe6}ul,ol{margin:2em;padding-left:3em}button:hover{background:#00f!important;color:#fff!important}' : '' );
-$themed = static function ( $title, $body ) use ( $css, $js, $theme_css ) {
-	$frag = GHCA_ODP_UI::themed( array( 'context' => 'admin', 'theme' => 'gridhouse', 'library_url' => 'library-theme.html', 'body_html' => $body ) );
+$themed = static function ( $title, $body ) use ( $css, $js, $theme_css, $preview_theme, $preview_brand ) {
+	$frag = GHCA_ODP_UI::themed( array( 'context' => 'admin', 'theme' => $preview_theme, 'brand_style' => $preview_brand, 'library_url' => 'library-theme.html', 'body_html' => $body ) );
 	return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . $title . '</title><style>' . $theme_css . '</style><link rel="stylesheet" href="' . $css . '"></head>'
 		. '<body class="page gh-odp-page"><header class="site-header" id="site-header"><a class="site-logo" href="#">Akanso Staging</a><nav class="site-nav"><a href="#">Home</a> <a href="#">Dashboard</a></nav></header>'
 		. '<div class="site-content" id="content">' . $frag . '</div><footer class="site-footer" id="site-footer">Theme footer</footer><script src="' . $js . '"></script></body></html>';

@@ -231,15 +231,29 @@ check( false !== strpos( $empty_library, 'No ODP bulletins right now.' ) && fals
 
 $health = GHCA_ACD_Redesign::health_from_aggregate( array( 'total_employees' => 0, 'compliance_rate' => 0 ) );
 check( '—' === $health['center'] && false === strpos( $health['center'], '30' ), 'Empty scope is not a fake compliance percent' );
+// Ten employees, one of every status the provider can give, plus a second not_started.
+$slugs = array( 'completed', 'new_hire_completed', 'expiring_soon', 'in_progress', 'new_hire_in_progress', 'new_hire_not_started', 'overdue', 'expired', 'not_started', 'not_started' );
+$people = array_map( static function ( $slug ) { return array( 'status_slug' => $slug ); }, $slugs );
 $populated = GHCA_ACD_Redesign::health_from_aggregate( array(
+	'employees' => $people,
 	'total_employees' => 10,
-	'completed_employees' => 3,
+	'completed_employees' => 2,
 	'expiring_soon_employees' => 1,
-	'in_progress_employees' => 2,
+	'in_progress_employees' => 3,
 	'overdue_employees' => 2,
-	'compliance_rate' => 40,
+	'compliance_rate' => 30,
 ) );
-check( 40 === $populated['rate'] && 2 === $populated['slices'][4]['count'] && 'Other' === $populated['slices'][4]['label'], 'Unclassified employees stay visible as Other' );
+$labels = array_column( $populated['slices'], 'label' );
+check( array( 'Compliant', 'Expiring soon', 'In progress', 'Overdue', 'Not started' ) === $labels, 'Health rows: Compliant, Expiring soon, In progress, Overdue, Not started; no Other' );
+check( 2 === $populated['slices'][4]['count'] && 'not_started' === $populated['slices'][4]['key'], 'Not started counts status not_started from the employee records' );
+check( 10 === array_sum( array_column( $populated['slices'], 'count' ) ), 'Rows add up to every employee in scope' );
+check( 30 === $populated['rate'] && '30%' === $populated['center'], 'Compliance rate is the provider\'s, unchanged' );
+check( false === strpos( implode( '|', $labels ), 'Other' ), 'The vague Other label is gone' );
+$people[] = array( 'status_slug' => 'something_new' );
+$unmapped = GHCA_ACD_Redesign::health_from_aggregate( array( 'employees' => $people, 'total_employees' => 11, 'completed_employees' => 2, 'expiring_soon_employees' => 1, 'in_progress_employees' => 3, 'overdue_employees' => 2, 'compliance_rate' => 27 ) );
+check( 'Status not recognised' === end( $unmapped['slices'] )['label'] && 1 === end( $unmapped['slices'] )['count'] && 11 === array_sum( array_column( $unmapped['slices'], 'count' ) ), 'A genuinely unmapped status stays visible as Status not recognised' );
+$none_new = GHCA_ACD_Redesign::health_from_aggregate( array( 'employees' => array( array( 'status_slug' => 'completed' ) ), 'total_employees' => 1, 'completed_employees' => 1, 'compliance_rate' => 100 ) );
+check( ! in_array( 'Status not recognised', array_column( $none_new['slices'], 'label' ), true ), 'No unmapped row when every status is mapped' );
 check( 'Compliant' === $populated['caption'], 'The donut centre label is exactly Compliant' );
 $kpis = GHCA_ACD_Redesign::kpis_from_aggregate( array(
 	'total_employees' => 4,
@@ -251,6 +265,10 @@ $kpis = GHCA_ACD_Redesign::kpis_from_aggregate( array(
 	'certificates_issued' => 7,
 ), 6 );
 check( '6' === $kpis[1]['value'] && '50%' === $kpis[5]['value'] && false !== strpos( $kpis[5]['sub'], '2 of 4 employees' ), 'KPIs use the existing rate and tracked course count' );
+check( 'Includes new hires not started' === $kpis[2]['sub'], 'In progress subtitle says what it counts' );
+check( 'danger' === $kpis[3]['tone'] && '1' === $kpis[3]['value'] && 'ghca-tab-overdue' === $kpis[3]['tab'], 'Overdue KPI: danger tone, real count, opens the Overdue tab' );
+$zero = GHCA_ACD_Redesign::kpis_from_aggregate( array( 'total_employees' => 3, 'completed_employees' => 3, 'overdue_employees' => 0, 'compliance_rate' => 100 ), 2 );
+check( 'danger' === $zero[3]['tone'] && '0' === $zero[3]['value'] && 'ghca-tab-overdue' === $zero[3]['tab'], 'Overdue KPI keeps the danger tone at zero, with the real count 0 and the same link' );
 $sorted = GHCA_ACD_Redesign::sort_groups( array(
 	array( 'label' => 'Low', 'risk' => 'low', 'rate' => 100, 'overdue' => 0, 'employees' => 1 ),
 	array( 'label' => 'High', 'risk' => 'high', 'rate' => 10, 'overdue' => 2, 'employees' => 2 ),
@@ -280,9 +298,9 @@ check( false !== strpos( $overview, 'class="ghca-ui' ) && false !== strpos( $ove
 check( false !== strpos( $overview, 'gh-grid gh-grid--kpi gh-kpi--overview' ) && 6 === preg_match_all( '/class="gh-stat(?: gh-stat--[a-z]+)?"/', $overview ), 'Overview renders the six-figure board strip' );
 check( false !== strpos( $overview, 'class="gh-ovp gh-ovp--3"' ) && false !== strpos( $overview, 'stroke-dasharray=' ), 'Overview uses the board grid and SVG donut' );
 check( false === strpos( $overview, 'Issued, all time' ) && false !== strpos( $overview, 'Issued, active employees' ), 'Certificates are labeled as the active view' );
-check( false === strpos( $overview, 'Training now' ) && false !== strpos( $overview, 'Includes not started' ), 'In progress does not say training now' );
-check( false !== strpos( $overview, 'aria-label="40% compliant: completed or expiring soon"' ), 'The donut keeps the rate definition as its accessible label only' );
-check( false !== strpos( $overview, '<div class="gh-donut-c"><strong>40%</strong><span>Compliant</span></div>' ), 'The donut centre reads the percent and Compliant only' );
+check( false === strpos( $overview, 'Training now' ) && false !== strpos( $overview, 'Includes new hires not started' ), 'In progress does not say training now, and names new hires' );
+check( false !== strpos( $overview, 'aria-label="30% compliant: completed or expiring soon"' ), 'The donut keeps the rate definition as its accessible label only' );
+check( false !== strpos( $overview, '<div class="gh-donut-c"><strong>30%</strong><span>Compliant</span></div>' ), 'The donut centre reads the percent and Compliant only' );
 check( false === strpos( $overview, 'The percent is the existing compliance rate' ) && false === strpos( $overview, 'gh-health-note' ), 'No visible rate explanation on the health card' );
 check( false === strpos( $overview, 'gh-appbar' ) && false === strpos( $overview, 'gh-nav' ) && false === strpos( $overview, '<header' ), 'The embedded overview has no app bar or site navigation of its own' );
 check( false === strpos( $overview, '<footer' ) && false === strpos( $overview, 'Powered by Gridhouse Digital' ) && false !== strpos( $overview, 'gh-help-row' ), 'No plugin footer; the support strip stays' );

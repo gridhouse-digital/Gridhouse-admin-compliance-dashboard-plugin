@@ -39,7 +39,9 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-odp-layer .gh-drawer.gh-bul { position: fixed; z-index: 1; top: 0; right: 0; bottom: 0; height: 100%; width: min(480px, 100%); box-shadow: var(--gh-shadow-3); outline: 0; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-sum p { white-space: pre-line; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-bul-x, :is(.ghca-ui, #ghca-ui-scope) .gh-bul-step button { padding: 0; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-bul-note, :is(.ghca-ui, #ghca-ui-scope) .gh-bp-note { margin-bottom: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bul-note { margin-bottom: 0; }
+/* The bulletin page's disclaimer keeps the space below it that the ODP-Page board renders (the paragraph's own 1em). */
+:is(.ghca-ui, #ghca-ui-scope) .gh-bp-note { margin-bottom: 1em; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-copy-status { margin-left: 4px; font-size: 12.5px; color: var(--gh-status-success-fg); }
 
 /* Library and full page. */
@@ -237,7 +239,13 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-dr-more > summary { list-style: none; cursor: pointer; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-dr-more > summary::-webkit-details-marker { display: none; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-dr-menu { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 5; min-width: 260px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i { color: var(--gh-text); text-decoration: none; }
+/* Menu links use the agency's brand ink (darkened by agency_brand_style() to 4.5:1 on white and on the hover tint), not a
+   fixed blue; menu buttons keep the text colour. Hover and keyboard focus use the agency tint and ring on both. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i:visited { color: var(--gh-agency-ink, var(--gh-text-link)); text-decoration: none; }
+/* !important: the link reset above (:where(.gh-app a) background transparent) carries the build's !important guard. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-menu-i:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-menu-i:focus-visible { background-color: var(--gh-agency-soft, var(--gh-surface-hover)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i:focus-visible { color: var(--gh-agency-ink, var(--gh-text-link)); text-decoration: underline; text-underline-offset: 3px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-menu-i:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)) !important; outline-offset: -2px !important; box-shadow: none; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-menu-i { font: inherit; font-weight: 500; }
 
 /* Phone: the drawer is a full-screen sheet (M-Admin-Sheet). */
@@ -467,4 +475,26 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-cert-filters .gh-filters .gh-field { flex: 1 1 100%; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-cards--pad { padding: 12px 16px; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-tmount--card > .gh-pager { padding: 12px 16px; }
+}
+
+/* Tablet (720–1023px): the T-Admin-Employees board is a touch layout (`.gh-touch`): every control at least 44px tall.
+   Minimums only, from the design's --gh-touch token, so nothing larger shrinks. Phones already get these from the app layer. */
+@media (min-width: 720px) and (max-width: 1023px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-input, :is(.ghca-ui, #ghca-ui-scope) .gh-select, :is(.ghca-ui, #ghca-ui-scope) .gh-tab, :is(.ghca-ui, #ghca-ui-scope) .gh-subtab, :is(.ghca-ui, #ghca-ui-scope) .gh-menu-i, :is(.ghca-ui, #ghca-ui-scope) .gh-check { min-height: var(--gh-touch); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-btn--icon { min-width: var(--gh-touch); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-pager-ctl .gh-pager-per { min-height: var(--gh-touch); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns button, :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns a { min-width: var(--gh-touch); min-height: var(--gh-touch); }
+}
+
+/* Phone Overview (M-Admin-Overview board). The phone frame's base is 15px; the KPI strip is two columns of compact tiles;
+   cards sit outside the desktop .gh-ovp grid, so their headers take the general card rules (14px top, 2px under a plain
+   header, -0.012em titles). The approved divided headers keep their divider. */
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov { font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-kpi--overview { grid-template-columns: 1fr 1fr; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-kpi--overview .gh-stat { padding: 12px 14px 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-kpi--overview .gh-stat-val { font-size: 24px; line-height: 30px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-ovp .gh-card-hd { padding-top: 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-ovp .gh-card-hd--plain { padding-bottom: 2px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-ovp .gh-h3 { letter-spacing: -0.012em; }
 }
