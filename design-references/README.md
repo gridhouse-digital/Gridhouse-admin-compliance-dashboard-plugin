@@ -29,6 +29,8 @@ The drawer and the full page render one plain-text body. The library uses the se
 
 `scope-board-css.py` prefixes every selector with `:is(.ghca-ui, #ghca-ui-scope)`. `:root` becomes `.gh-app`. `#ghca-ui-scope` is never rendered. It only adds id specificity, so board rules beat theme and page-builder selectors such as BuddyBoss `.entry-content a` and Elementor `.elementor-widget-container h2`. Every board rule gets the same extra weight, so the board's own cascade order is unchanged. Bare-element board rules (`a`, `button`, `:focus-visible`) skip `.gh-legacy`. Board-only presentation classes (`.gh-phone*`, `.gh-design-note`, `.gh-spec-*`, `.gh-focus-demo`, and similar) are dropped.
 
+Themes and page builders often style links, link children, and button hovers with `!important`, which no specificity can beat. `scope-board-css.py` therefore marks `color`, `background`, `background-color`, `border-color`, and `text-decoration` `!important` on rules for the interactive components listed in `GUARD` and on every rule that targets an `a` element. The board's relative order is unchanged, because all guarded rules carry the same flag. The tail is passed through `scope-board-css.py --guard-only`, which adds the flag without rescoping. The tail also clears theme hover backgrounds on redesign links with a zero-specificity `:where()` rule, so any component rule still wins.
+
 The reset sits first and uses `:where()`, so it neutralises inherited theme margins, borders, fonts, and text transforms. Any board rule wins over it. Nothing in the file targets `html`, `body`, or the page outside the wrapper. The one exception is `body.gh-ui-body`, the standalone bulletin pages this plugin renders itself.
 
 ## Fonts
