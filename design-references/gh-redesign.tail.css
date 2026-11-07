@@ -54,6 +54,12 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-skip { position: absolute; left: 8px; top: -60px; z-index: 100001; padding: 8px 12px; border-radius: 8px; background: var(--gh-surface-card); color: var(--gh-text); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-skip:focus { top: 8px; }
 body.gh-ui-body { margin: 0; background: #F3EFEA; }
+/* Inside a theme the bulletin <main> meets theme rules such as `main { padding: 40px !important; margin: … }`. Pin the board values. */
+:is(.ghca-ui, #ghca-ui-scope) main.gh-odp-main { padding: 28px 32px 56px !important; margin: 0 auto !important; max-width: 1320px !important; width: 100% !important; background: transparent !important; border: 0 !important; box-shadow: none !important; float: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bp-h, :is(.ghca-ui, #ghca-ui-scope) .gh-bul-h, :is(.ghca-ui, #ghca-ui-scope) .gh-bl-h, :is(.ghca-ui, #ghca-ui-scope) .gh-odp-hd h1 { text-transform: none; font-style: normal; }
+@media (max-width: 720px) {
+  :is(.ghca-ui, #ghca-ui-scope) main.gh-odp-main { padding-left: 16px !important; padding-right: 16px !important; }
+}
 
 /* Legacy tabs keep their existing dashboard.css typography. */
 :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-legacy { font-family: var(--ent-font-sans); font-size: 16.1px; line-height: 1.5; color: var(--ent-text); letter-spacing: normal; }

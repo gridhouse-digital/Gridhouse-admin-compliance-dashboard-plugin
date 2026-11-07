@@ -151,3 +151,44 @@ file_put_contents( $out . '/library.html', $shell( 'Synthetic library', $library
 file_put_contents( $out . '/empty.html', $shell( 'Synthetic empty', $empty_body ) );
 file_put_contents( $out . '/bulletin.html', $shell( 'Synthetic bulletin', $single ) );
 echo "wrote previews in $out\n";
+
+// In-theme versions (what the site serves since the theme-header correction): the same bodies inside a
+// stand-in classic theme with its own header, footer, 1100px content container and typical theme CSS.
+$themed_library = GHCA_ODP_UI::library( array(
+	'state' => 'fresh', 'context' => 'admin', 'kicker' => 'Agency bulletins', 'action' => 'library-theme.html', 'query' => '',
+	'home_url' => 'overview.html', 'home_label' => 'Compliance dashboard',
+	'items' => array( array(
+		'id' => 'synthetic-notice', 'headline' => 'Synthetic headline for the ticker',
+		'preview' => 'Synthetic preview only. The full page uses the body.', 'published_at' => '2026-11-01T15:00:00Z',
+		'date_label' => 'Nov 1, 2026', 'audience_label' => 'Employees and agency leads', 'url' => 'bulletin-theme.html',
+	) ),
+	'total' => 1, 'from' => 1, 'to' => 1, 'prev_url' => '', 'next_url' => '',
+	'payload' => array( 'disclaimer' => GHCA_ODP_Contract::DISCLAIMER, 'order' => array( 'synthetic-notice' ), 'bulletins' => array( 'synthetic-notice' => array(
+		'id' => 'synthetic-notice', 'headline' => 'Synthetic headline for the ticker', 'preview' => 'Synthetic preview only.',
+		'body' => 'First paragraph of the synthetic body.', 'paragraphs' => array( 'First paragraph of the synthetic body.' ),
+		'published_at' => '2026-11-01T15:00:00Z', 'date_label' => 'Nov 1, 2026', 'date_long' => 'November 1, 2026',
+		'audience_label' => 'Employees and agency leads', 'url' => 'bulletin-theme.html', 'source_url' => null, 'source_host' => '',
+	) ) ),
+) );
+$themed_single = GHCA_ODP_UI::single( array(
+	'result' => 'current', 'library_url' => 'library-theme.html', 'kicker' => 'ODP Bulletin', 'audience_note' => '',
+	'home_url' => 'overview.html', 'home_label' => 'Compliance dashboard', 'more' => array(),
+	'item' => array(
+		'headline' => 'Synthetic headline for the ticker', 'body' => "First paragraph of the synthetic body.\n\nSecond paragraph with Tom & Jerry.",
+		'paragraphs' => array( 'First paragraph of the synthetic body.', 'Second paragraph with Tom & Jerry.' ),
+		'published_at' => '2026-11-01T15:00:00Z', 'date_label' => 'Nov 1, 2026', 'audience_label' => 'Employees and agency leads',
+		'url' => 'bulletin-theme.html', 'source_url' => 'https://example.test/source', 'source_host' => 'example.test',
+	),
+) );
+$hostile_theme = getenv( 'GHCA_PREVIEW_HOSTILE' ) === '1';
+$theme_css     = 'body{margin:0;background:#fff;font-family:Georgia,serif;font-size:17px;line-height:1.7;color:#222}.site-header{background:#123;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center}.site-header a{color:#fff}.site-content{max-width:1100px;margin:0 auto;padding:0 20px}.site-footer{background:#222;color:#ddd;padding:24px}'
+	. ( $hostile_theme ? 'a{color:#0645ad!important;text-decoration:underline!important}h1,h2,h3{font-family:Georgia,serif!important;text-transform:uppercase!important}main{padding:40px!important;background:#fffbe6}ul,ol{margin:2em;padding-left:3em}button:hover{background:#00f!important;color:#fff!important}' : '' );
+$themed = static function ( $title, $body ) use ( $css, $js, $theme_css ) {
+	$frag = GHCA_ODP_UI::themed( array( 'context' => 'admin', 'theme' => 'gridhouse', 'library_url' => 'library-theme.html', 'body_html' => $body ) );
+	return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . $title . '</title><style>' . $theme_css . '</style><link rel="stylesheet" href="' . $css . '"></head>'
+		. '<body class="page gh-odp-page"><header class="site-header" id="site-header"><a class="site-logo" href="#">Akanso Staging</a><nav class="site-nav"><a href="#">Home</a> <a href="#">Dashboard</a></nav></header>'
+		. '<div class="site-content" id="content">' . $frag . '</div><footer class="site-footer" id="site-footer">Theme footer</footer><script src="' . $js . '"></script></body></html>';
+};
+file_put_contents( $out . '/library-theme.html', $themed( 'ODP Bulletins – Akanso Staging', $themed_library ) );
+file_put_contents( $out . '/bulletin-theme.html', $themed( 'Synthetic bulletin – Akanso Staging', $themed_single ) );
+echo "wrote in-theme previews in $out\n";

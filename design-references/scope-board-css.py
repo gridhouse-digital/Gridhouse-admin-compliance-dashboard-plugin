@@ -38,7 +38,8 @@ TABLE_PROPS = {'border', 'border-top', 'border-right', 'border-bottom', 'border-
 # Themes also force heading typography (`h1, h2, h3 { font-family: ...; text-transform: uppercase }`), sometimes
 # with !important. Only the properties themes commonly force are guarded; size and weight stay unguarded so a
 # component can still size a heading itself.
-HEADING = re.compile(r'\.gh-h[1-4](?![a-z0-9_-])')
+# Board headings, including the ODP bulletin headings, which sit inside the site theme since the theme-header correction.
+HEADING = re.compile(r'\.gh-(?:h[1-4]|bp-h|bul-h|bl-h)(?![a-z0-9_-])|\.gh-odp-hd h1(?![a-z0-9_-])')
 HEADING_PROPS = {'font-family', 'text-transform', 'letter-spacing', 'font-style'}
 
 

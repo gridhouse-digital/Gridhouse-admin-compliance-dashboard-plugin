@@ -313,14 +313,75 @@ final class GHCA_ODP_Bulletins {
 		self::send_document( self::library_model( $context, $query, $page ) );
 	}
 
-	/** @param array<string,mixed> $model */
+	/**
+	 * Sends the library or a bulletin inside the active theme's own header and footer. Routing, the login
+	 * redirect, the audience context and the status code are decided before this point and are unchanged;
+	 * only the page around the content changed (it used to be a standalone document with its own app bar).
+	 *
+	 * @param array<string,mixed> $model
+	 */
 	private static function send_document( array $model ): void {
 		status_header( (int) $model['http_status'] );
 		header( 'Content-Type: text/html; charset=UTF-8' );
 		header( 'Cache-Control: private, no-store' );
 		header( 'X-Robots-Tag: noindex' );
-		echo GHCA_ODP_UI::document( $model ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- document() escapes.
+		self::prepare_theme_page( $model );
+		echo self::themed_page( GHCA_ODP_UI::themed( $model ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- themed() escapes; the rest is theme output.
 		exit;
+	}
+
+	/**
+	 * Assets, title, robots and a body class for the themed page. The stylesheet and script are the same
+	 * files the redesigned dashboard enqueues, under the same handles.
+	 *
+	 * @param array<string,mixed> $model
+	 */
+	private static function prepare_theme_page( array $model ): void {
+		$plugin_file = dirname( __DIR__, 2 ) . '/gridhouse-admin-compliance-dashboard.php';
+		$dir         = plugin_dir_path( $plugin_file );
+		$version     = class_exists( 'GHCA_Admin_Compliance_Dashboard' ) ? GHCA_Admin_Compliance_Dashboard::VERSION : (string) GHCA_ODP_Contract::API_VERSION;
+		wp_enqueue_style( 'ghca-redesign', plugins_url( 'assets/gh-redesign.css', $plugin_file ), array(), $version . '-' . (string) @filemtime( $dir . 'assets/gh-redesign.css' ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		wp_enqueue_script( 'ghca-bulletins', plugins_url( 'assets/gh-bulletins.js', $plugin_file ), array(), $version . '-' . (string) @filemtime( $dir . 'assets/gh-bulletins.js' ), true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		$title = (string) $model['title'];
+		add_filter( 'pre_get_document_title', static function () use ( $title ): string {
+			return $title . ' – ' . get_bloginfo( 'name', 'display' );
+		}, 99 );
+		add_filter( 'wp_robots', static function ( array $robots ): array {
+			$robots['noindex']  = true;
+			$robots['nofollow'] = true;
+			return $robots;
+		}, 99 );
+		add_filter( 'body_class', static function ( array $classes ): array {
+			$classes[] = 'gh-odp-page';
+			return $classes;
+		} );
+	}
+
+	/**
+	 * The active theme's header, the content, the theme's footer. Block themes render their header and footer
+	 * template parts inside the canvas core uses for block templates; classic themes (BuddyBoss, Hello with
+	 * Elementor Pro header and footer locations, and so on) use get_header() / get_footer().
+	 */
+	private static function themed_page( string $content ): string {
+		if ( function_exists( 'wp_is_block_theme' ) && wp_is_block_theme() ) {
+			// Render the parts first, as core's template canvas does, so their styles reach wp_head().
+			$header = do_blocks( '<!-- wp:template-part {"slug":"header","tagName":"header"} /-->' );
+			$footer = do_blocks( '<!-- wp:template-part {"slug":"footer","tagName":"footer"} /-->' );
+			ob_start();
+			echo '<!DOCTYPE html><html ' . get_language_attributes() . '><head><meta charset="' . esc_attr( get_bloginfo( 'charset' ) ) . '"><meta name="viewport" content="width=device-width, initial-scale=1">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core-escaped attributes.
+			wp_head();
+			echo '</head><body class="' . esc_attr( implode( ' ', get_body_class() ) ) . '">';
+			wp_body_open();
+			echo '<div class="wp-site-blocks">' . $header . $content . $footer . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- block and plugin output.
+			wp_footer();
+			echo '</body></html>';
+			return (string) ob_get_clean();
+		}
+		ob_start();
+		get_header();
+		echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- GHCA_ODP_UI::themed() escapes.
+		get_footer();
+		return (string) ob_get_clean();
 	}
 
 	/** @return array<string,mixed> */

@@ -274,6 +274,23 @@ final class GHCA_ODP_UI {
 		return $html;
 	}
 
+	/**
+	 * The bulletin library or page as it sits inside the active WordPress theme: no document, no app bar
+	 * and no skip link of its own (the theme supplies the header, footer and site navigation). The
+	 * full-width wrapper carries the dashboard's page surface (#F3EFEA) and the agency brand style.
+	 *
+	 * @param array<string,mixed> $model
+	 */
+	public static function themed( array $model ): string {
+		$body  = (string) ( $model['body_html'] ?? '' );
+		$style = (string) ( $model['brand_style'] ?? '' );
+		$html  = '<div class="ghca-ui ghca-ui--bleed gh-odp-host">';
+		$html .= '<div class="gh-app gh-ui--' . esc_attr( (string) $model['context'] ) . '" data-theme="' . esc_attr( (string) $model['theme'] ) . '"' . ( '' !== $style ? ' style="' . esc_attr( $style ) . '"' : '' ) . '>';
+		$html .= '<main id="gh-odp-main" class="gh-container gh-odp-main">' . $body . '</main>';
+		$html .= self::drawer( $model );
+		return $html . '</div></div>';
+	}
+
 	/** @param array<string,mixed> $model */
 	public static function payload_script( array $model ): string {
 		$payload = isset( $model['payload'] ) && is_array( $model['payload'] ) ? $model['payload'] : array();
