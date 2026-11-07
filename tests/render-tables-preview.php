@@ -83,7 +83,7 @@ $theme_css = $tabs_css . ( $hostile
 	: 'body{font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#333;margin:0}' );
 
 $html = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Synthetic tables preview</title>'
-	. '<link rel="stylesheet" href="' . $css . '"><style>' . $theme_css . '</style></head><body>'
+	. '<link rel="stylesheet" href="' . $assets . '/dashboard.css"><link rel="stylesheet" href="' . $css . '"><style>' . $theme_css . '</style></head><body class="ghca-acd-page">'
 	. '<p style="margin:0;padding:6px 16px;background:#222;color:#fff;font:600 12px/1.2 sans-serif">SYNTHETIC PREVIEW. Not live data.</p>' . $page
 	. '<script>window.ghcaAcd={ajaxUrl:"https://preview.test/ajax",nonce:"test",tableError:"Could not update the table.",tableNetworkError:"Could not reach the server."};</script>'
 	. '<script src="' . $js . '"></script></body></html>';

@@ -68,6 +68,10 @@ final class GHCA_ACD_AJAX {
     if ( ! is_singular() ) {
       return;
     }
+    // The redesigned dashboard prints its own drawer inside the themed wrapper; two drawers would share one id.
+    if ( class_exists( 'GHCA_ACD_Redesign' ) && GHCA_ACD_Redesign::dashboard_rendered() ) {
+      return;
+    }
     $post = get_post();
     if ( ! $post || ! GHCA_Admin_Compliance_Dashboard::page_uses_dashboard( $post ) || ! is_user_logged_in() || ! GHCA_ACD_Roles::user_can_view() ) {
       return;
@@ -105,6 +109,20 @@ final class GHCA_ACD_AJAX {
       wp_send_json_error( array( 'message' => __( 'Employee not found.', 'ghca-acd' ) ) );
     }
 
+    $m = self::drawer_model( $user_id, $employee );
+    // The redesigned dashboard asks for board markup; the choice is markup only, every gate above has already passed.
+    $html = GHCA_ACD_Redesign_Tables::board_requested() ? GHCA_ACD_Redesign_Drawer::render( $m ) : self::render_legacy_drawer( $m );
+    wp_send_json_success( array( 'html' => $html, 'name' => $m['employee_name'] ) );
+  }
+
+  /**
+   * Everything the employee drawer shows, calculated once and shared by the legacy and the redesigned
+   * markup. Nothing here is new: it is the data preparation that used to sit inline in the handler.
+   *
+   * @param array<string,mixed> $employee Record from GHCA_ACD_Data_Provider::get_employee_record().
+   * @return array<string,mixed>
+   */
+  public static function drawer_model( int $user_id, array $employee ): array {
     $employee_name = (string) ( $employee['name'] ?? '' );
     $employee_email = (string) ( $employee['email'] ?? '' );
     $group_label = (string) ( $employee['group'] ?? '' );
@@ -239,6 +257,7 @@ final class GHCA_ACD_AJAX {
       }
     }
 
+    $can_remind    = GHCA_ACD_Roles::user_can_send_reminders();
     $can_documents = GHCA_ACD_Roles::user_can_view_employee_documents();
     $can_admin     = GHCA_ACD_Roles::user_can_edit_records();
     $document_count = 0;
@@ -262,7 +281,8 @@ final class GHCA_ACD_AJAX {
     }
     $is_suspended      = method_exists( 'GHCA_ACD_Data_Provider', 'is_user_suspended' ) && GHCA_ACD_Data_Provider::is_user_suspended( $user_id );
     $employment_label  = $is_suspended ? __( 'Inactive', 'ghca-acd' ) : __( 'Active', 'ghca-acd' );
-    $employment_label .= ' · ' . GHCA_ACD_Data_Provider::employment_type_label( $user_id );
+    $employment_type_label = GHCA_ACD_Data_Provider::employment_type_label( $user_id );
+    $employment_label .= ' · ' . $employment_type_label;
     $employment_class  = $is_suspended ? 'inactive' : 'active';
     $attention_class   = empty( $employee['courses'] ) ? ' is-empty' : ( empty( $attention_courses ) ? ' is-ok' : '' );
     $remaining_count   = count( $attention_courses );
@@ -291,6 +311,7 @@ final class GHCA_ACD_AJAX {
       $timestamp = '' !== trim( $value ) ? ( preg_match( '#^(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})$#D', trim( $value ) ) ? GHCA_Audit_Calculator::completion_timestamp( trim( $value ) ) : strtotime( $value ) ) : 0;
       return $timestamp ? wp_date( get_option( 'date_format', 'M j, Y' ), $timestamp ) : __( 'Not recorded', 'ghca-acd' );
     };
+    $verified_start_ts  = GHCA_ACD_Employment_Record::timestamp( $user_id );
     $registration_label = $user && ! empty( $user->user_registered ) ? $format_record_date( (string) $user->user_registered ) : __( 'Not recorded', 'ghca-acd' );
     $first_service_label = $format_record_date( (string) get_user_meta( $user_id, 'ghca_first_service_date', true ) );
     $orientation_total = 0;
@@ -304,6 +325,60 @@ final class GHCA_ACD_AJAX {
     }
     $orientation_label = $orientation_total > 0 ? sprintf( __( '%1$d of %2$d complete', 'ghca-acd' ), $orientation_complete, $orientation_total ) : __( 'Not configured', 'ghca-acd' );
 
+
+    return array(
+      'attention_class' => $attention_class,
+      'attention_courses' => $attention_courses,
+      'can_admin' => $can_admin,
+      'can_communications' => $can_communications,
+      'can_documents' => $can_documents,
+      'cert_count' => $cert_count,
+      'communication_count' => $communication_count,
+      'completed_count' => $completed_count,
+      'completed_courses' => $completed_courses,
+      'document_count' => $document_count,
+      'documents_html' => $documents_html,
+      'due_context' => $due_context,
+      'due_date_label' => $due_date_label,
+      'due_date_short' => $due_date_short,
+      'employee' => $employee,
+      'employee_name' => $employee_name,
+      'employment_label' => $employment_label,
+      'first_attention' => $first_attention,
+      'first_due_label' => $first_due_label,
+      'first_service_label' => $first_service_label,
+      'group_label' => $group_label,
+      'history_html' => $history_html,
+      'initials' => $initials,
+      'is_suspended' => $is_suspended,
+      'last_reminder_label' => $last_reminder_label,
+      'manual_html' => $manual_html,
+      'oltl_html' => $oltl_html,
+      'orientation_label' => $orientation_label,
+      'pct_class' => $pct_class,
+      'progress_pct' => $progress_pct,
+      'registration_label' => $registration_label,
+      'report_url' => $report_url,
+      'review' => $review,
+      'role_label' => $role_label,
+      'status_label' => $status_label,
+      'status_slug' => $status_slug,
+      'total_courses' => $total_courses,
+      'user_id' => $user_id,
+      'can_remind' => $can_remind,
+      'employee_email' => $employee_email,
+      'employment_type_label' => $employment_type_label,
+      'verified_start_ts' => $verified_start_ts,
+      'first_due_ts' => $first_due_ts,
+      'due_timestamp' => $due_timestamp,
+      'remaining_count' => $remaining_count,
+      'audit_mapping' => $audit_mapping,
+    );
+  }
+
+  /** @param array<string,mixed> $m Result of drawer_model(). */
+  private static function render_legacy_drawer( array $m ): string {
+    extract( $m, EXTR_SKIP ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract -- the template below is the original markup, unchanged.
     ob_start();
     ?>
     <div class="ghca-acd__drawer-chrome">
@@ -550,8 +625,7 @@ final class GHCA_ACD_AJAX {
       </div>
     </footer>
     <?php
-    $html = (string) ob_get_clean();
-    wp_send_json_success( array( 'html' => $html, 'name' => $employee_name ) );
+    return (string) ob_get_clean();
   }
 
   /**

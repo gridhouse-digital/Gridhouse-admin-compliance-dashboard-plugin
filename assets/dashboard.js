@@ -76,6 +76,32 @@
     }
   }, true);
 
+  // The redesigned drawer's More menu is the same disclosure with board classes. It has its own handler so the
+  // legacy one above stays exactly as it was.
+  function closeBoardMoreMenus(target) {
+    document.querySelectorAll('[data-ghca-more][open]').forEach(function (menu) {
+      var selectedAction = target && target.closest && target.closest('[data-ghca-more] .gh-menu-i');
+      if (!target || !menu.contains(target) || selectedAction) menu.removeAttribute('open');
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    closeBoardMoreMenus(e.target);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var open = document.querySelector('[data-ghca-more][open]');
+    if (!open) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    open.removeAttribute('open');
+    var summary = open.querySelector('summary');
+    if (summary && typeof summary.focus === 'function') {
+      try { summary.focus({preventScroll: true}); } catch (err) { summary.focus(); }
+    }
+  }, true);
+
   var tableConfigs = {
     employees: {
       fields: ['ghca_group', 'ghca_course', 'ghca_status', 'ghca_emp_search', 'ghca_emp_per', 'ghca_orderby', 'ghca_order'],
@@ -560,7 +586,7 @@
     };
 
     document.addEventListener('click', function (e) {
-      var trigger = e.target.closest('.ghca-acd__cert-trigger');
+      var trigger = e.target.closest('.ghca-acd__cert-trigger, [data-ghca-cert-trigger]');
       if (trigger) {
         e.preventDefault();
         openModal(trigger);
@@ -690,8 +716,10 @@
     var drawer = document.getElementById('ghca-acd-employee-drawer');
     if (!drawer) return;
 
-    var dialog = drawer.querySelector('.ghca-acd__drawer-dialog');
-    var closeBtn = drawer.querySelector('[data-ghca-drawer-close]');
+    var dialog = drawer.querySelector('[data-ghca-drawer-dialog], .ghca-acd__drawer-dialog');
+    // The redesigned drawer has a real close button after its scrim; prefer it as the first focus target.
+    var closeBtn = drawer.querySelector('button[data-ghca-drawer-close]') || drawer.querySelector('[data-ghca-drawer-close]');
+    var isBoard = drawer.getAttribute('data-ghca-ui') === 'board';
     var bodyContainer = document.getElementById('ghca-acd-employee-drawer-body');
     var loadingHtml = bodyContainer.innerHTML;
     var controller = null;
@@ -700,10 +728,21 @@
     var selectedTabs = Object.create(null);
 
     function errorState(message) {
+      if (isBoard) {
+        // Message text comes from the server or this file; it is set as text, never as markup.
+        return '<div class="gh-empty gh-dr-error" role="alert"><span class="gh-empty-ico"><span class="gh-i gh-i--xl i-alert" aria-hidden="true"></span></span>' +
+          '<strong class="gh-h4" data-ghca-error-msg></strong>' +
+          '<button type="button" class="gh-btn gh-btn--secondary" data-ghca-drawer-retry>Try again</button></div>';
+      }
       return '<div class="ghca-acd__overlay-state ghca-acd__overlay-state--error" role="alert">' +
         '<p class="ghca-acd__overlay-state-msg">' + message + '</p>' +
         '<button type="button" class="ghca-acd__overlay-retry" data-ghca-drawer-retry>Try again</button>' +
         '</div>';
+    }
+
+    function fillErrorText(message) {
+      var slot = bodyContainer.querySelector('[data-ghca-error-msg]');
+      if (slot) { slot.textContent = message; }
     }
 
     function initEmployeeDrawerTabs(userId) {
@@ -765,6 +804,7 @@
       params.append('action', 'ghca_acd_get_employee_drawer');
       params.append('nonce', window.ghcaAcd.nonce);
       params.append('user_id', userId);
+      if (isBoard) { params.append('ghca_ui', 'board'); }
 
       fetch(window.ghcaAcd.ajaxUrl, {
         method: 'POST',
@@ -780,12 +820,14 @@
           initEmployeeDrawerTabs(String(userId));
         } else {
           bodyContainer.innerHTML = errorState((json && json.data && json.data.message) || 'We couldn’t load this employee.');
+          fillErrorText((json && json.data && json.data.message) || 'We couldn’t load this employee.');
         }
       })
       .catch(function(err) {
         if (err && err.name === 'AbortError') return;
         bodyContainer.removeAttribute('aria-busy');
         bodyContainer.innerHTML = errorState('Network error. Please check your connection and try again.');
+        fillErrorText('Network error. Please check your connection and try again.');
       });
 
       if (!release) {
@@ -887,7 +929,7 @@
     var controller = null;
 
     function panel() {
-      return document.querySelector('.ghca-acd__drawer-panel--administration');
+      return document.querySelector('.ghca-acd__drawer-panel--administration, [data-ghca-tabpanel="administration"]');
     }
     function views() {
       var p = panel();
@@ -922,7 +964,7 @@
 
       // Move focus to the sub-page heading so keyboard and screen-reader users
       // follow the navigation rather than being left on the old view.
-      var heading = v.subpage.querySelector('.ghca-acd__subpage-head h4');
+      var heading = v.subpage.querySelector('.ghca-acd__subpage-head h4, [data-ghca-subpage-head]');
       if (heading) {
         heading.setAttribute('tabindex', '-1');
         heading.focus();
@@ -1179,7 +1221,7 @@
   }
 
   function ghcaDrawerRestoreTarget() {
-    var target = document.querySelector('#ghca-acd-employee-drawer [data-ghca-drawer-close]');
+    var target = document.querySelector('#ghca-acd-employee-drawer button[data-ghca-drawer-close]') || document.querySelector('#ghca-acd-employee-drawer [data-ghca-drawer-close]');
     return target && !target.closest('[hidden]') ? target : null;
   }
 
@@ -1559,7 +1601,7 @@
 
     function run(userId, tracker, opener) {
       if (running) return;
-      var drawer = opener.closest('.ghca-acd__drawer');
+      var drawer = opener.closest('.ghca-acd__drawer, #ghca-acd-employee-drawer');
       var period = drawer && drawer.querySelector('[data-ghca-audit-period]');
       var custom = tracker === 'annual' && period && period.querySelector('[data-ghca-audit-mode]').value === 'custom';
       var start, end;

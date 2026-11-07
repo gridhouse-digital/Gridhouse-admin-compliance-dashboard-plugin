@@ -1054,3 +1054,80 @@ body.gh-ui-body { margin: 0; background: #F3EFEA; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-h1, :is(.ghca-ui, #ghca-ui-scope) .gh-h2, :is(.ghca-ui, #ghca-ui-scope) .gh-h3, :is(.ghca-ui, #ghca-ui-scope) .gh-h4 { text-transform: none !important; font-style: normal !important; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-label, :is(.ghca-ui, #ghca-ui-scope) .gh-check, :is(.ghca-ui, #ghca-ui-scope) .gh-table th, :is(.ghca-ui, #ghca-ui-scope) .gh-fchip, :is(.ghca-ui, #ghca-ui-scope) .gh-st { text-transform: none; }
 :is(.ghca-ui, #ghca-ui-scope) .app-toasts { z-index: 100000; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer { position: fixed; inset: 0; z-index: 100000; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-scrim { position: fixed; inset: 0; z-index: 0; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer { position: fixed; z-index: 1; top: 0; right: 0; bottom: 0; height: 100%; width: min(600px, 100%); outline: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-body { display: contents; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drawer-x { position: absolute; top: 20px; right: 24px; z-index: 2; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-top { display: flex; align-items: flex-start; gap: 14px; padding-right: 48px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-id { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-name { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-meta { margin-top: 2px; font-size: 13px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-tabs { border-bottom: 0; margin-top: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-panel { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-frag { min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum { display: flex; align-items: center; gap: 18px; padding: 18px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum .gh-ring { --sz: 84px; --th: 9px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum .gh-ring-v { font-size: 22px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum-t { display: flex; flex-direction: column; gap: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum-meta { font-size: 13px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-due { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-due.gh-due--danger { color: var(--gh-status-danger-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-due.gh-due--warning { color: var(--gh-status-warning-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn { align-items: center; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn-act { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold { overflow: hidden; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold-hd { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px 16px; background: var(--gh-surface-sunken); border-bottom: 1px solid var(--gh-border); font-weight: 700; color: var(--gh-text); cursor: pointer; list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold-hd::-webkit-details-marker { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold-hd { font-family: inherit; font-size: var(--gh-text-sm); line-height: var(--gh-lh-sm); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold:not([open]) .gh-fold-hd { border-bottom: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold:not([open]) .gh-fold-hd .gh-i { transform: rotate(180deg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold-t { display: inline-flex; align-items: center; gap: 8px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold-empty { margin: 0; padding: 14px 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--gh-border); color: var(--gh-text); text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold .gh-dr-row:last-child { border-bottom: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-main { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-t { font-weight: 600; line-height: 20px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-dr-row { color: var(--gh-text) !important; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-dr-row:hover { background: var(--gh-surface-hover) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-row > .gh-i { color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-admin { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-note { margin: 12px 0 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dl > div.gh-dl-warn { background: var(--gh-status-warning-bg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dl > div.gh-dl-warn dd { color: var(--gh-status-warning-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-more { position: relative; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-more > summary { list-style: none; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-more > summary::-webkit-details-marker { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-menu { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 5; min-width: 260px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i { color: var(--gh-text) !important; text-decoration: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-menu-i { font: inherit; font-weight: 500; }
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer { width: 100%; border-left: 0; font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drawer-x { top: 8px; left: 8px; right: auto; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer-hd { padding: 56px 16px 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drh-top { padding-right: 0; gap: 12px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer-bd { padding: 16px; gap: 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drh-tabs { flex-wrap: nowrap; margin: 6px -8px 0; padding: 0 8px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer-ft { padding: 12px 16px 20px; gap: 10px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer-ft .gh-btn { min-height: 52px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer-ft > .gh-btn--primary { flex: 1; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-menu { min-width: min(280px, calc(100vw - 32px)); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum { padding: 16px; gap: 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum .gh-ring { --sz: 64px; --th: 7px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum .gh-ring-v { font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drawer--emp .gh-tab { font-size: 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-t { font-size: 14.5px; font-weight: 700; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-main .gh-small { margin-top: 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-dr-layer .gh-drawer-ft .gh-btn.gh-btn--lnk { font: inherit; line-height: 20px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn { flex-wrap: wrap; }
+}
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn.gh-btn--lnk { font-weight: 600; font-size: var(--gh-text-sm); line-height: 1; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn.gh-btn--lnk.gh-btn--sm { font-size: var(--gh-text-xs); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-tabs .gh-tab:not([aria-selected="true"]) { font-weight: 500; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-main .gh-small { margin-top: 2px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dl--14 dd { font-size: 14px; }
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-main .gh-small { margin-top: 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn { align-items: flex-start; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn-act { flex: 0 0 100%; }
+}

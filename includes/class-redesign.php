@@ -9,6 +9,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class GHCA_ACD_Redesign {
+	/** True once the redesigned dashboard has printed its wrapper, so wp_footer does not print a second drawer. */
+	private static $rendered = false;
+
+	public static function dashboard_rendered(): bool {
+		return self::$rendered;
+	}
+
 	/** @return array<int,string> */
 	public static function themes(): array {
 		return array( 'gridhouse', 'akansoh', 'purple' );
@@ -160,6 +167,7 @@ final class GHCA_ACD_Redesign {
 			'support_email'      => class_exists( 'GHCA_Dashboard_Branding' ) ? GHCA_Dashboard_Branding::get_support_email() : '',
 			'panels'             => self::secondary_panels( $atts, $data ),
 			'board_panels'       => array( 'ghca-tab-employees', 'ghca-tab-inactive-employees' ),
+			'employee_drawer'    => true,
 			'flash'              => GHCA_ACD_Shortcodes::flash_items(),
 		);
 		return $html . self::render_from_model( $model );
@@ -291,6 +299,10 @@ final class GHCA_ACD_Redesign {
 		}
 		$html .= '</main>';
 		$html .= (string) ( $model['drawer_html'] ?? '' );
+		if ( ! empty( $model['employee_drawer'] ) ) {
+			$html           .= GHCA_ACD_Redesign_Drawer::shell_html();
+			self::$rendered = true;
+		}
 		$html .= self::toasts_html( (array) ( $model['flash'] ?? array() ) );
 		return $html . '</div></div>';
 	}
