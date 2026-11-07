@@ -140,4 +140,14 @@ Uncheck the redesign option: the legacy screens return unchanged (the export han
 
 ## Package
 
-Recorded in the build commit that follows this one.
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-63c3287.zip` |
+| Source commit | `63c3287` (branch `gridhouse-overview-odp-bulletins-af45`); full hash in `BUILD.txt` |
+| Byte size | 675,164 |
+| SHA-256 | `0943cb0c7fe18fca81a2069ec340077123cced600d224f642cce54bfbed3915f` |
+| Root folder / entry file | `Gridhouse-admin-compliance-dashboard-plugin-main/gridhouse-admin-compliance-dashboard.php` (same as staging; updates in place) |
+| Contents | Cumulative Slices 1-6 on top of 1.7.3-rc.8. 142 runtime files, each byte-identical to the commit; `BUILD.txt` inside lists every file's SHA-256 |
+| Checks on the archive | `unzip -t` clean; every file compared with `git show 63c3287:<path>`; `php -l` on every PHP file |
+
+Not installed anywhere. Older builds are kept unchanged.
