@@ -44,7 +44,15 @@ function home_url( $p = '' ) { return 'https://example.test' . $p; }
 function get_page_by_path( $s ) { return null; }
 function get_permalink( $p = 0 ) { return ''; }
 function apply_filters( $tag, $value ) { return $value; }
-function add_query_arg( $k, $v, $url ) { return $url . ( false === strpos( $url, '?' ) ? '?' : '&' ) . $k . '=' . rawurlencode( (string) $v ); }
+function add_query_arg( $k, $v = null, $url = null ) {
+	if ( is_array( $k ) ) {
+		return $v . ( false === strpos( (string) $v, '?' ) ? '?' : '&' ) . http_build_query( $k );
+	}
+	return $url . ( false === strpos( $url, '?' ) ? '?' : '&' ) . $k . '=' . rawurlencode( (string) $v );
+}
+function wp_create_nonce( $a = '' ) { return 'nonce'; }
+// The real one measures against time(); this one against the fixed test clock, so output never drifts.
+function human_time_diff( $from, $to = 0 ) { $d = (int) round( abs( $GLOBALS['ghca_env']['now'] - $from ) / 86400 ); return $d . ( 1 === $d ? ' day' : ' days' ); }
 function get_the_title( $id ) { return 'Synthetic group ' . $id; }
 function get_option( $k, $d = false ) { return $d; }
 function wp_get_current_user() { return (object) array( 'roles' => array() ); }
@@ -58,11 +66,20 @@ final class GHCA_Admin_Compliance_Dashboard {
 }
 final class GHCA_ACD_Settings {
 	public static function ui_redesign_enabled(): bool { return $GLOBALS['ghca_env']['redesign']; }
+	public static function get_at_risk_days(): int { return $GLOBALS['ghca_env']['at_risk_days'] ?? 14; }
 }
 final class GHCA_ACD_Roles {
 	public static function user_can_view(): bool { return $GLOBALS['ghca_env']['can_view']; }
 	public static function user_can_manage_users(): bool { return $GLOBALS['ghca_env']['manage_users']; }
 	public static function user_has_unrestricted_view(): bool { return false; }
+	// Slice 4: the list tabs read these gates. Defaults keep the slice-2 tests unchanged.
+	public static function user_can_edit_records(): bool { return $GLOBALS['ghca_env']['can_admin'] ?? false; }
+	public static function user_can_send_reminders(): bool { return $GLOBALS['ghca_env']['can_remind'] ?? false; }
+	public static function user_can_view_communication_history(): bool { return $GLOBALS['ghca_env']['can_comms'] ?? false; }
+	public static function user_can_view_employee_documents(): bool { return $GLOBALS['ghca_env']['can_docs'] ?? false; }
+}
+final class GHCA_ACD_User_Report {
+	public static function can_view_user( int $id ): bool { return $GLOBALS['ghca_env']['can_view_user'] ?? true; }
 }
 final class GHCA_ACD_Scoping {
 	public static function get_visible_group_ids(): array { return array( 11, 12, 13 ); }
@@ -95,6 +112,8 @@ require_once __DIR__ . '/../../includes/class-shortcodes.php';
 require_once __DIR__ . '/../../includes/class-ajax-handlers.php';
 require_once __DIR__ . '/../../includes/class-data-provider.php';
 require_once __DIR__ . '/../../includes/class-redesign-tables.php';
+require_once __DIR__ . '/../../includes/class-fluentcrm.php';
+require_once __DIR__ . '/../../includes/class-certificate-download.php';
 
 /** Employee record in the shape build_employee_records() produces. */
 function ghca_env_employee( int $id, string $name, int $group, string $slug, string $label, int $done, int $total, int $due_offset_days, string $activity ): array {
