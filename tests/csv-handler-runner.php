@@ -9,6 +9,9 @@ function wp_date( $f, $t = null ) { return gmdate( $f, $t ?? 0 ); }
 function wp_die( $m = '' ) { fwrite( STDERR, 'wp_die' ); exit( 3 ); }
 function __( $v, $d = '' ) { return $v; }
 function esc_html__( $v, $d = '' ) { return $v; }
+function wp_unslash( $v ) { return $v; }
+// "Export selected": GHCA_CSV_HANDLER_IDS posts a selection, as the redesigned Employees tab does.
+if ( false !== getenv( 'GHCA_CSV_HANDLER_IDS' ) ) { $_POST['ghca_ids'] = (string) getenv( 'GHCA_CSV_HANDLER_IDS' ); }
 class GHCA_ACD_Roles { public static function user_can_view() { return true; } }
 class GHCA_ACD_Data_Provider {
 	public static function get_employees_for_current_view() {
@@ -16,7 +19,7 @@ class GHCA_ACD_Data_Provider {
 		$rows  = array();
 		foreach ( $names as $i => $name ) {
 			$rows[] = array(
-				'name' => $name, 'email' => 'synthetic' . $i . '@example.invalid', 'group' => "Group\nTwo", 'required_label' => '3', 'completed_label' => '1',
+				'user_id' => 100 + $i, 'name' => $name, 'email' => 'synthetic' . $i . '@example.invalid', 'group' => "Group\nTwo", 'required_label' => '3', 'completed_label' => '1',
 				'progress_label' => '33%', 'due_date_label' => '=1+1', 'certificate_label' => "\n=2+2", 'last_activity_label' => "line1\r\nline2", 'status_label' => '@SUM(A1)',
 			);
 		}

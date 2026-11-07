@@ -99,9 +99,11 @@ check( str_contains( $html, 'data-ghca-admin-view="overview"' ) && str_contains(
 check( 2 === substr_count( $html, 'data-ghca-reminder="42"' ) && 2 === substr_count( $html, 'data-ghca-reminder-name="Jordan Ellis"' ), 'the alert and the footer each carry the reminder hook the messaging script binds to' );
 check( str_contains( $html, 'data-ghca-pdf-packet="42" data-tracker="orientation"' ) && str_contains( $html, 'data-tracker="annual"' ) && ! str_contains( $html, 'data-tracker="oltl_training"' ), 'packet items match the legacy menu' );
 check( str_contains( $html, 'data-ghca-more' ) && str_contains( $html, 'href="https://example.test/user-report?user_id=42"' ), 'More menu and report link' );
-check( str_contains( $html, 'Not verified' ) && str_contains( $html, 'gh-dl-warn' ), 'an unverified start date is shown as needing attention' );
+check( str_contains( $html, 'Verified start date missing' ) && str_contains( $html, '<dt>Verified start</dt><dd>Not entered</dd>' ) && 2 === substr_count( $html, 'data-ghca-edit-records="42"' ), 'an unverified start date is flagged, with Enter date and Edit Record both opening Edit Records' );
+check( ! str_contains( $html, 'Restricted to authorized personnel' ) && ! str_contains( $html, 'restricted to authorized personnel' ) && str_contains( $html, 'Confidential: shown only to people with permission to edit employee records.' ), 'the confidentiality note says who can see the records and why; it no longer reads like a denial' );
+check( str_contains( $html, 'Administrative Overview' ) && str_contains( $html, 'Employee Training Record' ) && str_contains( $html, 'Compliance Review' ) && str_contains( $html, 'System meta' ) && str_contains( $html, 'class="app-adm-status"' ), 'Administration follows the updated Drawer-Administration board' );
 check( str_contains( $html, 'Not set' ), 'employment type' );
-check( ! str_contains( $html, '30-day' ) && ! str_contains( $html, "Can't verify" ), 'no verdict the plugin does not compute here' );
+check( 1 === substr_count( $html, '30-day' ) && str_contains( $html, 'shows “Missing evidence” until a verified employment start date is entered' ) && ! str_contains( $html, "Can't verify" ) && ! str_contains( $html, 'Within 30 days' ), 'the only 30-day wording is the calculator\'s own Missing evidence rule; no verdict is computed here' );
 check( ! preg_match( '/ghca-acd__(?!drawer-chrome)/', preg_replace( '#<div class="gh-legacy.*?</div>#s', '', $html ) ), 'no legacy class outside the fragments that still use them' );
 check( ! str_contains( $html, 'stub-documents' ) && ! str_contains( $html, 'stub-history' ) && ! str_contains( $html, 'stub-manual' ), 'the board drawer renders Documents and Communications itself, not through the legacy fragments' );
 
@@ -115,10 +117,12 @@ check( ! str_contains( $h, 'data-ghca-tab="administration"' ) && ! str_contains(
 $h = board( array( 'can_remind' => false ) );
 check( ! str_contains( $h, 'data-ghca-reminder' ), 'no reminder control without the send-reminders capability' );
 $h = board( array( 'suspended' => true ) );
-check( str_contains( $h, 'gh-st gh-st--suspended">Inactive' ) && str_contains( $h, 'not authorized for active service' ), 'suspended employee' );
+check( str_contains( $h, '<span>Inactive ·</span>' ) && str_contains( $h, 'not authorized for active service' ), 'suspended employee' );
 $h = board( array( 'reviewed_at' => strtotime( '2026-10-30 15:00:00 UTC' ) ) );
 check( str_contains( $h, 'Reviewed Oct 30</span>' ) && ! str_contains( $h, 'data-ghca-review-badge hidden' ), 'reviewed badge shows once reviewed' );
-check( str_contains( $h, 'Reviewed on Oct 30, 2026 by an admin' ) && str_contains( $h, 'last reminder None recorded' ), 'review line and last reminder' );
+check( 2 === substr_count( $h, 'Reviewed on Oct 30, 2026 by an admin' ) && str_contains( $h, '<dt>Last Reminder</dt><dd>None recorded</dd>' ), 'review line in the card and in System meta; last reminder shown' );
+$h = board( array( 'can_comms' => false ) );
+check( ! str_contains( $h, 'Last Reminder' ), 'last reminder is communication history: hidden without that permission' );
 $h = board( array( 'oltl' => true ) );
 check( str_contains( $h, 'stub-oltl' ) && str_contains( $h, 'data-tracker="oltl_training"' ), 'OLTL card and packet appear together' );
 

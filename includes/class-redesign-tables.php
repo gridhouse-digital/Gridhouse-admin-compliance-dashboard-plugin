@@ -13,6 +13,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class GHCA_ACD_Redesign_Tables {
 	/** Whether the AJAX table refresh should answer with board markup. The server decides; the client only asks. */
+	/** Row selection (slice 6) on the active Employees table; GHCA_ACD_Redesign_Bulk decides who may select. */
+	private static function selectable(): bool {
+		return class_exists( 'GHCA_ACD_Redesign_Bulk' ) && GHCA_ACD_Redesign_Bulk::can_select();
+	}
+
 	public static function board_requested(): bool {
 		if ( ! class_exists( 'GHCA_ACD_Settings' ) || ! GHCA_ACD_Settings::ui_redesign_enabled() ) {
 			return false;
@@ -205,7 +210,10 @@ final class GHCA_ACD_Redesign_Tables {
 		$report = GHCA_ACD_Data_Provider::get_user_report_url( $id );
 		$note   = self::due_note( (int) ( $row['due_timestamp'] ?? 0 ), $slug );
 
-		$h  = '<tr' . ( $risk ? ' class="is-risk"' : '' ) . '>';
+		$h  = '<tr' . ( $risk ? ' class="is-risk"' : '' ) . ' data-ghca-row="' . esc_attr( (string) $id ) . '">';
+		if ( ! $inactive && self::selectable() ) {
+			$h .= GHCA_ACD_Redesign_Bulk::row_cell( $id, $name );
+		}
 		$h .= '<td><div class="gh-person"><span class="gh-avatar" aria-hidden="true">' . esc_html( GHCA_ACD_Data_Provider::get_avatar_initials( $name ) ) . '</span><div>';
 		$h .= '<a class="gh-person-n" href="' . esc_url( $report ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '">' . esc_html( $name ) . '</a>';
 		$h .= '<a class="gh-person-s" href="' . esc_url( 'mailto:' . $row['email'] ) . '">' . esc_html( (string) $row['email'] ) . '</a>';
@@ -244,7 +252,7 @@ final class GHCA_ACD_Redesign_Tables {
 		$name = (string) $row['name'];
 		$note = self::due_note( (int) ( $row['due_timestamp'] ?? 0 ), $slug );
 
-		$h  = '<article class="gh-mcard' . ( $risk ? ' is-risk' : '' ) . '"><div class="gh-mcard-top"><span class="gh-avatar" aria-hidden="true">' . esc_html( GHCA_ACD_Data_Provider::get_avatar_initials( $name ) ) . '</span>';
+		$h  = '<article class="gh-mcard' . ( $risk ? ' is-risk' : '' ) . '" data-ghca-row="' . esc_attr( (string) $id ) . '"><div class="gh-mcard-top">' . ( ! $inactive && self::selectable() ? GHCA_ACD_Redesign_Bulk::card_check( $id, $name ) : '' ) . '<span class="gh-avatar" aria-hidden="true">' . esc_html( GHCA_ACD_Data_Provider::get_avatar_initials( $name ) ) . '</span>';
 		$h .= '<div class="gh-mcard-id"><a class="gh-person-n" href="' . esc_url( GHCA_ACD_Data_Provider::get_user_report_url( $id ) ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '">' . esc_html( $name ) . '</a>';
 		$h .= '<div class="gh-person-s">' . esc_html( (string) $row['group'] ) . '</div></div>';
 		$h .= '<span class="gh-st gh-st--' . esc_attr( self::status_tone( $slug ) ) . '">' . esc_html( (string) $row['status_label'] ) . '</span></div>';
@@ -253,7 +261,6 @@ final class GHCA_ACD_Redesign_Tables {
 		// The board's card shows two details. Certificate status stays in the table and in the drawer.
 		$h .= '<dt>' . esc_html__( 'Last activity', 'ghca-acd' ) . '</dt><dd>' . esc_html( (string) $row['last_activity_label'] ) . '</dd></dl>';
 		$h .= '<div class="gh-mcard-act"><a class="gh-btn gh-btn--secondary" href="' . esc_url( GHCA_ACD_Data_Provider::get_user_report_url( $id ) ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'View %s', 'ghca-acd' ), $name ) ) . '">' . esc_html__( 'View', 'ghca-acd' ) . '</a></div>';
-		unset( $inactive );
 		return $h . '</article>';
 	}
 
@@ -341,6 +348,9 @@ final class GHCA_ACD_Redesign_Tables {
 		$orderby = (string) ( $filters['orderby'] ?? '' );
 		$order   = (string) ( $filters['order'] ?? 'asc' );
 		$h       = '<div class="gh-table-wrap gh-table-wrap--tall gh-tbl" tabindex="0" role="group" aria-label="' . esc_attr( $inactive ? __( 'Inactive employees table', 'ghca-acd' ) : __( 'Employees table', 'ghca-acd' ) ) . '"><table class="gh-table"><thead><tr>';
+		if ( ! $inactive && self::selectable() ) {
+			$h .= GHCA_ACD_Redesign_Bulk::head_cell();
+		}
 		$h      .= self::sort_th( 'name', __( 'Employee', 'ghca-acd' ), $orderby, $order );
 		$h      .= self::sort_th( 'group', __( 'Group', 'ghca-acd' ), $orderby, $order );
 		$h      .= self::sort_th( 'progress_pct', __( 'Progress', 'ghca-acd' ), $orderby, $order, __( 'Completed / required courses', 'ghca-acd' ) );
@@ -441,7 +451,11 @@ final class GHCA_ACD_Redesign_Tables {
 		$h .= '</div>';
 
 		$h .= '<p class="gh-sr" role="status" aria-live="polite" data-ghca-table-status="' . esc_attr( $f['table'] ) . '"></p>';
-		$h .= '<div class="gh-tmount" data-ghca-table data-ghca-table-id="' . esc_attr( $f['table'] ) . '">' . $parts['html'] . '</div>';
+		// Outside the refreshed table, so a selection and its bar survive paging and filtering.
+		if ( ! $inactive && self::selectable() ) {
+			$h .= GHCA_ACD_Redesign_Bulk::bar_html();
+		}
+		$h .= '<div class="gh-tmount" data-ghca-table data-ghca-table-id="' . esc_attr( $f['table'] ) . '"' . ( ! $inactive && self::selectable() ? ' data-ghca-selectable' : '' ) . '>' . $parts['html'] . '</div>';
 		return $h;
 	}
 }

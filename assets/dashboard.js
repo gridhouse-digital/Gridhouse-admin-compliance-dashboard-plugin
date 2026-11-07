@@ -36,6 +36,24 @@
   // Exposed so the Audit tab's inline script can announce errors through the
   // shared toast (role=alert + aria-live) instead of a native alert().
   window.ghcaAcdToast = function (message, isError) { ghcaToast(message, isError); };
+
+  /*
+   * admin-ajax answers "-1" or "0" (often with 400/403) when the dashboard nonce has expired or the login
+   * session ended, which used to surface as "Network error". Tell the person what actually happened.
+   */
+  var GHCA_SESSION_MSG = 'Your session has expired or this page is out of date. Reload the page and try again.';
+  function ghcaReadJson(res) {
+    return res.text().then(function (text) {
+      var body = (text || '').trim();
+      var json = null;
+      try { json = JSON.parse(body); } catch (err) { json = null; }
+      if (json !== null && typeof json === 'object') { return json; }
+      var e = new Error(body === '-1' || body === '0' || res.status === 403 ? 'session' : 'network');
+      e.ghcaSession = e.message === 'session';
+      throw e;
+    });
+  }
+  window.ghcaReadJson = ghcaReadJson;
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape' || !modalStack.length) return;
     var top = modalStack[modalStack.length - 1];
@@ -875,6 +893,8 @@
         panels.forEach(function (panel) {
           panel.hidden = panel.getAttribute('data-ghca-tabpanel') !== name;
         });
+        // The Administration board is a wider drawer (860px); every other tab keeps the standard width.
+        if (isBoard && dialog) { dialog.classList.toggle('is-admin', name === 'administration'); }
       }
 
       tabs.forEach(function (tab, index) {
@@ -895,6 +915,8 @@
 
     function openDrawer(userId, launcher) {
       lastUserId = userId;
+      if (typeof window.ghcaAcdEditAbort === 'function') { window.ghcaAcdEditAbort(); }
+      if (dialog) { dialog.classList.remove('is-admin'); }
       drawer.hidden = false;
       drawer.setAttribute('aria-hidden', 'false');
       document.documentElement.classList.add('ghca-acd--drawer-open');
@@ -920,7 +942,7 @@
         body: params.toString(),
         signal: controller ? controller.signal : undefined
       })
-      .then(function(res) { return res.json(); })
+      .then(ghcaReadJson)
       .then(function(json) {
         bodyContainer.removeAttribute('aria-busy');
         if (json && json.success && json.data && json.data.html) {
@@ -934,8 +956,9 @@
       .catch(function(err) {
         if (err && err.name === 'AbortError') return;
         bodyContainer.removeAttribute('aria-busy');
-        bodyContainer.innerHTML = errorState('Network error. Please check your connection and try again.');
-        fillErrorText('Network error. Please check your connection and try again.');
+        var msg = err && err.ghcaSession ? GHCA_SESSION_MSG : 'Network error. Please check your connection and try again.';
+        bodyContainer.innerHTML = errorState(msg);
+        fillErrorText(msg);
       });
 
       if (!release) {
@@ -944,6 +967,8 @@
     }
 
     function closeDrawer() {
+      if (typeof window.ghcaAcdEditAbort === 'function') { window.ghcaAcdEditAbort(); }
+      if (dialog) { dialog.classList.remove('is-admin'); }
       drawer.hidden = true;
       drawer.setAttribute('aria-hidden', 'true');
       document.documentElement.classList.remove('ghca-acd--drawer-open');
@@ -993,9 +1018,8 @@
           reviewBtn.textContent = prevLabel;
           if (json && json.success && json.data) {
             var statusEl = drawer.querySelector('[data-ghca-review-status]');
-            var textEl = drawer.querySelector('[data-ghca-review-text]');
             var badgeEl = drawer.querySelector('[data-ghca-review-badge]');
-            if (textEl) textEl.textContent = json.data.line;
+            drawer.querySelectorAll('[data-ghca-review-text]').forEach(function (el) { el.textContent = json.data.line; });
             if (statusEl) statusEl.classList.remove('is-empty');
             if (badgeEl) { badgeEl.textContent = json.data.badge; badgeEl.hidden = false; }
             ghcaToast(json.data.message || 'Marked as reviewed.', false);
@@ -1107,7 +1131,7 @@
         body: params.toString(),
         signal: controller ? controller.signal : undefined
       })
-        .then(function (res) { return res.json(); })
+        .then(ghcaReadJson)
         .then(function (json) {
           if (json && json.success && json.data && typeof json.data.html === 'string') {
             v.body.innerHTML = json.data.html;
@@ -1118,7 +1142,8 @@
         })
         .catch(function (err) {
           if (err && err.name === 'AbortError') return;
-          v.body.innerHTML = '<p class="ghca-acd__edit-error" role="alert">Network error. Please check your connection and try again.</p>';
+          v.body.innerHTML = '<p class="ghca-acd__edit-error" role="alert"></p>';
+          v.body.firstChild.textContent = err && err.ghcaSession ? GHCA_SESSION_MSG : 'Network error. Please check your connection and try again.';
         })
         .finally(function () {
           v.body.setAttribute('aria-busy', 'false');
@@ -1133,13 +1158,20 @@
         saveBtn.textContent = (window.ghcaAcd && window.ghcaAcd.loading) || 'Saving…';
       }
 
+      // The employee is the one this form was rendered for, never whichever drawer was opened last.
+      var formUserId = form.getAttribute('data-user-id') || '';
+      if (!formUserId || String(formUserId) !== String(currentUserId)) {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = prevText; }
+        ghcaToast('This form is out of date. Close it and open the employee again. Nothing was saved.', true);
+        return;
+      }
       var params = new URLSearchParams(new FormData(form));
       form.querySelectorAll('input[type="checkbox"][name$="[mark_complete]"]').forEach(function (checkbox) {
         params.set(checkbox.name, checkbox.checked ? '1' : '0');
       });
       params.append('action', 'ghca_acd_save_employee_records');
       params.append('nonce', window.ghcaAcd.nonce);
-      params.append('user_id', currentUserId);
+      params.append('user_id', formUserId);
 
       fetch(window.ghcaAcd.ajaxUrl, {
         method: 'POST',
@@ -1147,10 +1179,10 @@
         headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
         body: params.toString()
       })
-        .then(function (res) { return res.json(); })
+        .then(ghcaReadJson)
         .then(function (json) {
           if (json && json.success) {
-            var savedUserId = currentUserId;
+            var savedUserId = formUserId;
             ghcaToast((json.data && json.data.message) || 'Records updated.', false);
             showOverview(false);
             // Reloading the drawer re-renders the sub-page too, so the form
@@ -1163,11 +1195,18 @@
             ghcaToast((json && json.data && json.data.message) || 'Could not save records.', true);
           }
         })
-        .catch(function () {
+        .catch(function (err) {
           if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = prevText; }
-          ghcaToast('Network error. Please try again.', true);
+          ghcaToast(err && err.ghcaSession ? GHCA_SESSION_MSG : 'Network error. Please try again.', true);
         });
     }
+
+    // The drawer calls this when it opens or closes, so a slow form load never lands in another employee's drawer.
+    window.ghcaAcdEditAbort = function () {
+      if (controller) { controller.abort(); controller = null; }
+      currentUserId = null;
+      setWide(false);
+    };
 
     document.addEventListener('click', function (e) {
       var trigger = e.target.closest('[data-ghca-edit-records]');
@@ -2567,6 +2606,293 @@
   });
 
   /*
+   * Row selection on the redesigned Employees tab (slice 6). The selection is a list of ids the person ticked;
+   * "Select all" adds only the rows on the current page. It survives paging and filtering, and the bar always
+   * names the selected employees that are not on screen, so nothing hidden is ever included silently.
+   */
+  function initBulkSelection() {
+    var bar = document.querySelector('.ghca-ui [data-ghca-bulkbar]');
+    var mount = document.querySelector('.ghca-ui [data-ghca-selectable]');
+    if (!bar || !mount) return;
+    var max = parseInt(bar.getAttribute('data-max'), 10) || 25;
+    var sel = [];           // [{id, name}] in the order selected
+    var names = Object.create(null);
+
+    function has(id) { return sel.some(function (s) { return s.id === id; }); }
+    function add(id, name) { if (!has(id)) { sel.push({ id: id, name: name }); } names[id] = name; }
+    function remove(id) { sel = sel.filter(function (s) { return s.id !== id; }); }
+    function visibleIds() {
+      var ids = [];
+      mount.querySelectorAll('table [data-ghca-select]').forEach(function (cb) { if (ids.indexOf(cb.value) === -1) ids.push(cb.value); });
+      return ids;
+    }
+    function listNames(items, limit) {
+      var shown = items.slice(0, limit).map(function (s) { return s.name; });
+      return items.length > limit ? shown.join(', ') + ' and ' + (items.length - limit) + ' more' : shown.join(', ');
+    }
+    function sync() {
+      mount.querySelectorAll('[data-ghca-select]').forEach(function (cb) {
+        cb.checked = has(cb.value);
+        var row = cb.closest('tr, .gh-mcard');
+        if (row) { row.classList.toggle('is-selected', cb.checked); }
+      });
+      var vis = visibleIds();
+      var onPage = vis.filter(has).length;
+      mount.querySelectorAll('[data-ghca-select-page]').forEach(function (head) {
+        head.checked = vis.length > 0 && onPage === vis.length;
+        head.indeterminate = onPage > 0 && onPage < vis.length;
+      });
+      var hidden = sel.filter(function (s) { return vis.indexOf(s.id) === -1; });
+      bar.hidden = sel.length === 0;
+      bar.querySelector('[data-ghca-bulk-count]').textContent = sel.length + ' selected';
+      bar.querySelector('[data-ghca-bulk-names]').textContent = listNames(sel, 3);
+      var note = bar.querySelector('[data-ghca-bulk-hidden]');
+      note.hidden = hidden.length === 0;
+      note.textContent = hidden.length ? hidden.length + ' not shown with the current filters or page: ' + listNames(hidden, 3) + '.' : '';
+      var keep = bar.querySelector('[data-ghca-bulk-visible]');
+      if (keep) { keep.hidden = hidden.length === 0; }
+      var send = bar.querySelector('[data-ghca-bulk-send]');
+      if (send) {
+        var tooMany = sel.length > max;
+        send.disabled = tooMany;
+        send.querySelector('[data-ghca-bulk-send-label]').textContent = tooMany ? 'Select ' + max + ' or fewer to send' : 'Send reminder to ' + sel.length;
+      }
+    }
+
+    mount.addEventListener('change', function (e) {
+      var cb = e.target.closest('[data-ghca-select]');
+      if (cb) {
+        if (cb.checked) { add(cb.value, cb.getAttribute('data-name') || cb.value); } else { remove(cb.value); }
+        sync();
+        return;
+      }
+      var head = e.target.closest('[data-ghca-select-page]');
+      if (head) {
+        var all = head.checked;
+        mount.querySelectorAll('table [data-ghca-select]').forEach(function (box) {
+          if (all) { add(box.value, box.getAttribute('data-name') || box.value); } else { remove(box.value); }
+        });
+        sync();
+      }
+    });
+    bar.addEventListener('click', function (e) {
+      if (e.target.closest('[data-ghca-bulk-clear]')) { sel = []; sync(); var first = mount.querySelector('[data-ghca-select-page]'); if (first) first.focus(); return; }
+      if (e.target.closest('[data-ghca-bulk-visible]')) { var vis = visibleIds(); sel = sel.filter(function (s) { return vis.indexOf(s.id) !== -1; }); sync(); return; }
+      var send = e.target.closest('[data-ghca-bulk-send]');
+      if (send && !send.disabled && typeof window.ghcaAcdBulkOpen === 'function') {
+        window.ghcaAcdBulkOpen(sel.map(function (s) { return { id: s.id, name: s.name }; }), send);
+      }
+    });
+    var exportForm = bar.querySelector('[data-ghca-bulk-export]');
+    if (exportForm) {
+      exportForm.addEventListener('submit', function (e) {
+        if (!sel.length) { e.preventDefault(); return; }
+        exportForm.querySelector('[data-ghca-bulk-ids]').value = sel.map(function (s) { return s.id; }).join(',');
+      });
+    }
+    // The filter script replaces the table; re-tick what is still selected.
+    if (typeof MutationObserver !== 'undefined') { new MutationObserver(sync).observe(mount, { childList: true }); }
+    window.ghcaAcdBulkSelection = { ids: function () { return sel.map(function (s) { return s.id; }); }, clear: function () { sel = []; sync(); } };
+    sync();
+  }
+
+  /*
+   * Bulk reminder dialog: compose, review, results. Every call goes through the server, which checks each
+   * recipient again; the browser only sends the ids the person selected and then reviewed.
+   */
+  function initBulkMessaging() {
+    var layer = document.getElementById('ghca-acd-bulk-modal');
+    if (!layer || !window.ghcaAcd) return;
+    var dialog = layer.querySelector('[data-ghca-bulk-dialog]');
+    var q = function (sel) { return layer.querySelector(sel); };
+    var steps = { compose: q('[data-ghca-bulk-step="compose"]'), review: q('[data-ghca-bulk-step="review"]'), result: q('[data-ghca-bulk-step="result"]') };
+    var btn = { next: q('[data-ghca-bulk-next]'), go: q('[data-ghca-bulk-go]'), back: q('[data-ghca-bulk-back]'), retry: q('[data-ghca-bulk-retry]'), cancel: q('[data-ghca-bulk-cancel]') };
+    var state = null;
+    var release = null;
+
+    function post(action, extra) {
+      var p = new URLSearchParams();
+      p.append('action', action);
+      p.append('nonce', window.ghcaAcd.nonce);
+      Object.keys(extra).forEach(function (k) { p.append(k, extra[k]); });
+      return fetch(window.ghcaAcd.ajaxUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: p.toString() }).then(ghcaReadJson);
+    }
+    function showError(msg) { var el = q('[data-ghca-bulk-error]'); el.textContent = msg || ''; el.hidden = !msg; }
+    function failMsg(err) { return err && err.ghcaSession ? GHCA_SESSION_MSG : 'Could not reach the server. Nothing was sent.'; }
+    function show(step) {
+      Object.keys(steps).forEach(function (k) { steps[k].hidden = k !== step; });
+      btn.next.hidden = step !== 'compose';
+      btn.go.hidden = step !== 'review';
+      btn.back.hidden = step !== 'review';
+      btn.retry.hidden = true;
+      btn.cancel.textContent = step === 'result' ? 'Close' : 'Cancel';
+      var title = q('[data-ghca-bulk-title]');
+      title.textContent = step === 'compose' ? 'Send training reminder to ' + state.ids.length : (step === 'review' ? 'Review before sending' : 'Reminder results');
+      try { title.focus({ preventScroll: true }); } catch (e) { title.focus(); }
+    }
+    function nameOf(id) { var r = state.recipients.filter(function (x) { return String(x.id) === String(id); })[0]; return r && r.name ? r.name : (state.names[id] || ('Employee #' + id)); }
+    function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+    function chip(tone, text) { return el('span', 'gh-st gh-st--' + tone, text); }
+
+    function close() {
+      if (state && state.busy) return;
+      layer.hidden = true;
+      layer.setAttribute('aria-hidden', 'true');
+      ghcaAcdOverlay.close(layer);
+      if (release) { release(); release = null; }
+      state = null;
+    }
+
+    function open(selection, launcher) {
+      state = { ids: selection.map(function (s) { return String(s.id); }), names: {}, recipients: [], templates: [], token: '', busy: false, results: {} };
+      selection.forEach(function (s) { state.names[s.id] = s.name; });
+      layer.hidden = false;
+      layer.setAttribute('aria-hidden', 'false');
+      ghcaAcdOverlay.open(layer, launcher, function () { if (!steps.review.hidden) { show('compose'); } else { close(); } });
+      Object.keys(steps).forEach(function (k) { steps[k].hidden = true; });
+      q('[data-ghca-bulk-loading]').hidden = false;
+      showError('');
+      btn.next.disabled = true; btn.next.hidden = false; btn.go.hidden = true; btn.back.hidden = true; btn.retry.hidden = true;
+      q('[data-ghca-bulk-subject]').value = ''; q('[data-ghca-bulk-message]').value = ''; q('[data-ghca-bulk-urgency]').value = 'normal';
+      release = ghcaFocusTrap(dialog, q('[data-ghca-bulk-title]'));
+      post('ghca_acd_bulk_message_context', { ids: state.ids.join(',') }).then(function (json) {
+        q('[data-ghca-bulk-loading]').hidden = true;
+        if (!state) return;
+        if (!json || !json.success) { showError((json && json.data && json.data.message) || 'Could not check the recipients.'); return; }
+        state.recipients = json.data.recipients || [];
+        state.templates = json.data.templates || [];
+        state.token = json.data.token;
+        var who = q('[data-ghca-bulk-who]');
+        who.textContent = '';
+        var ready = state.recipients.filter(function (r) { return r.ready; });
+        var blocked = state.recipients.filter(function (r) { return !r.ready; });
+        who.appendChild(el('p', 'gh-p', ready.length + ' of ' + state.recipients.length + ' selected employees can receive an email.'));
+        if (blocked.length) {
+          var ul = el('ul', 'gh-bulk-list');
+          blocked.forEach(function (r) { var li = el('li'); li.appendChild(el('strong', '', r.name || ('Employee #' + r.id))); li.appendChild(chip('failed', 'Won’t be sent')); li.appendChild(el('span', 'gh-small gh-muted', r.reason)); ul.appendChild(li); });
+          who.appendChild(ul);
+        }
+        var sel = q('[data-ghca-bulk-template]');
+        sel.querySelectorAll('option:not([value="0"])').forEach(function (o) { o.remove(); });
+        state.templates.forEach(function (t) { var o = el('option', '', t.name); o.value = String(t.id); sel.appendChild(o); });
+        sel.value = '0';
+        show('compose');
+        btn.next.disabled = ready.length === 0;
+        if (!ready.length) { showError('None of the selected employees can receive an email. Nothing will be sent.'); }
+      }).catch(function (err) { q('[data-ghca-bulk-loading]').hidden = true; showError(failMsg(err)); });
+    }
+    window.ghcaAcdBulkOpen = open;
+
+    q('[data-ghca-bulk-template]').addEventListener('change', function () {
+      var t = state && state.templates.filter(function (x) { return String(x.id) === this.value; }, this)[0];
+      if (!t) return;
+      q('[data-ghca-bulk-subject]').value = t.subject;
+      q('[data-ghca-bulk-message]').value = t.message;
+      q('[data-ghca-bulk-urgency]').value = t.urgency || 'normal';
+    });
+
+    function draft() {
+      return { subject: q('[data-ghca-bulk-subject]').value.trim(), message: q('[data-ghca-bulk-message]').value.trim(), urgency: q('[data-ghca-bulk-urgency]').value, template_id: q('[data-ghca-bulk-template]').value };
+    }
+
+    steps.compose.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!state || state.busy) return;
+      var d = draft();
+      if (!d.subject || !d.message) {
+        showError('Enter a subject and a message.');
+        (d.subject ? q('[data-ghca-bulk-message]') : q('[data-ghca-bulk-subject]')).focus();
+        return;
+      }
+      showError('');
+      state.busy = true; btn.next.disabled = true;
+      post('ghca_acd_bulk_message_preview', { ids: state.ids.join(','), subject: d.subject, message: d.message, urgency: d.urgency }).then(function (json) {
+        state.busy = false; btn.next.disabled = false;
+        if (!json || !json.success) { showError((json && json.data && json.data.message) || 'Could not prepare the preview.'); return; }
+        state.recipients = json.data.recipients || [];
+        state.draft = d;
+        var rows = q('[data-ghca-bulk-rows]'); rows.textContent = '';
+        var pv = q('[data-ghca-bulk-pv-who]'); pv.textContent = '';
+        state.recipients.forEach(function (r) {
+          var tr = el('tr');
+          tr.appendChild(el('td', '', r.name || ('Employee #' + r.id)));
+          tr.appendChild(el('td', 'gh-secondary', r.destination || '—'));
+          var td = el('td'); td.appendChild(chip(r.ready ? 'completed' : 'failed', r.ready ? 'Will be sent' : 'Won’t be sent'));
+          if (!r.ready && r.reason) { td.appendChild(el('div', 'gh-small gh-muted', r.reason)); }
+          tr.appendChild(td); rows.appendChild(tr);
+          if (r.ready) { var o = el('option', '', r.name); o.value = String(r.id); pv.appendChild(o); }
+        });
+        var ready = state.recipients.filter(function (r) { return r.ready; });
+        state.readyIds = ready.map(function (r) { return String(r.id); });
+        renderPreview();
+        q('[data-ghca-bulk-confirm]').checked = false;
+        btn.go.disabled = true;
+        q('[data-ghca-bulk-go-label]').textContent = 'Send ' + ready.length + (ready.length === 1 ? ' email' : ' emails');
+        show('review');
+        if (!ready.length) { showError('None of the selected employees can receive this message. Nothing will be sent.'); }
+      }).catch(function (err) { state.busy = false; btn.next.disabled = false; showError(failMsg(err)); });
+    });
+
+    function renderPreview() {
+      var id = q('[data-ghca-bulk-pv-who]').value;
+      var r = state.recipients.filter(function (x) { return String(x.id) === id; })[0];
+      q('[data-ghca-bulk-pv-subject]').textContent = r ? r.subject : '';
+      q('[data-ghca-bulk-pv-message]').textContent = r ? r.message : '';
+    }
+    q('[data-ghca-bulk-pv-who]').addEventListener('change', renderPreview);
+    q('[data-ghca-bulk-confirm]').addEventListener('change', function () { btn.go.disabled = !this.checked || !state || !state.readyIds.length; });
+    btn.back.addEventListener('click', function () { if (state && !state.busy) { showError(''); show('compose'); } });
+
+    function send(ids) {
+      if (!state || state.busy || !ids.length) return;
+      state.busy = true; btn.go.disabled = true; btn.retry.disabled = true; btn.back.disabled = true;
+      dialog.setAttribute('aria-busy', 'true');
+      showError('');
+      var d = state.draft;
+      post('ghca_acd_bulk_message_send', { ids: ids.join(','), subject: d.subject, message: d.message, urgency: d.urgency, template_id: d.template_id, token: state.token, reviewed: '1' }).then(function (json) {
+        state.busy = false; btn.back.disabled = false; btn.retry.disabled = false;
+        dialog.removeAttribute('aria-busy');
+        if (!json || !json.success) { showError((json && json.data && json.data.message) || 'Nothing was sent.'); if (steps.result.hidden) { btn.go.disabled = false; } return; }
+        (json.data.results || []).forEach(function (r) { state.results[String(r.id)] = r; });
+        renderResults();
+      }).catch(function (err) {
+        state.busy = false; btn.back.disabled = false; btn.retry.disabled = false;
+        dialog.removeAttribute('aria-busy');
+        // The server may have queued some before the connection dropped. Retrying uses the same batch token, so
+        // anyone already queued is reported as "already queued" rather than emailed twice.
+        showError(err && err.ghcaSession ? GHCA_SESSION_MSG : 'The connection dropped. Some emails may have been queued. Use Retry to check: anyone already queued is not emailed again.');
+        state.readyIds.forEach(function (id) { if (!state.results[id]) { state.results[id] = { id: id, status: 'failed', message: 'Not confirmed: the connection dropped.' }; } });
+        renderResults();
+      });
+    }
+    btn.go.addEventListener('click', function () { if (state && q('[data-ghca-bulk-confirm]').checked) { send(state.readyIds.slice()); } });
+
+    function renderResults() {
+      var list = q('[data-ghca-bulk-results]'); list.textContent = '';
+      var counts = { queued: 0, duplicate: 0, failed: 0 };
+      state.readyIds.forEach(function (id) {
+        var r = state.results[id] || { status: 'failed', message: 'No answer for this employee.' };
+        counts[r.status] = (counts[r.status] || 0) + 1;
+        var li = el('li'); li.appendChild(el('strong', '', nameOf(id)));
+        li.appendChild(chip(r.status === 'failed' ? 'failed' : (r.status === 'duplicate' ? 'progress' : 'completed'), r.status === 'queued' ? 'Queued' : (r.status === 'duplicate' ? 'Already recorded' : 'Not sent')));
+        li.appendChild(el('span', 'gh-small gh-muted', r.message || ''));
+        list.appendChild(li);
+      });
+      var total = state.readyIds.length;
+      var sum = q('[data-ghca-bulk-summary]');
+      sum.className = 'gh-alert ' + (counts.failed ? 'gh-alert--warning' : 'gh-alert--success');
+      sum.textContent = (counts.queued + counts.duplicate) + ' of ' + total + ' queued' + (counts.duplicate ? ' (' + counts.duplicate + ' already recorded from this batch)' : '') + '.' + (counts.failed ? ' ' + counts.failed + ' not sent.' : '');
+      show('result');
+      var failed = state.readyIds.filter(function (id) { return (state.results[id] || {}).status === 'failed'; });
+      btn.retry.hidden = failed.length === 0;
+      btn.retry.textContent = 'Retry the ' + failed.length + ' not sent';
+      btn.retry.onclick = function () { send(failed); };
+    }
+
+    layer.addEventListener('click', function (e) { if (e.target.closest('[data-ghca-bulk-close]')) { close(); } });
+  }
+
+  /*
    * Redesigned Audit data tab: saves one row's first-service date, worked-alone date and CSV exclusion
    * through the same action, nonce name and fields as the legacy tab. Dates are checked against the
    * MM/DD/YYYY shape first, because the server stores anything else as empty.
@@ -2643,5 +2969,7 @@
   initManualEntry();
   initManualEvidenceOpen();
   initAuditDates();
+  initBulkSelection();
+  initBulkMessaging();
 
 })();

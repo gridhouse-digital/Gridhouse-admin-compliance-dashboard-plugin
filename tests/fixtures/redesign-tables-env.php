@@ -67,6 +67,7 @@ final class GHCA_Admin_Compliance_Dashboard {
 final class GHCA_ACD_Settings {
 	public static function ui_redesign_enabled(): bool { return $GLOBALS['ghca_env']['redesign']; }
 	public static function get_at_risk_days(): int { return $GLOBALS['ghca_env']['at_risk_days'] ?? 14; }
+	public static function reminder_email_enabled(): bool { return $GLOBALS['ghca_env']['email_on'] ?? true; }
 }
 final class GHCA_ACD_Roles {
 	public static function user_can_view(): bool { return $GLOBALS['ghca_env']['can_view']; }

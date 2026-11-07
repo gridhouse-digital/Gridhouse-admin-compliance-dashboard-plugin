@@ -1390,3 +1390,67 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-date { width: 100%; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-save .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-pk .gh-btn { flex: 1 1 auto; min-height: var(--gh-touch); }
 }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer.is-admin { width: min(860px, 100%); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer.is-admin.is-subpage { width: min(920px, 100%); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-admin.app-adm { gap: 20px; }
+:is(.ghca-ui, #ghca-ui-scope) .app-adm-hero > span { background: var(--gh-agency, var(--gh-color-primary)) !important; color: var(--gh-agency-on, var(--gh-color-on-primary)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .app-adm-status { background: var(--gh-agency, var(--gh-color-primary)) !important; color: var(--gh-agency-on, var(--gh-color-on-primary)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .app-adm-status > span, :is(.ghca-ui, #ghca-ui-scope) .app-adm-status > p, :is(.ghca-ui, #ghca-ui-scope) .app-adm-status dt { color: color-mix(in srgb, var(--gh-agency-on, var(--gh-color-on-primary)) 85%, transparent) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .app-adm-status dl { border-top-color: color-mix(in srgb, var(--gh-agency-on, var(--gh-color-on-primary)) 22%, transparent) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .app-adm-card--brand .app-adm-card-hd h4::before { background: var(--gh-agency, var(--gh-color-primary)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .app-adm-facts > div:last-child { border-left-color: var(--gh-agency, var(--gh-color-primary)) !important; background: var(--gh-agency-soft, var(--gh-primary-100)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app button.app-adm-btn { background: var(--gh-agency-soft, var(--gh-primary-100)) !important; color: var(--gh-agency-ink, var(--gh-text)) !important; text-transform: none; letter-spacing: normal; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app button.app-adm-btn:hover { background: color-mix(in srgb, var(--gh-agency, var(--gh-color-primary)) 18%, var(--gh-surface-card)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app button.app-adm-btn--primary { background: var(--gh-agency, var(--gh-color-primary)) !important; color: var(--gh-agency-on, var(--gh-color-on-primary)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app button.app-adm-btn--primary:hover { background: var(--gh-agency-hover, var(--gh-color-primary-hover)) !important; color: var(--gh-agency-on-hover, var(--gh-color-on-primary)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app button.app-adm-btn:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)); outline-offset: 2px; box-shadow: none; }
+:is(.ghca-ui, #ghca-ui-scope) .app-adm-card-hd p.is-empty { color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .app-adm-hero h3, :is(.ghca-ui, #ghca-ui-scope) .app-adm-card-hd h4, :is(.ghca-ui, #ghca-ui-scope) .app-adm-meta h4 { text-transform: none !important; font-family: var(--gh-font-heading) !important; letter-spacing: -0.02em !important; }
+:is(.ghca-ui, #ghca-ui-scope) .app-adm-meta h4 { font-family: var(--gh-font-body) !important; letter-spacing: .09em !important; text-transform: uppercase !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-admin > .gh-alert .gh-btn { align-self: center; flex: 0 0 auto; }
+@media (min-width: 720px) and (max-width: 1023px) {
+  :is(.ghca-ui, #ghca-ui-scope) .app-adm-btn { min-height: var(--gh-touch); }
+}
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .app-adm-hero { padding: 18px; }
+  :is(.ghca-ui, #ghca-ui-scope) .app-adm-hero > span { width: 48px; height: 48px; flex-basis: 48px; }
+  :is(.ghca-ui, #ghca-ui-scope) .app-adm-card, :is(.ghca-ui, #ghca-ui-scope) .app-adm-status, :is(.ghca-ui, #ghca-ui-scope) .app-adm-meta { padding: 18px; }
+  :is(.ghca-ui, #ghca-ui-scope) .app-adm-status > strong { font-size: 26px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-admin > .gh-alert { flex-wrap: wrap; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-admin > .gh-alert > .gh-btn { flex: 1 1 100%; min-height: var(--gh-touch); }
+}
+:is(.ghca-ui, #ghca-ui-scope) .gh-app input.gh-cb { -webkit-appearance: auto; appearance: auto; width: 18px; height: 18px; margin: 0; accent-color: var(--gh-agency, var(--gh-color-primary)); cursor: pointer; vertical-align: middle; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table .c-check { width: 44px; padding-right: 0; text-align: center; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table tr.is-selected td { background: var(--gh-agency-soft, var(--gh-surface-selected)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard.is-selected { box-shadow: inset 0 0 0 2px var(--gh-agency, var(--gh-color-primary)); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-sel { display: inline-flex; align-items: center; justify-content: center; min-width: var(--gh-touch); min-height: var(--gh-touch); margin: -10px 0 -10px -10px; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar { background: var(--gh-agency, var(--gh-color-primary)) !important; color: var(--gh-agency-on, var(--gh-color-on-primary)) !important; position: sticky; top: 8px; z-index: 3; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-bulk-names { opacity: .9; min-width: 0; overflow-wrap: anywhere; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-bulk-hidden { flex-basis: 100%; order: 9; font-weight: 600; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-bulk-hidden[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-bulk-sp { flex: 1; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-bulk-export { display: contents; margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bulkbar .gh-btn--on-brand { color: var(--gh-agency-on, var(--gh-color-on-primary)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bulkbar .gh-btn--on-brand.is-primary { background: var(--gh-agency-on, var(--gh-color-on-primary)) !important; color: var(--gh-agency, var(--gh-color-primary)) !important; border-color: var(--gh-agency-on, var(--gh-color-on-primary)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bulkbar .gh-btn--on-brand:disabled { opacity: .6; cursor: not-allowed; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-bulkbar .gh-btn--on-brand:focus-visible { outline: 2px solid var(--gh-agency-on, var(--gh-color-on-primary)); outline-offset: 2px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulk-mod .gh-modal-bd { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulk-mod .gh-bulk-chan { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulk-review, :is(.ghca-ui, #ghca-ui-scope) .gh-bulk-result, :is(.ghca-ui, #ghca-ui-scope) .gh-bulk-who { display: flex; flex-direction: column; gap: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulk-review[hidden], :is(.ghca-ui, #ghca-ui-scope) .gh-bulk-result[hidden], :is(.ghca-ui, #ghca-ui-scope) .gh-bulk-mod form[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulk-who > p { margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) ul.gh-bulk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+:is(.ghca-ui, #ghca-ui-scope) ul.gh-bulk-list > li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; padding: 10px 12px; border: 1px solid var(--gh-border); border-radius: var(--gh-radius-md); background: var(--gh-surface-card); }
+:is(.ghca-ui, #ghca-ui-scope) ul.gh-bulk-list > li > .gh-small { flex-basis: 100%; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulk-mod .gh-table-wrap { max-height: 240px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bulk-pv { white-space: pre-wrap; }
+@media (max-width: 1023px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-btn { min-height: var(--gh-touch); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-btn--icon { min-width: var(--gh-touch); }
+}
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar { top: 0; border-radius: 0 0 var(--gh-radius-md) var(--gh-radius-md); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-bulk-sp { display: none; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-btn:not(.gh-btn--icon) { flex: 1 1 auto; }
+}

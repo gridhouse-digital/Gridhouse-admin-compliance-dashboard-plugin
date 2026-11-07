@@ -313,6 +313,7 @@ final class GHCA_ACD_Redesign {
 		if ( ! empty( $model['employee_drawer'] ) ) {
 			$html           .= GHCA_ACD_Redesign_Drawer::shell_html();
 			$html           .= GHCA_ACD_Redesign_Reminder::modal_html();
+			$html           .= class_exists( 'GHCA_ACD_Redesign_Bulk' ) ? GHCA_ACD_Redesign_Bulk::modal_html() : '';
 			self::$rendered = true;
 		}
 		$html .= self::toasts_html( (array) ( $model['flash'] ?? array() ) );

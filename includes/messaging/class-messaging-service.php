@@ -225,6 +225,37 @@ final class GHCA_ACD_Messaging_Service {
 		return $created;
 	}
 
+	/**
+	 * What one employee would receive by email for this subject and message: the same access check, placeholder
+	 * values, length checks and urgency prefix as queue(), with nothing stored or sent. Used by the bulk review step.
+	 *
+	 * @return array{subject:string,message:string}|WP_Error
+	 */
+	public static function preview_email( int $employee_user_id, string $subject, string $message, string $urgency ) {
+		if ( ! self::schema_ready() ) {
+			return new WP_Error( 'ghca_message_schema_unavailable', __( 'Messaging setup is incomplete.', 'ghca-acd' ) );
+		}
+		$access = self::check_employee_access( $employee_user_id, true );
+		if ( is_wp_error( $access ) ) {
+			return $access;
+		}
+		$values  = self::template_values( $access['user'], $access['employee'] );
+		$subject = GHCA_ACD_Message_Template_Renderer::render( sanitize_text_field( $subject ), $values );
+		$message = GHCA_ACD_Message_Template_Renderer::render( sanitize_textarea_field( $message ), $values );
+		if ( is_wp_error( $subject ) ) {
+			return $subject;
+		}
+		if ( is_wp_error( $message ) ) {
+			return $message;
+		}
+		$valid = GHCA_ACD_Message_Template_Renderer::validate_lengths( $subject, $message, true );
+		if ( is_wp_error( $valid ) ) {
+			return $valid;
+		}
+		$urgency = GHCA_ACD_Message_Template_Renderer::normalize_urgency( sanitize_key( $urgency ) );
+		return array( 'subject' => GHCA_ACD_Message_Template_Renderer::apply_urgency_prefix( $subject, $urgency ), 'message' => $message );
+	}
+
 	public static function retry( int $delivery_id ) {
 		if ( ! self::schema_ready() ) {
 			return new WP_Error( 'ghca_message_schema_unavailable', __( 'Messaging setup is incomplete.', 'ghca-acd' ) );

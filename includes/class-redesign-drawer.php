@@ -453,34 +453,60 @@ final class GHCA_ACD_Redesign_Drawer {
 		return $h . '<span class="gh-small gh-muted">' . esc_html( sprintf( /* translators: %s: urgency level */ __( 'Urgency: %s', 'ghca-acd' ), ucfirst( (string) $item['urgency'] ) ) ) . '</span></div></li>';
 	}
 
-	/** @param array<string,mixed> $m */
+	/**
+	 * Administration tab, following the Drawer-Administration board (canvas version 1794077292-4607): overview hero,
+	 * a warning when the verified start is missing, the training-record and compliance-review cards, and a status
+	 * column with system meta. Only shown when user_can_edit_records() passed (see header_html()); every value is
+	 * the drawer model's, and every action keeps its existing hook and endpoint.
+	 *
+	 * The hero's last sentence differs from the board ("This information is restricted to authorized personnel."):
+	 * shown next to the data, that read like a denial. The replacement says who can see it and why.
+	 *
+	 * @param array<string,mixed> $m
+	 */
 	private static function administration_html( array $m ): string {
 		$user_id   = (int) $m['user_id'];
 		$suspended = (bool) $m['is_suspended'];
 		$unset     = (string) $m['employment_type_label'] === __( 'Not set', 'ghca-acd' );
-		$not_rec   = __( 'Not recorded', 'ghca-acd' );
 		$vs_ts     = (int) $m['verified_start_ts'];
+		$name      = (string) $m['employee_name'];
+		$edit_attr = ' data-ghca-edit-records="' . esc_attr( (string) $user_id ) . '" data-ghca-edit-records-name="' . esc_attr( $name ) . '"';
+		$review    = (string) $m['review']['line'];
 
-		$h  = '<div class="gh-dr-admin" data-ghca-admin-view="overview">';
-		$h .= '<div class="gh-alert gh-alert--neutral">' . self::icon( 'lock' ) . '<div class="gh-alert-body">' . esc_html__( 'Employment records. Restricted to authorized personnel.', 'ghca-acd' ) . '</div></div>';
+		$h  = '<div class="gh-dr-admin app-adm" data-ghca-admin-view="overview">';
+		$h .= '<header class="app-adm-hero"><div><h3>' . esc_html__( 'Administrative Overview', 'ghca-acd' ) . '</h3><p>' . esc_html__( 'Core employee records and employment status details. Confidential: shown only to people with permission to edit employee records.', 'ghca-acd' ) . '</p></div><span aria-hidden="true">' . self::icon( 'shield', 'xl' ) . '</span></header>';
 
-		$h .= '<section class="gh-card"><div class="gh-card-hd"><h3 class="gh-h4">' . esc_html__( 'Employment', 'ghca-acd' ) . '</h3><span class="gh-st gh-st--' . ( $suspended ? 'suspended' : 'active' ) . '">' . esc_html( $suspended ? __( 'Inactive', 'ghca-acd' ) : __( 'Active', 'ghca-acd' ) ) . '</span></div><div class="gh-card-bd"><dl class="gh-dl gh-dl--14">';
-		$h .= '<div><dt>' . esc_html__( 'Role', 'ghca-acd' ) . '</dt><dd>' . esc_html( '' !== (string) $m['role_label'] ? (string) $m['role_label'] : '—' ) . '</dd></div>';
+		if ( $vs_ts <= 0 ) {
+			$h .= '<div class="gh-alert gh-alert--warning" role="status">' . self::icon( 'alert' ) . '<div class="gh-alert-body"><span class="gh-alert-t">' . esc_html__( 'Verified start date missing', 'ghca-acd' ) . '</span><p>' . esc_html__( 'The 30-day orientation result shows “Missing evidence” until a verified employment start date is entered. The registration date is never used.', 'ghca-acd' ) . '</p></div>';
+			$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm"' . $edit_attr . '>' . esc_html__( 'Enter date', 'ghca-acd' ) . '</button></div>';
+		}
+
+		$h .= '<div class="app-adm-grid"><div class="app-adm-main">';
+		$h .= '<section class="app-adm-card" aria-labelledby="ghca-adm-rec"><div class="app-adm-card-hd"><div><h4 id="ghca-adm-rec">' . esc_html__( 'Employee Training Record', 'ghca-acd' ) . '</h4><p>' . esc_html__( 'Foundational dates and orientation metrics.', 'ghca-acd' ) . '</p></div>';
+		$h .= '<button type="button" class="app-adm-btn"' . $edit_attr . '>' . self::icon( 'edit', 'sm' ) . esc_html__( 'Edit Record', 'ghca-acd' ) . '</button></div>';
+		$h .= '<dl class="app-adm-facts"><div><dt>' . esc_html__( 'Registration date', 'ghca-acd' ) . '</dt><dd>' . esc_html( (string) $m['registration_label'] ) . '</dd></div>';
+		$h .= '<div><dt>' . esc_html__( 'First service date', 'ghca-acd' ) . '</dt><dd>' . esc_html( (string) $m['first_service_label'] ) . '</dd></div>';
+		$h .= '<div><dt>' . esc_html__( 'Orientation', 'ghca-acd' ) . '</dt><dd>' . esc_html( (string) $m['orientation_label'] ) . '</dd></div></dl></section>';
+
+		$h .= '<section class="app-adm-card app-adm-card--brand" aria-labelledby="ghca-adm-rev"><div class="app-adm-card-hd"><div><h4 id="ghca-adm-rev">' . esc_html__( 'Compliance Review', 'ghca-acd' ) . '</h4><p data-ghca-review-status' . ( $m['review']['reviewed'] ? '' : ' class="is-empty"' ) . '><span data-ghca-review-text>' . esc_html( $review ) . '</span></p></div>';
+		$h .= '<button type="button" class="app-adm-btn app-adm-btn--primary" data-ghca-mark-reviewed="' . esc_attr( (string) $user_id ) . '">' . self::icon( 'check-circle', 'sm' ) . esc_html__( 'Mark Reviewed', 'ghca-acd' ) . '</button></div></section>';
+		$h .= '</div>';
+
+		$h .= '<aside class="app-adm-side"><section class="app-adm-status" aria-label="' . esc_attr__( 'Employment status', 'ghca-acd' ) . '"><span>' . esc_html__( 'Employment status', 'ghca-acd' ) . '</span>';
+		$h .= '<strong><span>' . esc_html( $suspended ? __( 'Inactive', 'ghca-acd' ) : __( 'Active', 'ghca-acd' ) ) . ' ·</span> <span' . ( $unset ? ' class="is-unset"' : '' ) . '>' . esc_html( (string) $m['employment_type_label'] ) . '</span></strong>';
+		$h .= '<p>' . esc_html( $suspended ? __( 'Employee is currently inactive and is not authorized for active service.', 'ghca-acd' ) : __( 'Employee is currently in good standing and authorized for active service.', 'ghca-acd' ) ) . '</p>';
+		$h .= '<dl><div><dt>' . esc_html__( 'Role', 'ghca-acd' ) . '</dt><dd>' . esc_html( '' !== (string) $m['role_label'] ? (string) $m['role_label'] : '—' ) . '</dd></div>';
 		$h .= '<div><dt>' . esc_html__( 'Group', 'ghca-acd' ) . '</dt><dd>' . esc_html( '' !== (string) $m['group_label'] ? (string) $m['group_label'] : '—' ) . '</dd></div>';
-		$h .= '<div' . ( $unset ? ' class="gh-dl-warn"' : '' ) . '><dt>' . esc_html__( 'Employment type', 'ghca-acd' ) . '</dt><dd>' . esc_html( (string) $m['employment_type_label'] ) . '</dd></div>';
-		$h .= '</dl><p class="gh-small gh-muted gh-dr-note">' . esc_html( $suspended ? __( 'Employee is currently inactive and is not authorized for active service.', 'ghca-acd' ) : __( 'Employee is currently in good standing and authorized for active service.', 'ghca-acd' ) ) . '</p></div></section>';
+		$h .= '<div><dt>' . esc_html__( 'Verified start', 'ghca-acd' ) . '</dt><dd>' . esc_html( $vs_ts > 0 ? wp_date( get_option( 'date_format', 'M j, Y' ), $vs_ts ) : __( 'Not entered', 'ghca-acd' ) ) . '</dd></div></dl></section>';
 
-		$h .= '<section class="gh-card"><div class="gh-card-hd"><div><h3 class="gh-h4">' . esc_html__( 'Orientation & key dates', 'ghca-acd' ) . '</h3><span class="gh-small gh-muted">' . esc_html__( 'Foundational dates and orientation metrics.', 'ghca-acd' ) . '</span></div>';
-		$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm gh-btn--lnk" data-ghca-edit-records="' . esc_attr( (string) $user_id ) . '" data-ghca-edit-records-name="' . esc_attr( (string) $m['employee_name'] ) . '">' . self::icon( 'edit', 'sm' ) . esc_html__( 'Edit records', 'ghca-acd' ) . '</button></div><div class="gh-card-bd"><dl class="gh-dl">';
-		$h .= '<div><dt>' . esc_html__( 'Account registered', 'ghca-acd' ) . '</dt><dd>' . esc_html( (string) $m['registration_label'] ) . '</dd></div>';
-		$h .= '<div' . ( $vs_ts > 0 ? '' : ' class="gh-dl-warn"' ) . '><dt>' . esc_html__( 'Verified start', 'ghca-acd' ) . '</dt><dd>' . esc_html( $vs_ts > 0 ? wp_date( get_option( 'date_format', 'M j, Y' ), $vs_ts ) : __( 'Not verified', 'ghca-acd' ) ) . '</dd></div>';
-		$h .= '<div><dt>' . esc_html__( 'First service', 'ghca-acd' ) . '</dt><dd' . ( (string) $m['first_service_label'] === $not_rec ? ' class="gh-muted"' : '' ) . '>' . esc_html( (string) $m['first_service_label'] ) . '</dd></div>';
-		$h .= '<div><dt>' . esc_html__( 'Orientation', 'ghca-acd' ) . '</dt><dd>' . esc_html( (string) $m['orientation_label'] ) . '</dd></div></dl></div></section>';
-
-		$last = '' !== (string) $m['last_reminder_label'] ? (string) $m['last_reminder_label'] : __( 'None recorded', 'ghca-acd' );
-		$h   .= '<section class="gh-card"><div class="gh-card-hd"><div><h3 class="gh-h4">' . esc_html__( 'Compliance review', 'ghca-acd' ) . '</h3>';
-		$h   .= '<span class="gh-small gh-muted' . ( $m['review']['reviewed'] ? '' : ' is-empty' ) . '" data-ghca-review-status><span data-ghca-review-text>' . esc_html( (string) $m['review']['line'] ) . '</span> · ' . esc_html( sprintf( /* translators: %s: date and time of the last reminder */ __( 'last reminder %s', 'ghca-acd' ), $last ) ) . '</span></div>';
-		$h   .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-mark-reviewed="' . esc_attr( (string) $user_id ) . '">' . self::icon( 'check', 'sm' ) . esc_html__( 'Mark reviewed', 'ghca-acd' ) . '</button></div></section>';
+		$h .= '<section class="app-adm-meta" aria-labelledby="ghca-adm-meta"><h4 id="ghca-adm-meta">' . esc_html__( 'System meta', 'ghca-acd' ) . '</h4><dl>';
+		$h .= '<div><dt>' . esc_html__( 'Last Review', 'ghca-acd' ) . '</dt><dd data-ghca-review-text>' . esc_html( $review ) . '</dd></div>';
+		// The last reminder is communication history: shown only to people allowed to see it, as before.
+		if ( ! empty( $m['can_communications'] ) ) {
+			$h .= '<div><dt>' . esc_html__( 'Last Reminder', 'ghca-acd' ) . '</dt><dd>' . esc_html( '' !== (string) $m['last_reminder_label'] ? (string) $m['last_reminder_label'] : __( 'None recorded', 'ghca-acd' ) ) . '</dd></div>';
+		}
+		$h .= '<div><dt>' . esc_html__( 'Training status', 'ghca-acd' ) . '</dt><dd>' . esc_html( (string) $m['status_label'] ) . '</dd></div></dl></section>';
+		$h .= '</aside></div>';
 
 		$h .= '</div><div class="gh-dr-subpage" data-ghca-admin-view="subpage" hidden>' . self::subpage_html( $m ) . '</div>';
 		return $h;

@@ -24,7 +24,8 @@ function reset_env( array $over = array(), int $count = 10 ): void {
 	ghca_env_seed( $count );
 }
 function rows_in( string $html ): int {
-	return substr_count( $html, '<tr class="is-risk">' ) + substr_count( $html, '<tr>' ) - 1; // minus the header row
+	// Body rows carry data-ghca-row (slice 6, for row selection); the header row does not.
+	return (int) preg_match_all( '/<tr[^>]*\sdata-ghca-row="/', $html );
 }
 
 // ---- Status tones: every slug the provider can emit, new-hire variants included.

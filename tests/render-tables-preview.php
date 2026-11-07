@@ -6,11 +6,22 @@
  *
  *   php tests/render-tables-preview.php page /tmp/ghca-tables [theme] [hostile]
  *   php tests/render-tables-preview.php ajax '{"ghca_table":"employees","ghca_ui":"board"}' [count]
+ *
+ * GHCA_PREVIEW_BULK=1 adds slice 6: row selection, the selection bar and the bulk reminder dialog (with the
+ * drawer shell and reminder modal they sit beside). GHCA_PREVIEW_PERMS=noremind hides sending.
  */
 require __DIR__ . '/fixtures/redesign-tables-env.php';
 require __DIR__ . '/../includes/odp/class-odp-contract.php';
 require __DIR__ . '/../includes/odp/class-odp-ui.php';
 require __DIR__ . '/../includes/class-redesign.php';
+$bulk = '1' === getenv( 'GHCA_PREVIEW_BULK' );
+if ( $bulk ) {
+	require_once __DIR__ . '/../includes/class-redesign-drawer.php';
+	require_once __DIR__ . '/../includes/class-redesign-reminder.php';
+	require_once __DIR__ . '/../includes/messaging/class-bulk-messaging.php';
+	require_once __DIR__ . '/../includes/class-redesign-bulk.php';
+	$GLOBALS['ghca_env']['can_remind'] = 'noremind' !== getenv( 'GHCA_PREVIEW_PERMS' );
+}
 
 $mode = $argv[1] ?? 'page';
 
@@ -64,6 +75,7 @@ $model     = array(
 		'ghca-tab-inactive-employees' => GHCA_ACD_Redesign_Tables::render_employees( array(), 'inactive' ),
 	),
 	'board_panels' => array( 'ghca-tab-employees', 'ghca-tab-inactive-employees' ),
+	'employee_drawer' => $bulk,
 	'flash'        => 'flash' === getenv( 'GHCA_PREVIEW_FLASH' ) ? array(
 		array( 'tone' => 'success', 'title' => 'Dashboard data refreshed.', 'text' => '' ),
 		array( 'tone' => 'success', 'title' => 'Compliance reminder logged successfully.', 'text' => 'A note was added to the FluentCRM contact when available.' ),

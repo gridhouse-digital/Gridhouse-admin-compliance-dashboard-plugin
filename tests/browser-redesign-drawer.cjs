@@ -176,8 +176,8 @@ const metrics = (page) => page.evaluate(() => {
     assert.equal(await page.evaluate(() => document.querySelector('.gh-drh-tabs').getAttribute('role')), 'tablist');
 
     // Administration.
-    assert.match(await page.locator('[data-ghca-tabpanel="administration"]').innerText(), /Employment type\s+Not set/); ok('administration shows employment details');
-    assert.equal(await page.locator('.gh-dl-warn').count(), 2); ok('unset employment type and unverified start are flagged');
+    assert.match(await page.locator('[data-ghca-tabpanel="administration"]').innerText(), /Active · Not set[\s\S]*Verified start\s+Not entered/i); ok('administration shows employment details (updated Drawer-Administration board)');
+    assert.equal(await page.locator('[data-ghca-tabpanel="administration"] .gh-alert--warning').count(), 1); ok('an unverified start is flagged with an Enter date action');
     await page.click('[data-ghca-mark-reviewed]');
     await page.waitForFunction(() => document.querySelector('[data-ghca-review-text]').textContent.includes('Reviewed on Nov 1, 2026'));
     assert.equal(await page.locator('[data-ghca-review-badge]').isVisible(), true); ok('Mark reviewed updates the line and shows the badge through the existing script');
@@ -462,7 +462,7 @@ const metrics = (page) => page.evaluate(() => {
     await page.waitForSelector('[data-ghca-edit-form]');
     assert.equal(state.editRequest.ghca_ui, 'board'); ok('edit: the form is requested as board markup');
     const wide = await page.evaluate(() => Math.round(document.querySelector('.gh-drawer--emp').getBoundingClientRect().width));
-    assert.equal(before, 600); assert.equal(wide, 920); ok('edit: the drawer widens from 600px to 920px for the sub-page');
+    assert.equal(before, 860); assert.equal(wide, 920); ok('edit: the drawer is 860px on Administration (updated board) and widens to 920px for the sub-page');
     assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-ghca-subpage-head')), true); ok('edit: focus moves to the sub-page heading');
     assert.equal(await page.locator('[data-ghca-admin-view="overview"]').isVisible(), false); ok('edit: the overview is hidden behind the sub-page');
     assert.equal(await page.locator('.ghca-acd__edit-form').count(), 0); ok('edit: no legacy form markup');
@@ -490,7 +490,7 @@ const metrics = (page) => page.evaluate(() => {
     assert.equal(state.saved.employment_type, 'full_time'); assert.equal(state.saved.user_id, '42'); ok('edit: Save posts the form to the existing action for this employee');
     assert.ok(Object.keys(state.saved).some((k) => /^course\[\d+\]\[mark_complete\]$/.test(k))); ok('edit: course completion flags are posted as 0 or 1 by the existing script');
     assert.equal(await page.locator('[data-ghca-edit-form]').count(), 0); ok('edit: after saving the sub-page closes');
-    assert.equal(await page.evaluate(() => Math.round(document.querySelector('.gh-drawer--emp').getBoundingClientRect().width)), 600); ok('edit: and the drawer returns to 600px');
+    assert.equal(await page.evaluate(() => Math.round(document.querySelector('.gh-drawer--emp').getBoundingClientRect().width)), 860); ok('edit: and the drawer returns to the Administration width (860px)');
 
     // Back and Escape.
     await page.click('[data-ghca-edit-records]');
