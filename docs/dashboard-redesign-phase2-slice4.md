@@ -2,7 +2,7 @@
 
 Opt-in, behind `ghca_acd_ui_redesign`. Unchecking it restores the previous tabs. Training math, certificate counts, group scope, capabilities, messaging and certificate downloads are unchanged. Rows, filters and paging come from the same `GHCA_ACD_Data_Provider` and `GHCA_ACD_Table_UI` calls the legacy tabs use. The legacy renderers in `class-shortcodes.php` were not edited.
 
-Boards: `Admin-Overdue`, `Admin-Courses`, `Admin-Certificates`, from the design canvas "Gridhouse Compliance — Phase 2 Dashboards", version `1793995837-628a`. Commits, oldest first: `3ebfd91` (legacy goldens, taken before any change), `87d0cb6` (implementation and tests), then this document with the browser suite and fidelity fixes.
+Boards: `Admin-Overdue`, `Admin-Courses`, `Admin-Certificates`, from the design canvas "Gridhouse Compliance — Phase 2 Dashboards", version `1793995837-628a`. Commits, oldest first: `3ebfd91` (legacy goldens, taken before any change), `87d0cb6` (implementation and tests), `3b06039` (this document, the browser suite and fidelity fixes), `e1370cb` (review changes: Courses default sort, date-only certificate sort, phone tab focus), then this update with the package and rollback notes. The package's exact commit is in its `BUILD.txt` and under [Package](#package).
 
 ## What shipped
 
@@ -13,7 +13,7 @@ Boards: `Admin-Overdue`, `Admin-Courses`, `Admin-Certificates`, from the design 
 | Due-soon rows | Courses not complete with the next course, days left, progress, status, View and Remind. |
 | Last reminder | The date and channels of the latest message, plus the state of its first delivery. Shown only to people with `user_can_view_communication_history()`, and only when the messaging schema is current. One read-only query per page: `GHCA_ACD_Messaging_Repository::latest_for_employees()`. |
 | Courses | Board toolbar, filter card (search, group, certificate, Sort), and a table with course, group badge, required, done, in progress, not started, completion bar and certificate flag. `render_courses()`. |
-| Certificates | Four tiles (Issued, Expiring soon, Missing, Completed in the last 30 days), a missing-certificate alert above the list, and a list with Issued / Expiring / Missing toggles, search, course and date filters, and sortable Completed, Employee and Course headers. PDF download and Recent completions are also on the tab. `render_certificates()`. |
+| Certificates | Four tiles (Issued, Expiring soon, Missing, Completed in the last 30 days), a missing-certificate alert above the list, and a list with Issued / Expiring / Missing toggles, search, course and date filters, and a sortable Completed (date) header, the board's only certificate sort. PDF download and Recent completions are also on the tab. `render_certificates()`. |
 | Phone | Below 720 px each table becomes cards, with full-size buttons (44 px touch targets). |
 
 ### Where the numbers come from
@@ -22,7 +22,7 @@ Boards: `Admin-Overdue`, `Admin-Courses`, `Admin-Certificates`, from the design 
 - The window in "Due within N days" is `GHCA_ACD_Settings::get_at_risk_days()`.
 - Days late and days left are whole days between today and the due date already shown, both read in the site time zone.
 - If an employee is overdue because a completed course expired, but the cycle due date is still ahead, days late shows "—" and does not count down.
-- Course counts are `get_course_overview_rows()`. The headline's tracked-course figure is `count_unique_tracked_courses()`, the same number as the Courses tab badge (acceptance gate for this slice).
+- Course counts are `get_course_overview_rows()`. The default order is the board's, Lowest completion first; ties go by course, then group. "Course A–Z" gives the legacy table's order. Only the order changes, never a count. The headline's tracked-course figure is `count_unique_tracked_courses()`, the same number as the Courses tab badge (acceptance gate for this slice).
 - Certificate rows come from the same course records `summarize_certificates()` counts. Issued equals `certificates_issued`, and Missing equals `certificates_missing`; a test checks both.
 - Expiring and expired come from the rolling-lifespan state already on each course (`GHCA_Course_Lifespans`).
 
@@ -93,14 +93,27 @@ These board elements have no functionality behind them in the plugin. None is fa
 | Source column and filter, "Outside (approved)" | Omitted. This list is LearnDash certificates. Approved outside training lives in the External training tab and the employee drawer's Documents. |
 | "This cycle" date filter | Omitted. The certificate rows do not carry a cycle. "Last 30 days" is offered. |
 | Sub-tabs as ARIA tabs | Toggle buttons with `aria-pressed`. They filter one list, not switch panels. Styled as the board's selected tab. |
-| Courses default sort "Lowest completion first" | Offered; the default stays Course A–Z, the legacy order, so the same inputs give the same rows as before. |
+| Certificate sort by employee or course | Not offered. The board sorts this list by date only; a request for another sort is ignored. |
 | Tiles as links | Plain tiles. The alert's "Show missing" and the toggles change the list. |
 
-## Decisions still to confirm
+## Decisions
 
-1. **Courses default sort.** The board selects "Lowest completion first"; the plugin keeps the legacy A–Z default and offers the board's order in Sort. One line in `course_sort()` to change.
-2. **Fourth certificate tile.** Expiring soon replaces Pending issuance (see above). The alternative is three tiles.
-3. **Carried over:** phone tab height, column drop, the footer modals and the phone sheet, from slices 2 and 3.
+Settled in review:
+
+1. **Courses default sort:** Lowest completion first, as on the board (`GHCA_ACD_Redesign_Lists::COURSE_SORT_DEFAULT`).
+2. **Fourth certificate tile:** Expiring soon stays in place of the unsupported "Pending issuance" count. Its number is the rolling-lifespan state already on each course; no new calculation.
+3. **Certificate sorting:** the date column only, as on the board. No new certificate sort control.
+
+Still open, carried over from slices 2 and 3: phone tab height, column drop, the footer modals and the phone sheet.
+
+## Changes after the first review (`e1370cb`)
+
+| Change | Detail |
+| --- | --- |
+| Courses default | `course_sort()` returns `rate_asc` when the request has no valid sort. The Sort select lists Lowest completion first, Highest completion first, Course A–Z. `ghca_crs_sort` is still ignored by the legacy table. |
+| Certificate sort | The Employee and Course sort headers were removed. `certificate_filters()` always sorts by completion date (newest first by default; the header toggles oldest first). |
+| Phone tab bars | Found while verifying: on a phone, keyboard selection could leave the chosen tab partly off-screen in the drawer's tab bar and in the dashboard's main tab bar. The drawer focused the tab before the other tabs lost their bolder selected state, so the scroll was computed for a width that then changed. Now every tab gets its state first and focus comes after. The redesigned drawer and main tab bars also call `scrollIntoView({ inline: 'nearest' })`. The legacy tab bars end in the same state as before, and the scroll call is not applied to them. |
+| Tests | Course, Overdue-only and combined filters; empty states and reset; the new defaults; phone tab scrolling and keyboard access in both tab bars. See [Tests](#tests). |
 
 ## Known gaps
 
@@ -109,15 +122,50 @@ These board elements have no functionality behind them in the plugin. None is fa
 - On phones the pager's chevrons render at 44 px. This is slice-2 behaviour from the canvas app layer, not changed here.
 - Loading is a dim and `aria-busy`, not skeleton rows.
 - Not verified here: LearnDash, BuddyBoss, Elementor and FluentCRM are not installed. The stand-in WordPress runs the plugin's own classes on synthetic data. Staging has not been touched.
+- The plugin header still reads `1.7.3-rc.8`, the same as the Slice 3 build on staging (the phase-2 plan keeps the header until release). WordPress's upload screen will show the same version on both sides. `BUILD.txt` and the ZIP name carry the commit that tells them apart. Asset URLs carry the file time, so browsers fetch the new CSS and JS.
+- **Staging Elementor editor stuck on "Loading": open, cause unknown.** The code review found no GHCA path that blocks the editor. Two candidates to test are the dashboard shortcode's render inside the preview (dashboard pages only) and `jotform-ownership.js`, which loads on every front-end page for logged-in users when Jotform is enabled. Controlled, approval-gated diagnostics are in `docs/staging-elementor-loading-diagnostics.md`. Staging is not cleared while this and the other staging checks below are outstanding.
 
 ## Tests
 
 | Test | What it covers |
 | --- | --- |
-| `php tests/test-redesign-lists.php` (154 checks) | Real provider, renderers, AJAX handler and messaging query on synthetic records: legacy goldens in 15 states, rows and order against the legacy rows, counts against the provider, sections, day counts, escaping, Sort, filters, chips, empty states, the Last reminder gates, FluentCRM gating, the certificate views, filters and sort, download URLs, isolation, nonce and capability order, and the redesign switch. |
-| `node tests/browser-redesign-lists.cjs [dir]` (34 checks) | Chromium. Real PHP for the page and every refresh; canned certificate endpoint. Fonts, row order, the risk edge, the row menu (not clipped, Escape, focus return), Remind hooks and permission, Sort through the hidden fields, filters and debounce, Clear all, Courses sort, filter and per-page, Certificates "Show missing", toggles, sort, PDF download (success and refused), the date filter, phone cards with no sideways scroll, and the hostile theme. |
+| `php tests/test-redesign-lists.php` (160 checks) | Real provider, renderers, AJAX handler and messaging query on synthetic records: legacy goldens in 15 states, rows and order against the legacy rows (Course A–Z) and the same rows under the default order, counts against the provider, sections, day counts, escaping, Sort, filters, chips, empty states, the Last reminder gates, FluentCRM gating, the certificate views, filters and sort, download URLs, isolation, nonce and capability order, and the redesign switch. |
+| `node tests/browser-redesign-lists.cjs [dir]` (51 checks) | Chromium. Real PHP for the page and every refresh; canned certificate endpoint. Fonts (Wix Madefor only), row order, the risk edge, the row menu (not clipped, Escape, focus return), Remind hooks and permission, Sort through the hidden fields, search debounce, **Show: Overdue only alone and with a group**, **three-filter empty state and Clear filters (all filters reset, focus to search)**, Courses default (Lowest completion first) and Course A–Z, **group, certificate and search filters alone and combined**, chip removal, **Courses empty state and reset**, per page, Certificates "Show missing", toggles, the date-only sort, **course + date + search combined, empty state and reset**, PDF download (success and refused), phone cards with no sideways scroll, **the main tab bar on a phone (scrolls, End/ArrowLeft keep the tab in view)**, and the hostile theme. |
 | `php tests/test-redesign-tables.php` (120 checks) | Slice 2. Its assertion that Courses stays legacy now expects board parts. |
-| `node tests/browser-redesign-tables.cjs` (53), `node tests/browser-redesign-drawer.cjs` (152) | Slices 2 and 3, unchanged and passing. |
-| Every other `tests/test-*.php` (72 scripts in all) and JS test | All pass. PHP lint and `node --check` pass. |
+| `node tests/browser-redesign-tables.cjs` (53) | Slice 2, passing. Covers the Employees tab's "Overdue only" checkbox (mouse and keyboard) and Clear all. |
+| `node tests/browser-redesign-drawer.cjs` (159) | Slice 3, plus seven new phone checks: the drawer tab bar scrolls sideways (4 tabs, 548 of 374 px), End, Home and ArrowRight keep the selected tab fully in view, a focus indicator shows, swipe/wheel scrolls it, and the page never scrolls sideways. |
+| Every other `tests/test-*.php` (72 scripts in all), the JS tests and the Playwright `.cjs` tests | All pass. PHP lint and `node --check` pass. |
 
 `php tests/render-lists-preview.php page <dir>` writes the synthetic page for screenshots. `GHCA_PREVIEW_PERMS` sets the permissions (`remind,docs,comms,admin`, or `none`).
+
+## Synthetic tests and staging verification
+
+| | Done | Not done |
+| --- | --- | --- |
+| Synthetic (this repository) | Everything under [Tests](#tests): the plugin's own PHP on synthetic records in a stand-in WordPress, and Chromium on a synthetic page with the plugin's real AJAX handler and canned certificate responses. Fidelity measured against the boards' own markup. Package integrity, see [Package](#package). | Real WordPress, LearnDash, BuddyBoss, Elementor, FluentCRM, Jotform; real roles and group scope; real certificates. |
+| Staging | Nothing. Nothing was installed, deployed, sent or saved. The email/outbound guard, reminders, employee records and training data were not touched. | Installing the package, every check below, and the Elementor investigation. |
+
+Suggested staging checks for Taz, after the package is approved for staging (fictional employees only; no sends):
+
+1. Install over the existing plugin (see [Install and rollback](#install-and-rollback)). Confirm one GHCA entry on the Plugins screen, active, at `Gridhouse-admin-compliance-dashboard-plugin-main/gridhouse-admin-compliance-dashboard.php`.
+2. Redesign on: Overdue, Courses and Certificates match the boards at desktop and phone width. Courses opens with Lowest completion first. Certificates sorts only by date. Fonts are Wix Madefor.
+3. Filters on each tab, alone and combined. Empty states and Clear filters. The Employees tab's Overdue only checkbox.
+4. Phone: the drawer's tab bar and the main tab bar scroll sideways; arrow keys, Home and End keep the selected tab in view.
+5. Permissions: a group leader sees only their groups; a viewer without the employee-documents permission gets no PDF button; without the send-reminders permission there is no Remind.
+6. PDF download of a real certificate through the broker, as a non-LearnDash-admin dashboard role.
+7. Redesign off: the legacy Overdue, Courses and Certificates tabs are as before.
+8. Elementor editor: follow `docs/staging-elementor-loading-diagnostics.md`; do not disable plugins or change settings without approval.
+
+## Install and rollback
+
+**Root folder.** The ZIP's single top-level folder is `Gridhouse-admin-compliance-dashboard-plugin-main/`, the folder staging already uses (`wp-content/plugins/Gridhouse-admin-compliance-dashboard-plugin-main/gridhouse-admin-compliance-dashboard.php`). Uploading it through Plugins → Add New → Upload Plugin makes WordPress offer **Replace current with uploaded**, which updates the existing plugin in place. A ZIP with a different root folder would install a second copy beside it; do not rename the folder.
+
+**What the update changes, compared with the Slice 3 build on staging (`a890189`).** Files only. The runtime diff adds no database table, migration, option, scheduled event, mail call or write of any kind; it was checked with a search of the diff. `ghca_crs_sort` and `ghca_cert_*` are request parameters, and the new messaging query only reads. Nothing is sent or written on update or activation. The package is cumulative (Slices 1–4), so a site on an older build would also receive the Slice 1–3 settings those slices introduced; staging already has them.
+
+**Rollback, fastest first:**
+
+1. **Switch the redesign off** (GHCA Settings → the redesign setting, `ghca_acd_ui_redesign`). The legacy dashboard returns at once, with no file change. The legacy screens are byte-identical to before (golden checks). This is a setting change, so it needs the owner's approval on staging.
+2. **Reinstall the previous build** (the Slice 3 package staging runs now, commit `a890189`) the same way, Replace current with uploaded. Keep that package and the existing private rollback copies; this package does not replace them.
+3. After either step, clear any page cache or CDN for the dashboard pages. Asset URLs carry the file time, so browsers need no action.
+
+No data rollback is needed: Slice 4 writes nothing.
