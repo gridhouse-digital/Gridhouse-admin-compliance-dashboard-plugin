@@ -736,6 +736,10 @@
     }
     if (moveFocus) {
       tabBtn.focus();
+      // On phones the redesigned tab bar scrolls sideways; keep the selected tab fully in view (legacy tabs unchanged).
+      if (tabContainer && tabContainer.hasAttribute('data-ghca-tablist-main') && typeof tabBtn.scrollIntoView === 'function') {
+        tabBtn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
     }
   }
 
@@ -853,12 +857,21 @@
       function selectTab(name, moveFocus) {
         if (allowed.indexOf(name) === -1) name = 'training';
         selectedTabs[String(userId)] = name;
+        var activeTab = null;
         tabs.forEach(function (tab) {
           var active = tab.getAttribute('data-ghca-tab') === name;
           tab.setAttribute('aria-selected', active ? 'true' : 'false');
           tab.setAttribute('tabindex', active ? '0' : '-1');
-          if (active && moveFocus) tab.focus();
+          if (active) activeTab = tab;
         });
+        // Focus after every tab has its final state: the selected tab is bolder, so focusing first scrolled the
+        // phone tab bar to a width that then changed. The board tab bar also scrolls the tab fully into view.
+        if (activeTab && moveFocus) {
+          activeTab.focus();
+          if (tablist.classList.contains('gh-drh-tabs') && typeof activeTab.scrollIntoView === 'function') {
+            activeTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          }
+        }
         panels.forEach(function (panel) {
           panel.hidden = panel.getAttribute('data-ghca-tabpanel') !== name;
         });

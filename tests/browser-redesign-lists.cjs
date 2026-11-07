@@ -159,6 +159,33 @@ const ids = (page, sel) => page.$$eval(sel, (els) => els.map((el) => el.getAttri
     assert.equal(await page.inputValue('#ghca-filters-priority-s'), 'name:desc');
     ok('Clear all clears filters and keeps the sort');
 
+    // Overdue only, alone and combined with a group.
+    await page.selectOption('#ghca-filters-priority-t', 'overdue');
+    await settle(page);
+    assert.deepEqual(await ids(page, '#ghca-tab-overdue .gh-tbl tbody .gh-person-n'), ['205', '202', '201']);
+    assert.equal(await page.locator('#ghca-tab-overdue #ghca-pri-soon-h').count(), 0);
+    assert.equal(state.ajax[state.ajax.length - 1].ghca_pri_type, 'overdue');
+    ok('Show: Overdue only lists the three overdue employees and drops the due-soon section');
+    await page.selectOption('#ghca-filters-priority-g', '12');
+    await settle(page);
+    assert.deepEqual(await ids(page, '#ghca-tab-overdue .gh-tbl tbody .gh-person-n'), ['202']);
+    assert.equal(await page.locator('#ghca-tab-overdue [data-ghca-chips] .gh-fchip').count(), 2);
+    ok('Overdue only + group combine (two chips)');
+    await page.fill('#ghca-filters-priority-q', 'reyes');
+    await page.waitForTimeout(450);
+    await settle(page);
+    assert.match(await page.locator('#ghca-tab-overdue .gh-tmount').innerText(), /No one matches these filters/);
+    assert.equal(await page.locator('#ghca-tab-overdue .gh-tbl').count(), 0);
+    ok('three filters that exclude everyone: filtered-empty state');
+    await page.click('#ghca-tab-overdue .gh-tmount [data-ghca-filter-clear="all"]');
+    await settle(page);
+    assert.equal(await page.inputValue('#ghca-filters-priority-q'), '');
+    assert.equal(await page.inputValue('#ghca-filters-priority-g'), '');
+    assert.equal(await page.inputValue('#ghca-filters-priority-t'), '');
+    assert.equal(await page.locator('#ghca-tab-overdue .gh-tbl tbody tr').count(), 5);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'ghca-filters-priority-q');
+    ok('Clear filters in the empty state resets every filter, restores all rows and returns focus to search');
+
     assert.deepEqual(errors, []);
     ok('no script errors on Overdue');
     if (shots) { await page.screenshot({ path: path.join(shots, 'overdue-1440.png'), fullPage: true }); }
@@ -172,12 +199,29 @@ const ids = (page, sel) => page.$$eval(sel, (els) => els.map((el) => el.getAttri
     const badge = await page.locator('[data-ghca-tab-target="ghca-tab-courses"] .gh-count').innerText();
     assert.ok((await page.locator('#ghca-tab-courses .gh-toolbar').innerText()).includes(badge + ' tracked courses'));
     ok('headline course count equals the tab badge');
+    const rateList = () => page.$$eval('#ghca-tab-courses .gh-tbl .gh-rate strong', (els) => els.map((e) => parseInt(e.textContent, 10)));
+    let rates = await rateList();
+    assert.equal(await page.inputValue('#ghca-filters-courses-s'), 'rate_asc');
+    assert.deepEqual(rates, [...rates].sort((a, b) => a - b));
+    assert.equal(await page.getAttribute('#ghca-tab-courses th.c-rate', 'aria-sort'), 'ascending');
+    ok('default: Lowest completion first, as on the board');
+    await page.selectOption('#ghca-filters-courses-s', 'name');
+    await settle(page);
+    assert.equal(state.ajax[state.ajax.length - 1].ghca_crs_sort, 'name');
+    const titles = await page.$$eval('#ghca-tab-courses .gh-tbl tbody td:first-child strong', (els) => els.map((e) => e.textContent));
+    assert.deepEqual(titles, [...titles].sort((a, b) => a.localeCompare(b)));
+    assert.equal(await page.getAttribute('#ghca-tab-courses th.c-rate', 'aria-sort'), null);
+    ok('Course A–Z gives the legacy order');
     await page.selectOption('#ghca-filters-courses-s', 'rate_asc');
     await settle(page);
-    assert.equal(state.ajax[state.ajax.length - 1].ghca_crs_sort, 'rate_asc');
-    const rates = await page.$$eval('#ghca-tab-courses .gh-tbl .gh-rate strong', (els) => els.map((e) => parseInt(e.textContent, 10)));
-    assert.deepEqual(rates, [...rates].sort((a, b) => a - b));
-    ok('Lowest completion first');
+
+    // Each course filter, then combined.
+    await page.selectOption('#ghca-filters-courses-g', '13');
+    await settle(page);
+    assert.equal(await page.locator('#ghca-tab-courses .gh-tbl tbody tr').count(), 3);
+    ok('group filter');
+    await page.selectOption('#ghca-filters-courses-g', '');
+    await settle(page);
     await page.selectOption('#ghca-filters-courses-c', 'no');
     await settle(page);
     assert.equal(await page.locator('#ghca-tab-courses .gh-tbl tbody tr').count(), 2);
@@ -187,6 +231,32 @@ const ids = (page, sel) => page.$$eval(sel, (els) => els.map((el) => el.getAttri
     assert.equal(await page.locator('#ghca-tab-courses .gh-tbl tbody tr').count(), 10);
     assert.equal(await page.inputValue('#ghca-filters-courses-s'), 'rate_asc');
     ok('chip removes its filter; sort stays');
+    await page.fill('#ghca-filters-courses-q', 'fatal');
+    await page.waitForTimeout(450);
+    await settle(page);
+    assert.equal(await page.locator('#ghca-tab-courses .gh-tbl tbody tr').count(), 2);
+    ok('search filter');
+    await page.selectOption('#ghca-filters-courses-g', '12');
+    await settle(page);
+    await page.selectOption('#ghca-filters-courses-c', 'yes');
+    await settle(page);
+    assert.equal(await page.locator('#ghca-tab-courses .gh-tbl tbody tr').count(), 1);
+    assert.equal(await page.locator('#ghca-tab-courses [data-ghca-chips] .gh-fchip').count(), 3);
+    rates = await rateList();
+    assert.deepEqual(rates, [50]);
+    ok('search + group + certificate combine to one row (Fatal Five, Group 12, 50%)');
+    await page.selectOption('#ghca-filters-courses-c', 'no');
+    await settle(page);
+    assert.match(await page.locator('#ghca-tab-courses .gh-tmount').innerText(), /No courses match these filters/);
+    ok('combined filters that match nothing: filtered-empty state');
+    await page.click('#ghca-tab-courses .gh-tmount [data-ghca-filter-clear="all"]');
+    await settle(page);
+    assert.equal(await page.locator('#ghca-tab-courses .gh-tbl tbody tr').count(), 10);
+    assert.equal(await page.inputValue('#ghca-filters-courses-q'), '');
+    assert.equal(await page.inputValue('#ghca-filters-courses-g'), '');
+    assert.equal(await page.inputValue('#ghca-filters-courses-c'), '');
+    assert.equal(await page.inputValue('#ghca-filters-courses-s'), 'rate_asc');
+    ok('Clear filters resets search, group and certificate, keeps the sort');
     await page.selectOption('#ghca-tab-courses [data-ghca-per-page]', '10');
     await settle(page);
     assert.equal(await page.locator('#ghca-tab-courses .gh-tbl tbody tr').count(), 10);
@@ -224,13 +294,36 @@ const ids = (page, sel) => page.$$eval(sel, (els) => els.map((el) => el.getAttri
     assert.equal(await page.locator('#ghca-tab-certificates .gh-tbl tbody tr').count(), 5);
     ok('back to Issued');
 
-    // Sort header.
-    await page.click('#ghca-tab-certificates th[data-ghca-sort="name"] button');
+    // The only sort is the date column, as on the board.
+    assert.equal(await page.locator('#ghca-tab-certificates th[data-ghca-sort]').count(), 1);
+    await page.click('#ghca-tab-certificates th[data-ghca-sort="completed_ts"] button');
     await settle(page);
-    const names = await page.$$eval('#ghca-tab-certificates .gh-tbl tbody td:nth-child(2) strong', (els) => els.map((e) => e.textContent));
-    assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b)));
-    assert.equal(state.ajax[state.ajax.length - 1].ghca_cert_orderby, 'name');
-    ok('sort by employee');
+    const dates = await page.$$eval('#ghca-tab-certificates .gh-tbl tbody td:first-child', (els) => els.map((e) => Date.parse(e.textContent)));
+    assert.deepEqual(dates, [...dates].sort((a, b) => a - b));
+    assert.equal(state.ajax[state.ajax.length - 1].ghca_cert_order, 'asc');
+    ok('date header toggles to oldest first; no other certificate sort');
+
+    // Combined filters, empty state and reset.
+    await page.selectOption('#ghca-filters-certificates-c', '504');
+    await settle(page);
+    assert.equal(await page.locator('#ghca-tab-certificates .gh-tbl tbody tr').count(), 2);
+    await page.selectOption('#ghca-filters-certificates-d', '30');
+    await settle(page);
+    assert.equal(await page.locator('#ghca-tab-certificates .gh-tbl tbody tr').count(), 1);
+    ok('course + date filters combine');
+    await page.fill('#ghca-filters-certificates-q', 'reyes');
+    await page.waitForTimeout(450);
+    await settle(page);
+    assert.match(await page.locator('#ghca-tab-certificates .gh-tmount').innerText(), /No certificates match these filters/);
+    ok('three filters that match nothing: filtered-empty state');
+    await page.click('#ghca-tab-certificates .gh-tmount [data-ghca-filter-clear="all"]');
+    await settle(page);
+    assert.equal(await page.locator('#ghca-tab-certificates .gh-tbl tbody tr').count(), 5);
+    assert.equal(await page.inputValue('#ghca-filters-certificates-c'), '');
+    assert.equal(await page.inputValue('#ghca-filters-certificates-d'), '');
+    assert.equal(await page.inputValue('#ghca-filters-certificates-q'), '');
+    assert.equal(await page.getAttribute('#ghca-cert-list [data-ghca-set-value="issued"]', 'aria-pressed'), 'true');
+    ok('Clear filters resets every filter and keeps the Issued view');
 
     // Download: through the existing endpoint, ids only; only a PDF is saved.
     const [download] = await Promise.all([
@@ -294,6 +387,31 @@ const ids = (page, sel) => page.$$eval(sel, (els) => els.map((el) => el.getAttri
       await p.screenshot({ path: path.join(shots, tab.replace('ghca-tab-', '') + '-390.png'), fullPage: true });
       await phone.close();
     }
+    await context.close();
+  }
+
+  // ---------------- Phone: the dashboard's own tab bar scrolls sideways and keyboard selection keeps the tab in view.
+  {
+    const { context, page, errors } = await open(browser, clean, { width: 390, height: 844 }, 'ghca-tab-overview', ALL);
+    const bar = await page.evaluate(() => { const t = document.querySelector('[data-ghca-tablist-main]'); return { ox: getComputedStyle(t).overflowX, sw: t.scrollWidth, cw: t.clientWidth }; });
+    assert.ok(['auto', 'scroll'].includes(bar.ox));
+    ok('phone: main tab bar is a horizontal scroller (' + bar.sw + ' of ' + bar.cw + ' px)');
+    const inView = () => page.evaluate(() => { const t = document.querySelector('[data-ghca-tablist-main]').getBoundingClientRect(); const b = document.activeElement.getBoundingClientRect(); return b.left >= t.left - 1 && b.right <= t.right + 1; });
+    await page.focus('[data-ghca-tab-target="ghca-tab-overview"]');
+    await page.keyboard.press('End');
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-ghca-tab-target')), 'ghca-tab-certificates');
+    assert.ok(await page.locator('#ghca-tab-certificates').isVisible());
+    assert.ok(await inView(), 'Certificates tab fully in view');
+    ok('phone: End opens Certificates and scrolls its tab fully into view');
+    for (const target of ['ghca-tab-courses', 'ghca-tab-overdue', 'ghca-tab-overview']) {
+      await page.keyboard.press('ArrowLeft');
+      assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-ghca-tab-target')), target);
+      assert.ok(await inView(), target + ' in view');
+    }
+    ok('phone: ArrowLeft walks back through every tab, each in view');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+    assert.deepEqual(errors, []);
+    ok('phone: no sideways page scroll, no script errors');
     await context.close();
   }
 

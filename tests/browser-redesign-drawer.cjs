@@ -297,6 +297,39 @@ const metrics = (page) => page.evaluate(() => {
     assert.equal(m, true); ok('phone: the More menu stays on screen');
     await page.keyboard.press('Escape');
     if (shots) { await page.screenshot({ path: path.join(shots, 'drawer-training-390.png') }); }
+
+    // Slice 4 package check: the phone tab bar scrolls sideways inside itself, and keyboard selection keeps the
+    // focused tab fully in view, with the page itself never scrolling sideways.
+    const bar = await page.evaluate(() => { const t = document.querySelector('.gh-drh-tabs'); const c = getComputedStyle(t); return { ox: c.overflowX, sw: t.scrollWidth, cw: t.clientWidth, n: t.querySelectorAll('.gh-tab').length }; });
+    assert.ok(['auto', 'scroll'].includes(bar.ox), 'tab bar overflow-x: ' + bar.ox); ok('phone: the drawer tab bar is a horizontal scroller (' + bar.n + ' tabs, ' + bar.sw + ' of ' + bar.cw + ' px)');
+    const inView = (id) => page.evaluate((sel) => { const t = document.querySelector('.gh-drh-tabs').getBoundingClientRect(); const b = document.querySelector(sel).getBoundingClientRect(); return b.left >= t.left - 1 && b.right <= t.right + 1; }, id);
+    await page.focus('.gh-drh-tabs .gh-tab[aria-selected="true"]');
+    await page.keyboard.press('End');
+    const lastId = await page.evaluate(() => { const t = document.querySelectorAll('.gh-drh-tabs .gh-tab'); return t[t.length - 1].id; });
+    assert.equal(await page.evaluate(() => document.activeElement.id), lastId);
+    assert.equal(await page.getAttribute('#' + lastId, 'aria-selected'), 'true');
+    assert.ok(await inView('#' + lastId), 'last tab scrolled fully into view'); ok('phone: End selects the last tab and scrolls it fully into view');
+    await page.keyboard.press('Home');
+    const firstId = await page.evaluate(() => document.querySelector('.gh-drh-tabs .gh-tab').id);
+    assert.equal(await page.evaluate(() => document.activeElement.id), firstId);
+    assert.ok(await inView('#' + firstId)); ok('phone: Home returns to the first tab, in view');
+    for (let i = 1; i < bar.n; i += 1) {
+      await page.keyboard.press('ArrowRight');
+      const id = await page.evaluate(() => document.activeElement.id);
+      assert.ok(await inView('#' + id), id + ' in view after ArrowRight');
+      assert.equal(await page.getAttribute('#' + id, 'aria-selected'), 'true');
+    }
+    ok('phone: ArrowRight walks every tab, each selected and in view');
+    const ring = await page.evaluate(() => { const c = getComputedStyle(document.activeElement); return c.outlineStyle !== 'none' || c.boxShadow !== 'none'; });
+    assert.ok(ring); ok('phone: the focused tab shows a focus indicator');
+    if (bar.sw > bar.cw) {
+      await page.evaluate(() => { document.querySelector('.gh-drh-tabs').scrollLeft = 0; });
+      await page.mouse.move(195, await page.evaluate(() => { const r = document.querySelector('.gh-drh-tabs').getBoundingClientRect(); return r.top + r.height / 2; }));
+      await page.mouse.wheel(200, 0);
+      await page.waitForTimeout(150);
+      assert.ok(await page.evaluate(() => document.querySelector('.gh-drh-tabs').scrollLeft) > 0); ok('phone: the tab bar scrolls by swipe/wheel');
+    }
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)); ok('phone: still no sideways page scroll after tab navigation');
     await context.close();
   }
 

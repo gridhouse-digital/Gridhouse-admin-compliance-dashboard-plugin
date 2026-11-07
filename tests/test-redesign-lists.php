@@ -199,11 +199,27 @@ check( count( $GLOBALS['wpdb']->queries ) === $before, 'without permission the m
 reset_env();
 $filters = GHCA_ACD_Data_Provider::get_course_filters();
 $legacy  = GHCA_ACD_Data_Provider::get_course_overview_rows( $filters );
-$parts   = GHCA_ACD_Redesign_Lists::course_parts( $filters );
+$parts   = GHCA_ACD_Redesign_Lists::course_parts( $filters, 'name' );
 preg_match_all( '#<tr><td><strong>(.*?)</strong></td><td><span class="gh-badge gh-badge--outline">(.*?)</span></td><td class="c-num">(\d+)</td><td class="c-num">(\d+)</td><td class="c-num">(\d+)</td><td class="c-num">(\d+)</td>#', $parts['html'], $m, PREG_SET_ORDER );
 $seen = array_map( static function ( array $x ): string { return html_entity_decode( $x[1] ) . '|' . $x[2] . '|' . $x[3] . '|' . $x[4] . '|' . $x[5] . '|' . $x[6]; }, $m );
 $want = array_map( static function ( array $r ): string { return $r['course'] . '|' . $r['group'] . '|' . $r['required'] . '|' . $r['completed'] . '|' . $r['in_progress'] . '|' . $r['not_started']; }, array_slice( $legacy, 0, 15 ) );
-check( $seen === $want && count( $seen ) === 10, 'course rows, order and every count match the legacy course table' );
+check( $seen === $want && count( $seen ) === 10, 'Course A–Z: rows, order and every count match the legacy course table' );
+// The default order is the board's (lowest completion first): the same rows and counts, only re-ordered.
+check( 'rate_asc' === GHCA_ACD_Redesign_Lists::course_sort(), 'no sort in the request means Lowest completion first' );
+$default = GHCA_ACD_Redesign_Lists::course_parts( $filters, GHCA_ACD_Redesign_Lists::course_sort() );
+preg_match_all( '#<tr><td><strong>(.*?)</strong></td><td><span class="gh-badge gh-badge--outline">(.*?)</span></td><td class="c-num">(\d+)</td><td class="c-num">(\d+)</td><td class="c-num">(\d+)</td><td class="c-num">(\d+)</td>#', $default['html'], $m, PREG_SET_ORDER );
+$seen_default = array_map( static function ( array $x ): string { return html_entity_decode( $x[1] ) . '|' . $x[2] . '|' . $x[3] . '|' . $x[4] . '|' . $x[5] . '|' . $x[6]; }, $m );
+$a = $seen_default;
+$b = $want;
+sort( $a );
+sort( $b );
+check( $a === $b, 'default order: exactly the legacy rows and counts' );
+preg_match_all( '#<strong class="gh-num">(\d+)%</strong>#', $default['html'], $m );
+$r = array_map( 'intval', array_slice( $m[1], 0, 10 ) );
+$rs = $r;
+sort( $rs );
+check( $r === $rs && false !== strpos( $default['html'], 'class="c-rate" aria-sort="ascending"' ), 'default order is ascending completion, and the column says so' );
+check( 1 === preg_match( '#<select id="ghca-filters-courses-s" class="gh-select" name="ghca_crs_sort" data-ghca-not-filter><option value="rate_asc" selected="selected">Lowest completion first#', GHCA_ACD_Redesign_Lists::render_courses() ), 'Sort select shows Lowest completion first by default' );
 foreach ( $legacy as $r ) {
 	check( (int) $r['required'] === (int) $r['completed'] + (int) $r['in_progress'] + (int) $r['not_started'], 'counts add up for ' . $r['course'] . ' / ' . $r['group'] );
 }
@@ -233,7 +249,7 @@ $parts = GHCA_ACD_Redesign_Lists::course_parts( GHCA_ACD_Data_Provider::get_cour
 preg_match_all( '#<strong class="gh-num">(\d+)%</strong>#', $parts['html'], $m );
 check( 100 === (int) $m[1][0], 'Highest completion first' );
 reset_env( array(), array( 'ghca_crs_sort' => 'evil' ) );
-check( '' === GHCA_ACD_Redesign_Lists::course_sort(), 'unknown sort ignored' );
+check( 'rate_asc' === GHCA_ACD_Redesign_Lists::course_sort(), 'unknown sort falls back to the default' );
 reset_env( array(), array( 'ghca_crs_cert' => 'no', 'ghca_crs_search' => 'trauma' ) );
 $parts = GHCA_ACD_Redesign_Lists::course_parts( GHCA_ACD_Data_Provider::get_course_filters() );
 check( 2 === substr_count( $parts['html'], '<tr><td><strong>Trauma-Informed Care' ) && false !== strpos( $parts['chips'], 'No certificate' ), 'certificate and search filters' );
@@ -286,9 +302,13 @@ check( 'Showing 1–1 of 1' === $parts['summary'] && false !== strpos( $parts['c
 reset_env( array(), array( 'ghca_cert_search' => 'tomás' ) );
 $parts = GHCA_ACD_Redesign_Lists::certificate_parts( GHCA_ACD_Redesign_Lists::certificate_filters() );
 check( 'Showing 1–2 of 2' === $parts['summary'], 'search by employee' );
-reset_env( array(), array( 'ghca_cert_orderby' => 'name', 'ghca_cert_order' => 'asc' ) );
+reset_env( array(), array( 'ghca_cert_orderby' => 'name' ) );
 $parts = GHCA_ACD_Redesign_Lists::certificate_parts( GHCA_ACD_Redesign_Lists::certificate_filters() );
-check( strpos( $parts['html'], 'Daniel Reyes' ) < strpos( $parts['html'], 'Priya Nair' ) && false !== strpos( $parts['html'], 'data-ghca-sort="name" data-ghca-sort-order="desc" aria-sort="ascending"' ), 'sort by employee' );
+check( strpos( $parts['html'], 'Priya Nair' ) < strpos( $parts['html'], 'Daniel Reyes' ), 'a request to sort by employee is ignored: newest first stays' );
+check( 1 === substr_count( $parts['html'], 'data-ghca-sort=' ) && false !== strpos( $parts['html'], 'data-ghca-sort="completed_ts"' ), 'the only certificate sort is the date column, as on the board' );
+reset_env( array(), array( 'ghca_cert_order' => 'asc' ) );
+$parts = GHCA_ACD_Redesign_Lists::certificate_parts( GHCA_ACD_Redesign_Lists::certificate_filters() );
+check( strpos( $parts['html'], 'Sep 27, 2025' ) < strpos( $parts['html'], 'Oct 30, 2026' ) && false !== strpos( $parts['html'], 'data-ghca-sort="completed_ts" data-ghca-sort-order="desc" aria-sort="ascending"' ), 'oldest first by the date header' );
 reset_env( array(), array( 'ghca_cert_view' => 'all", "x', 'ghca_cert_orderby' => 'user_pass', 'ghca_cert_when' => '9999' ) );
 $f = GHCA_ACD_Redesign_Lists::certificate_filters();
 check( 'issued' === $f['view'] && 'completed_ts' === $f['orderby'] && '' === $f['when'], 'unknown view, sort and date values fall back' );

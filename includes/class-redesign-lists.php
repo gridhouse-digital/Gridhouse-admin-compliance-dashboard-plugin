@@ -526,18 +526,21 @@ final class GHCA_ACD_Redesign_Lists {
 	 * Courses
 	 * ------------------------------------------------------------------- */
 
-	/** @return array<string,string> */
+	/** The default, as on the Admin-Courses board: the courses that most need attention come first. */
+	const COURSE_SORT_DEFAULT = 'rate_asc';
+
+	/** @return array<string,string> value => label. 'name' is the legacy table's order (course, then group). */
 	public static function course_sort_options(): array {
 		return array(
-			''          => __( 'Course A–Z', 'ghca-acd' ),
 			'rate_asc'  => __( 'Lowest completion first', 'ghca-acd' ),
 			'rate_desc' => __( 'Highest completion first', 'ghca-acd' ),
+			'name'      => __( 'Course A–Z', 'ghca-acd' ),
 		);
 	}
 
 	public static function course_sort(): string {
 		$sort = self::request_key( 'ghca_crs_sort' );
-		return isset( self::course_sort_options()[ $sort ] ) ? $sort : '';
+		return isset( self::course_sort_options()[ $sort ] ) ? $sort : self::COURSE_SORT_DEFAULT;
 	}
 
 	/**
@@ -548,8 +551,8 @@ final class GHCA_ACD_Redesign_Lists {
 	 * @return array<int,array<string,mixed>>
 	 */
 	public static function sort_course_rows( array $rows, string $sort ): array {
-		if ( '' === $sort ) {
-			return $rows;
+		if ( 'rate_asc' !== $sort && 'rate_desc' !== $sort ) {
+			return $rows; // Course A–Z: the provider already returns that order.
 		}
 		$desc = 'rate_desc' === $sort;
 		usort( $rows, static function ( array $a, array $b ) use ( $desc ): int {
@@ -591,7 +594,7 @@ final class GHCA_ACD_Redesign_Lists {
 	 * @param array<string,mixed> $filters  From GHCA_ACD_Data_Provider::get_course_filters().
 	 * @return array{html:string,chips:string,summary:string}
 	 */
-	public static function course_parts( array $filters, string $sort = '' ): array {
+	public static function course_parts( array $filters, string $sort = self::COURSE_SORT_DEFAULT ): array {
 		$all     = self::sort_course_rows( GHCA_ACD_Data_Provider::get_course_overview_rows( $filters ), $sort );
 		$paged   = GHCA_ACD_Table_UI::paginate( $all, (int) $filters['page'], (int) $filters['per_page'] );
 		$chips   = self::course_chips( $filters );
@@ -607,7 +610,7 @@ final class GHCA_ACD_Redesign_Lists {
 		$h  = '<div class="gh-table-wrap gh-tbl" tabindex="0" role="group" aria-label="' . esc_attr__( 'Course completion table', 'ghca-acd' ) . '"><table class="gh-table gh-table--courses"><thead><tr>';
 		$h .= '<th scope="col" class="c-course">' . esc_html__( 'Course', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Assigned group', 'ghca-acd' ) . '</th>';
 		$h .= '<th scope="col" class="c-num">' . esc_html__( 'Required', 'ghca-acd' ) . '</th><th scope="col" class="c-num">' . esc_html__( 'Done', 'ghca-acd' ) . '</th><th scope="col" class="c-num">' . esc_html__( 'In progress', 'ghca-acd' ) . '</th><th scope="col" class="c-num">' . esc_html__( 'Not started', 'ghca-acd' ) . '</th>';
-		$h .= '<th scope="col" class="c-rate"' . ( '' !== $sort ? ' aria-sort="' . ( 'rate_desc' === $sort ? 'descending' : 'ascending' ) . '"' : '' ) . '>' . esc_html__( 'Completion', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Certificate', 'ghca-acd' ) . '</th></tr></thead><tbody>';
+		$h .= '<th scope="col" class="c-rate"' . ( 'name' !== $sort ? ' aria-sort="' . ( 'rate_desc' === $sort ? 'descending' : 'ascending' ) . '"' : '' ) . '>' . esc_html__( 'Completion', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Certificate', 'ghca-acd' ) . '</th></tr></thead><tbody>';
 		$cards = '';
 		foreach ( $paged['rows'] as $row ) {
 			$pct   = max( 0, min( 100, (int) $row['rate'] ) );
@@ -732,15 +735,15 @@ final class GHCA_ACD_Redesign_Lists {
 	public static function certificate_filters(): array {
 		$view = self::request_key( 'ghca_cert_view' );
 		$when = self::request_key( 'ghca_cert_when' );
-		$by   = self::request_key( 'ghca_cert_orderby' );
 		$ord  = self::request_key( 'ghca_cert_order' );
 		return array(
 			'view'     => in_array( $view, array( 'issued', 'expiring', 'missing' ), true ) ? $view : 'issued',
 			'course'   => (string) absint( self::request_key( 'ghca_cert_course' ) ?: '0' ),
 			'search'   => self::request_text( 'ghca_cert_search' ),
 			'when'     => '30' === $when ? '30' : '',
-			'orderby'  => in_array( $by, array( 'completed_ts', 'name', 'course' ), true ) ? $by : 'completed_ts',
-			'order'    => in_array( $ord, array( 'asc', 'desc' ), true ) ? $ord : ( in_array( $by, array( 'name', 'course' ), true ) ? 'asc' : 'desc' ),
+			// The board sorts this list by date only (its "Issued" column); there is no other certificate sort.
+			'orderby'  => 'completed_ts',
+			'order'    => in_array( $ord, array( 'asc', 'desc' ), true ) ? $ord : 'desc',
 			'page'     => GHCA_ACD_Table_UI::normalize_page( (int) ( self::request_key( 'ghca_cert_page' ) ?: '1' ) ),
 			'per_page' => GHCA_ACD_Table_UI::normalize_per_page( (int) ( self::request_key( 'ghca_cert_per' ) ?: '15' ) ),
 		);
@@ -772,10 +775,9 @@ final class GHCA_ACD_Redesign_Lists {
 			return '' === $search || GHCA_ACD_Table_UI::matches_search( $search, array( $row['name'], $row['email'], $row['group'], $row['course'] ) );
 		} ) );
 
-		$by   = (string) $filters['orderby'];
 		$desc = 'desc' === $filters['order'];
-		usort( $rows, static function ( array $a, array $b ) use ( $by, $desc ): int {
-			$cmp = 'completed_ts' === $by ? (int) $a['completed_ts'] <=> (int) $b['completed_ts'] : strcasecmp( (string) $a[ $by ], (string) $b[ $by ] );
+		usort( $rows, static function ( array $a, array $b ) use ( $desc ): int {
+			$cmp = (int) $a['completed_ts'] <=> (int) $b['completed_ts'];
 			if ( 0 === $cmp ) {
 				$cmp = strcasecmp( $a['name'] . "\0" . $a['course'], $b['name'] . "\0" . $b['course'] );
 				return $cmp;
@@ -881,8 +883,7 @@ final class GHCA_ACD_Redesign_Lists {
 		$order = (string) $filters['order'];
 		$h     = '<div class="gh-table-wrap gh-table-wrap--flat gh-tbl" tabindex="0" role="group" aria-label="' . esc_attr__( 'Certificates table', 'ghca-acd' ) . '"><table class="gh-table"><thead><tr>';
 		$h    .= GHCA_ACD_Redesign_Tables::sort_th( 'completed_ts', __( 'Completed', 'ghca-acd' ), $by, $order );
-		$h    .= GHCA_ACD_Redesign_Tables::sort_th( 'name', __( 'Employee', 'ghca-acd' ), $by, $order );
-		$h    .= GHCA_ACD_Redesign_Tables::sort_th( 'course', __( 'Course', 'ghca-acd' ), $by, $order );
+		$h    .= '<th scope="col">' . esc_html__( 'Employee', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Course', 'ghca-acd' ) . '</th>';
 		$h    .= '<th scope="col">' . esc_html( 'missing' === $view ? __( 'Certificate', 'ghca-acd' ) : __( 'Expires', 'ghca-acd' ) ) . '</th><th scope="col" class="c-act"><span class="gh-sr">' . esc_html__( 'Actions', 'ghca-acd' ) . '</span></th></tr></thead><tbody>';
 		$cards = '';
 		foreach ( $paged['rows'] as $row ) {
