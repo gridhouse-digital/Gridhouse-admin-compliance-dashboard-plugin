@@ -78,7 +78,7 @@ All synthetic: a stand-in WordPress with synthetic people, submissions and catal
 
 ## Rollback
 
-Uncheck the redesign option: the legacy tabs return, unchanged. To go back to the previous build, reinstall `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-51d8679.zip` (same folder, "Replace current with uploaded"). Nothing in this slice writes new data or changes stored formats, so no data rollback is needed.
+Uncheck the redesign option: the legacy tabs return, unchanged. To go back to the previous build, reinstall `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-51d8679.zip`, the build Akansoh staging runs (installed and checked November 7; same folder, "Replace current with uploaded"). Nothing in this slice writes new data or changes stored formats, so no data rollback is needed.
 
 ## Remaining admin-dashboard work
 

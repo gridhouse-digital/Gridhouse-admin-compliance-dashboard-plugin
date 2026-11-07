@@ -375,25 +375,61 @@ final class GHCA_ACD_Messaging_Repository {
 		return true;
 	}
 
-	public static function mark_schedule_failed( int $delivery_id ): void {
+	/**
+	 * Records that a queued delivery has no background job. Compare-and-set on state 'queued', so it can never
+	 * overwrite a delivery a worker has claimed (processing) or finished (accepted, sent, delivered, failed).
+	 * Returns true when this call made the change.
+	 */
+	public static function mark_schedule_failed( int $delivery_id ): bool {
 		global $wpdb;
 		$now = current_time( 'mysql', true );
 
-		$wpdb->update(
-			GHCA_ACD_Messaging_Schema::deliveries_table(),
-			array(
-				'state'              => 'failed',
-				'failed_at'          => $now,
-				'updated_at'         => $now,
-				'last_error_code'    => 'queue_schedule_failed',
-				'last_error_summary' => __( 'The background email job could not be scheduled.', 'ghca-acd' ),
-			),
-			array( 'id' => $delivery_id ),
-			array( '%s', '%s', '%s', '%s', '%s' ),
-			array( '%d' )
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				'UPDATE ' . GHCA_ACD_Messaging_Schema::deliveries_table() . '
+				 SET state = %s, failed_at = %s, updated_at = %s, last_error_code = %s, last_error_summary = %s
+				 WHERE id = %d AND state = %s',
+				'failed',
+				$now,
+				$now,
+				'queue_schedule_failed',
+				__( 'The background email job could not be scheduled.', 'ghca-acd' ),
+				$delivery_id,
+				'queued'
+			)
 		);
+		if ( 1 !== (int) $updated ) {
+			return false;
+		}
 
 		self::sync_communication_state( $delivery_id, 'failed' );
+		return true;
+	}
+
+	/**
+	 * A short-lived lock around scheduling one delivery, so simultaneous requests cannot both schedule it. Same
+	 * pattern as WordPress core's WP_Upgrader::create_lock(): an INSERT IGNORE into the options table succeeds for
+	 * exactly one caller; a lock older than $ttl seconds (a request that died) is taken over.
+	 */
+	public static function acquire_schedule_lock( int $delivery_id, int $ttl = 60 ): bool {
+		global $wpdb;
+		$name    = 'ghca_acd_sched_lock_' . $delivery_id;
+		$created = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` ( `option_name`, `option_value`, `autoload` ) VALUES ( %s, %s, 'no' )", $name, (string) time() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( 1 === (int) $created ) {
+			return true;
+		}
+		$held = (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM `{$wpdb->options}` WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( $held > time() - $ttl ) {
+			return false;
+		}
+		// Stale: take it over only if nobody else did first.
+		$taken = $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET option_value = %s WHERE option_name = %s AND option_value = %s", (string) time(), $name, (string) $held ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return 1 === (int) $taken;
+	}
+
+	public static function release_schedule_lock( int $delivery_id ): void {
+		global $wpdb;
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'ghca_acd_sched_lock_' . $delivery_id ), array( '%s' ) );
 	}
 
 	public static function requeue_failed( int $delivery_id ): bool {

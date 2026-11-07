@@ -2867,26 +2867,45 @@
     }
     btn.go.addEventListener('click', function () { if (state && q('[data-ghca-bulk-confirm]').checked) { send(state.readyIds.slice()); } });
 
+    // One label per lifecycle status the server reports. Only queued / recovered / pending mean a job exists.
+    var BULK_LABEL = {
+      queued: ['completed', 'Queued'], recovered: ['completed', 'Queued now (recovered)'], pending: ['progress', 'Already queued'],
+      processing: ['progress', 'Sending now'], sent: ['completed', 'Already sent'], busy: ['progress', 'Being scheduled elsewhere'],
+      unscheduled: ['failed', 'Saved, not scheduled'], failed: ['failed', 'Not sent'], delivery_failed: ['failed', 'Delivery failed']
+    };
+    var BULK_RETRY = ['unscheduled', 'failed', 'busy'];
     function renderResults() {
       var list = q('[data-ghca-bulk-results]'); list.textContent = '';
-      var counts = { queued: 0, duplicate: 0, failed: 0 };
+      var c = {};
+      Object.keys(BULK_LABEL).forEach(function (k) { c[k] = 0; });
       state.readyIds.forEach(function (id) {
         var r = state.results[id] || { status: 'failed', message: 'No answer for this employee.' };
-        counts[r.status] = (counts[r.status] || 0) + 1;
+        var label = BULK_LABEL[r.status] || BULK_LABEL.failed;
+        c[r.status in BULK_LABEL ? r.status : 'failed'] += 1;
         var li = el('li'); li.appendChild(el('strong', '', nameOf(id)));
-        li.appendChild(chip(r.status === 'failed' ? 'failed' : (r.status === 'duplicate' ? 'progress' : 'completed'), r.status === 'queued' ? 'Queued' : (r.status === 'duplicate' ? 'Already recorded' : 'Not sent')));
+        li.appendChild(chip(label[0], label[1]));
         li.appendChild(el('span', 'gh-small gh-muted', r.message || ''));
         list.appendChild(li);
       });
       var total = state.readyIds.length;
+      var parts = [];
+      var queued = c.queued + c.recovered + c.pending;
+      parts.push(queued + ' of ' + total + ' queued');
+      if (c.processing) parts.push(c.processing + ' sending now');
+      if (c.sent) parts.push(c.sent + ' already sent');
+      if (c.busy) parts.push(c.busy + ' being scheduled by another request');
+      if (c.unscheduled) parts.push(c.unscheduled + ' saved but not scheduled (nothing sent)');
+      if (c.failed) parts.push(c.failed + ' not sent');
+      if (c.delivery_failed) parts.push(c.delivery_failed + ' delivery failed (see Communication History)');
+      var problems = c.unscheduled + c.failed + c.delivery_failed + c.busy;
       var sum = q('[data-ghca-bulk-summary]');
-      sum.className = 'gh-alert ' + (counts.failed ? 'gh-alert--warning' : 'gh-alert--success');
-      sum.textContent = (counts.queued + counts.duplicate) + ' of ' + total + ' queued' + (counts.duplicate ? ' (' + counts.duplicate + ' already recorded from this batch)' : '') + '.' + (counts.failed ? ' ' + counts.failed + ' not sent.' : '');
+      sum.className = 'gh-alert ' + (problems ? 'gh-alert--warning' : 'gh-alert--success');
+      sum.textContent = parts.join('. ') + '.';
       show('result');
-      var failed = state.readyIds.filter(function (id) { return (state.results[id] || {}).status === 'failed'; });
-      btn.retry.hidden = failed.length === 0;
-      btn.retry.textContent = 'Retry the ' + failed.length + ' not sent';
-      btn.retry.onclick = function () { send(failed); };
+      var retryIds = state.readyIds.filter(function (id) { return BULK_RETRY.indexOf((state.results[id] || { status: 'failed' }).status) !== -1; });
+      btn.retry.hidden = retryIds.length === 0;
+      btn.retry.textContent = 'Retry the ' + retryIds.length + ' not queued';
+      btn.retry.onclick = function () { send(retryIds); };
     }
 
     layer.addEventListener('click', function (e) { if (e.target.closest('[data-ghca-bulk-close]')) { close(); } });

@@ -157,8 +157,26 @@ final class GHCA_ACD_Bulk_Messaging {
 		wp_send_json_success( array( 'recipients' => $rows ) );
 	}
 
+	/** Statuses a recipient can end in, and the ones a person may retry from the dialog. */
+	const STATUSES  = array( 'queued', 'recovered', 'pending', 'processing', 'sent', 'busy', 'unscheduled', 'failed', 'delivery_failed' );
+	const RETRYABLE = array( 'unscheduled', 'failed', 'busy' );
+
 	/**
-	 * Queues one email per id through the service. Each result is the service's own answer for that employee.
+	 * One email per id through the service. A new message is queued with queue(). When the batch token already has
+	 * a record for that person (a resubmission, a retry, or a response that never arrived), the existing record is
+	 * read and, only if it was saved but never scheduled, recovered through recover_delivery(). No second message
+	 * is ever created and a sent, sending or attempted message is never sent again.
+	 *
+	 * Result statuses:
+	 *   queued          new message saved and its job scheduled
+	 *   recovered       existing message that had no job; now scheduled
+	 *   pending         existing message already queued with a job waiting
+	 *   processing      existing message a worker is sending now
+	 *   sent            existing message already accepted or delivered
+	 *   busy            another request was scheduling it at that moment
+	 *   unscheduled     message saved, but no job could be scheduled; nothing sent
+	 *   failed          nothing saved: refused before saving (readiness, scope, rate limit)
+	 *   delivery_failed the worker tried and failed, or the outcome is unknown; review in Communication History
 	 *
 	 * @param array<int,int>      $ids
 	 * @param array<string,mixed> $request subject, message, urgency, template_id, token.
@@ -179,14 +197,38 @@ final class GHCA_ACD_Bulk_Messaging {
 				)
 			);
 			if ( is_wp_error( $queued ) ) {
-				$results[] = array( 'id' => $id, 'status' => 'failed', 'message' => $queued->get_error_message() );
-			} elseif ( ! empty( $queued['duplicate'] ) ) {
-				$results[] = array( 'id' => $id, 'status' => 'duplicate', 'message' => __( 'Already recorded from this batch; not created again. Its delivery status is in Communication History.', 'ghca-acd' ) );
-			} else {
-				$results[] = array( 'id' => $id, 'status' => 'queued', 'message' => __( 'Queued. Delivery status appears in Communication History.', 'ghca-acd' ) );
+				if ( 'ghca_message_schedule_failed' === $queued->get_error_code() ) {
+					$results[] = array( 'id' => $id, 'status' => 'unscheduled', 'message' => __( 'Saved, but the background job could not be scheduled. Nothing was sent. Retry schedules this same message.', 'ghca-acd' ) );
+				} else {
+					$results[] = array( 'id' => $id, 'status' => 'failed', 'message' => $queued->get_error_message() );
+				}
+				continue;
 			}
+			if ( empty( $queued['duplicate'] ) ) {
+				$results[] = array( 'id' => $id, 'status' => 'queued', 'message' => __( 'Queued. Delivery status appears in Communication History.', 'ghca-acd' ) );
+				continue;
+			}
+			// A record for this person already exists from this batch: report or recover that record.
+			$recovered = GHCA_ACD_Messaging_Service::recover_delivery( (int) ( $queued['delivery_id'] ?? 0 ) );
+			if ( is_wp_error( $recovered ) ) {
+				// Readiness errors concern a record this viewer may see; anything else (permission, scope) is a plain refusal.
+				$saved     = in_array( $recovered->get_error_code(), array( 'ghca_message_email_not_ready', 'ghca_message_inactive_blocked' ), true );
+				$results[] = array( 'id' => $id, 'status' => $saved ? 'unscheduled' : 'failed', 'message' => $recovered->get_error_message() );
+				continue;
+			}
+			$status    = in_array( $recovered['status'], self::STATUSES, true ) ? $recovered['status'] : 'delivery_failed';
+			$results[] = array( 'id' => $id, 'status' => $status, 'message' => (string) $recovered['message'] );
 		}
 		return $results;
+	}
+
+	/** @param array<int,array<string,mixed>> $results @return array<string,int> */
+	public static function counts( array $results ): array {
+		$counts = array_fill_keys( self::STATUSES, 0 );
+		foreach ( $results as $result ) {
+			++$counts[ $result['status'] ];
+		}
+		return $counts;
 	}
 
 	public static function ajax_send(): void {
@@ -208,10 +250,6 @@ final class GHCA_ACD_Bulk_Messaging {
 				'token'       => $token,
 			)
 		);
-		$counts = array( 'queued' => 0, 'duplicate' => 0, 'failed' => 0 );
-		foreach ( $results as $result ) {
-			++$counts[ $result['status'] ];
-		}
-		wp_send_json_success( array( 'results' => $results, 'counts' => $counts ) );
+		wp_send_json_success( array( 'results' => $results, 'counts' => self::counts( $results ) ) );
 	}
 }

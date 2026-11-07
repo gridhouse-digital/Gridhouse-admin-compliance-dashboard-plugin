@@ -50,7 +50,17 @@ final class GHCA_ACD_Messaging_Worker {
 		}
 
 		$result = wp_schedule_single_event( time() + 1, self::HOOK, array( $delivery_id ) );
-		return ! is_wp_error( $result ) && false !== $result;
+		if ( ! is_wp_error( $result ) && false !== $result ) {
+			return true;
+		}
+		// WordPress refuses an identical single event due within ten minutes. A job for this delivery already
+		// exists, so the delivery is scheduled; that is not a failure.
+		return self::is_scheduled( $delivery_id );
+	}
+
+	/** Whether a background job for this delivery is waiting to run. */
+	public static function is_scheduled( int $delivery_id ): bool {
+		return $delivery_id > 0 && false !== wp_next_scheduled( self::HOOK, array( $delivery_id ) );
 	}
 
 	public static function process( int $delivery_id ): void {

@@ -62,13 +62,13 @@ Posts the selected ids to the existing export (`admin-post.php?action=ghca_acd_e
 2. **Compose**: template, urgency, subject, message, with the existing placeholders (`[employee_first_name]`, `[due_date]`, `[agency_name]`, `[portal_url]`). Delivery is Email; "SMS is not available for group reminders" is stated and SMS cannot be chosen. (SMS remains available for single reminders where Twilio is configured, as before.)
 3. **Review** (required): every recipient with a masked address and "Will be sent" / "Won't be sent" plus the reason; a per-recipient preview rendered by the service (`preview_email()`, new, read-only); an explicit confirmation checkbox. The server refuses a send without the review flag.
 4. **Send**: one `queue()` call per reviewed, ready recipient. Each person gets their own personalised email and their own Communication History record; no message is addressed to more than one person.
-5. **Results**: per person, Queued / Already recorded / Not sent with the service's reason, and a summary. "Retry the N not sent" resends only those.
+5. **Results**: per person, the record's real lifecycle state (see [Bulk retry fix](#bulk-retry-fix-after-63c3287)), and totals that count as queued only messages with a job. "Retry the N not queued" acts only on recipients saved but not scheduled, refused, or being scheduled by another request.
 
-Duplicate prevention: one batch token is the idempotency token for every recipient; the service keys it with the actor and the employee and the database enforces it as a unique key. Resubmitting or retrying a batch therefore creates nothing for anyone already recorded. The Send button is disabled while a request is in flight. If the connection drops mid-send, the dialog says some emails may have been queued and Retry is safe for the same reason.
+Duplicate prevention: one batch token is the idempotency token for every recipient; the service keys it with the actor and the employee and the database enforces it as a unique key. Resubmitting or retrying a batch therefore never creates a second message for anyone; an existing record is reported, or recovered if it was saved but never scheduled. The Send and Retry buttons are disabled while a request is in flight. If the connection drops mid-send, the dialog says some emails may have been queued and Retry is safe for the same reason.
 
 Limits: at most 25 recipients per send (the service's own sender limit is 30 per 10 minutes); 26 or more selected disables Send and says so; Export selected has no limit. Recipients over the sender rate limit are reported as not sent.
 
-What Communication History records: every queued email and, later, its delivery outcome (written by the existing worker). Recipients refused before queueing (no valid email, out of scope, inactive, rate limit) are shown in the dialog's results and are **not** written to Communication History, because nothing was created or sent; a recipient whose background job could not be scheduled has a record with a failed delivery, retryable from Communication History as before. **Decision needed** if refusals must also be logged.
+What Communication History records: every saved email and its delivery outcome (written by the existing worker). Recipients refused before saving (no valid email, out of scope, inactive, rate limit) are shown in the dialog's results and are **not** written to Communication History, because nothing was created or sent. A message saved but not scheduled shows there as a failed delivery ("The background email job could not be scheduled.") until a bulk retry or the existing per-delivery Retry schedules it. **Decision needed** if refusals must also be logged.
 
 Permissions: selection and Export selected for anyone who can see the Employees tab; Send and the dialog only for `user_can_send_reminders()` with email reminders enabled. Every endpoint re-checks on the server.
 
@@ -102,9 +102,9 @@ The bulk "Send to N people" confirmation listed there is built in this slice.
 
 All synthetic: stand-in WordPress, synthetic employees, Chromium 153; messaging over an in-memory repository with a mocked worker that only records what it would schedule (`wp_mail()` throws if called). Nothing was run on WordPress, staging or live; no message was sent; no training record was changed.
 
-- `php tests/test-bulk-messaging.php` (51): id boundaries (empty, malformed, duplicates, 25 / 26); nonce and permission on all three endpoints; email-disabled; per-recipient readiness and scope; masked addresses; email-only templates; personalised previews; review flag and token required; one record and one email delivery per recipient; partial failure; same-batch resubmit and retry create nothing; new batch is a deliberate new send; sender rate limit reported; Export selected exact, ordered, fail-closed.
+- `php tests/test-bulk-messaging.php` (51 at `63c3287`; 83 after the retry fix, see below): id boundaries (empty, malformed, duplicates, 25 / 26); nonce and permission on all three endpoints; email-disabled; per-recipient readiness and scope; masked addresses; email-only templates; personalised previews; review flag and token required; one record and one email delivery per recipient; partial failure; same-batch resubmit and retry create nothing; new batch is a deliberate new send; sender rate limit reported; Export selected exact, ordered, fail-closed.
 - `php tests/test-drawer-access.php` (25): permitted and denied users in both drawers; no employment value reaches a denied user; out-of-scope refusal; every Administration action refuses without permission or scope; the two wordings traced; the script fixes present.
-- `node tests/browser-redesign-bulk.cjs` (23): selection across pages and filters, indeterminate state, Keep only those shown, Clear, Export selected request, the 25 limit, full keyboard compose / review / send, one request despite repeated clicks, partial failure and retry with the same token, Escape and focus return, no-permission variant, 1023 / 834 / 390 and a hostile theme.
+- `node tests/browser-redesign-bulk.cjs` (23 at `63c3287`; 24 after the retry fix): selection across pages and filters, indeterminate state, Keep only those shown, Clear, Export selected request, the 25 limit, full keyboard compose / review / send, one request despite repeated clicks, partial failure and retry with the same token, Escape and focus return, no-permission variant, 1023 / 834 / 390 and a hostile theme.
 - `node tests/browser-drawer-access.cjs` (9): administrator at 1440 / 834 / 390; reopen; switching to a refused employee leaves nothing of the previous one; slow Edit Records load cancelled; denied user (no tab, forced request refused); expired session message.
 - Updated: `test-redesign-drawer.php` (142), `test-redesign-tables.php` (120), `browser-redesign-drawer.cjs` (159).
 - Full run: every PHP test file and every browser suite pass (see the build record for the exact run).
@@ -134,9 +134,50 @@ New in this slice:
 
 Staging checks from earlier builds remain open; staging is not cleared.
 
+## Bulk retry fix (after `63c3287`)
+
+**Defect (verified in review).** `GHCA_ACD_Messaging_Service::queue()` saves the message, then schedules its background job. When scheduling failed it marked the delivery `failed` (`queue_schedule_failed`) and returned an error, but the record stayed. "Retry the N not sent" reused the batch token, so `queue()` found the existing record by its idempotency key and returned it as a duplicate. The bulk class reported that as "Already recorded", scheduled nothing, and the summary counted it as queued. The message was never sent and nothing said so.
+
+**Fix.** The existing record is reused and recovered through the existing lifecycle; no second message is created and idempotency is untouched.
+
+- `GHCA_ACD_Messaging_Service::recover_delivery()` (new) reads the delivery's real state and acts only when that is unambiguous:
+
+  | Delivery state | Bulk result | Action |
+  | --- | --- | --- |
+  | `accepted`, `sent`, `delivered` | Already sent | none; never resent |
+  | `processing` | Sending now | none; a worker holds it |
+  | `queued`, job waiting | Already queued | none |
+  | `queued`, no job (the saving request died before scheduling) | Queued now (recovered) | schedule its job |
+  | `failed`, `queue_schedule_failed`, never attempted | Queued now (recovered), or Saved, not scheduled if scheduling fails again | `requeue_failed()` (compare-and-set failed → queued) then schedule; on failure `mark_schedule_failed()` again |
+  | `failed` after an attempt, `undelivered`, `suppressed`, or an unknown outcome (`worker_interrupted`) | Delivery failed | none; left for review in Communication History, where the existing Retry rechecks it |
+
+  Before acting it re-checks the send-reminders permission, agency scope, email readiness and the inactive policy, exactly as for a new message. Rate limits apply to new messages; recovery creates none.
+- **Concurrency.** Scheduling one delivery is serialised by a short lock (`acquire_schedule_lock()`, the same insert-or-fail option pattern as WordPress core's upgrader lock, with a compare-and-set takeover of a stale lock). A second simultaneous request reports "Being scheduled elsewhere" and does nothing. `requeue_failed()` and the worker's `claim_delivery()` were already compare-and-set, so even two jobs for one delivery would send it once.
+- `mark_schedule_failed()` is now compare-and-set on `queued`, so it can never overwrite a delivery a worker has claimed or finished.
+- `GHCA_ACD_Messaging_Worker::schedule()` treats WordPress refusing an identical pending event (core refuses duplicates due within ten minutes) as "already scheduled", instead of as a failure that would mark the delivery failed.
+- `queue()` attaches the saved record's ids to its scheduling error, and the bulk class reports it as **Saved, not scheduled (nothing sent)**.
+- Totals: queued counts only Queued, Queued now (recovered) and Already queued, that is, messages with a job. Already sent, Sending now, Saved but not scheduled, Not sent, Delivery failed and Being scheduled elsewhere are reported separately.
+
+**Regression tests** (synthetic recipients; the plugin's real service, bulk class and worker over an in-memory repository with the same compare-and-set rules and a fake WordPress cron that refuses duplicate events; jobs are recorded, never run; `wp_mail()` throws if called). `php tests/test-bulk-messaging.php`, 83 checks, each asserting the stored message and delivery records and the actual pending jobs, not only the response:
+
+- persistence followed by scheduling failure (failed / `queue_schedule_failed` / 0 attempts / no job; not counted as queued);
+- successful recovery (same delivery id back to queued, one job, no new record, message unchanged);
+- a second retry and a resubmitted batch (already queued; no job or record added);
+- repeated scheduling failure, three retries (still unscheduled, no job, no new record);
+- simultaneous retries (lock held → busy, nothing scheduled; requeue compare-and-set refuses a second requeue; queued-without-job scheduled once, then seen as queued; a racing schedule call finds the existing job and is not marked failed);
+- lost responses (after scheduling: already queued; after saving but before scheduling: recovered once);
+- processing, sent and attempted-failure messages (never reset, requeued or resent; no job);
+- one mixed retry with five different outcomes and exact totals;
+- permission, agency scope and email readiness re-checked on recovery;
+- source checks that the real repository SQL carries the same compare-and-set guards and the lock.
+
+`node tests/browser-redesign-bulk.cjs` (24): the first scheduling attempt for one recipient fails, then a retry fails again, then a retry recovers it. The dialog's states and totals are checked at each step against the stored records and jobs.
+
+**Limits.** The tests run against an in-memory stand-in for the database; the real SQL is checked by inspection and source assertions, not executed against MySQL here. WordPress cron itself is not transactional: if a scheduling call succeeds but its option write is lost, the delivery stays queued without a job until the next bulk retry or the hourly maintenance job schedules it; the worker's compare-and-set claim keeps that from ever sending twice. A message whose worker was interrupted mid-send is deliberately not resent automatically.
+
 ## Rollback
 
-Uncheck the redesign option: the legacy screens return unchanged (the export handler behaves as before when no selection is posted). Or reinstall the previous build, `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-ce36016.zip`. No schema change; bulk reminders write the same communication records a single reminder writes.
+Uncheck the redesign option: the legacy screens return unchanged (the export handler behaves as before when no selection is posted). Or reinstall the build Akansoh staging runs, `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-51d8679.zip` (installed and checked November 7; see `docs/staging-builds.md`). `ce36016` (Slice 5) was never installed. No schema change; bulk reminders write the same communication records a single reminder writes.
 
 ## Package
 
@@ -150,4 +191,4 @@ Uncheck the redesign option: the legacy screens return unchanged (the export han
 | Contents | Cumulative Slices 1-6 on top of 1.7.3-rc.8. 142 runtime files, each byte-identical to the commit; `BUILD.txt` inside lists every file's SHA-256 |
 | Checks on the archive | `unzip -t` clean; every file compared with `git show 63c3287:<path>`; `php -l` on every PHP file |
 
-Not installed anywhere. Older builds are kept unchanged.
+Downloaded and integrity-verified by the reviewer; not installed. Superseded by the bulk-retry fix build below, which should be installed instead. Older builds are kept unchanged.

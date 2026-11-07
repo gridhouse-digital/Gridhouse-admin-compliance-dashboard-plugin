@@ -218,7 +218,12 @@ final class GHCA_ACD_Messaging_Service {
 		foreach ( (array) ( $created['delivery_ids'] ?? array( $created['delivery_id'] ) ) as $delivery_id ) {
 			if ( ! GHCA_ACD_Messaging_Worker::schedule( (int) $delivery_id ) ) {
 				GHCA_ACD_Messaging_Repository::mark_schedule_failed( (int) $delivery_id );
-				return new WP_Error( 'ghca_message_schedule_failed', __( 'The reminder was saved, but one or more background delivery jobs could not be scheduled.', 'ghca-acd' ) );
+				// The record exists; say which, so a caller can recover it instead of creating another message.
+				return new WP_Error(
+					'ghca_message_schedule_failed',
+					__( 'The reminder was saved, but one or more background delivery jobs could not be scheduled.', 'ghca-acd' ),
+					array( 'communication_id' => (int) $created['communication_id'], 'delivery_ids' => array_map( 'intval', (array) ( $created['delivery_ids'] ?? array( $created['delivery_id'] ) ) ) )
+				);
 			}
 		}
 
@@ -254,6 +259,109 @@ final class GHCA_ACD_Messaging_Service {
 		}
 		$urgency = GHCA_ACD_Message_Template_Renderer::normalize_urgency( sanitize_key( $urgency ) );
 		return array( 'subject' => GHCA_ACD_Message_Template_Renderer::apply_urgency_prefix( $subject, $urgency ), 'message' => $message );
+	}
+
+	/**
+	 * Reports where an existing email delivery is in its lifecycle and recovers it only when that is unambiguous:
+	 * the message was saved but its background job never existed and it was never attempted. Used by bulk retries,
+	 * which reuse the same record instead of creating another message.
+	 *
+	 * - accepted / sent / delivered: 'sent'. Never sent again.
+	 * - processing: 'processing'. A worker holds it; not touched.
+	 * - queued with a job waiting: 'pending'.
+	 * - queued with no job (the request that saved it died before scheduling): scheduled now, 'recovered'.
+	 * - failed with queue_schedule_failed and no attempt: requeued through requeue_failed() (compare-and-set) and
+	 *   scheduled, 'recovered'; if scheduling fails again it is marked failed again, 'unscheduled'.
+	 * - any other failure (the worker tried, or the outcome is unknown): 'delivery_failed'. Left for a person to
+	 *   review in Communication History, where the existing retry rechecks it.
+	 *
+	 * Permission, agency scope, email readiness and the inactive policy are checked first, as for a new message.
+	 * Scheduling is serialised per delivery by a short lock, so simultaneous requests schedule at most one job.
+	 *
+	 * @return array{status:string,state:string,message:string}|WP_Error
+	 */
+	public static function recover_delivery( int $delivery_id ) {
+		if ( ! self::schema_ready() ) {
+			return new WP_Error( 'ghca_message_schema_unavailable', __( 'Messaging setup is incomplete.', 'ghca-acd' ) );
+		}
+		if ( ! GHCA_ACD_Roles::user_can_send_reminders() ) {
+			return new WP_Error( 'ghca_message_permission_denied', __( 'You do not have permission to send reminders.', 'ghca-acd' ) );
+		}
+		$delivery = GHCA_ACD_Messaging_Repository::get_delivery( $delivery_id );
+		if ( ! $delivery ) {
+			return new WP_Error( 'ghca_message_delivery_not_found', __( 'The message record could not be found.', 'ghca-acd' ) );
+		}
+		$access = self::check_employee_access( (int) $delivery['employee_user_id'], true );
+		if ( is_wp_error( $access ) ) {
+			return $access;
+		}
+		if ( 'email' !== (string) $delivery['channel'] ) {
+			return self::delivery_status( $delivery );
+		}
+
+		$status = self::delivery_status( $delivery );
+		if ( ! in_array( $status['status'], array( 'needs_job', 'unscheduled' ), true ) ) {
+			return $status;
+		}
+
+		$email    = sanitize_email( (string) $access['user']->user_email );
+		$inactive = GHCA_ACD_Data_Provider::is_user_suspended( (int) $delivery['employee_user_id'] );
+		if ( ! GHCA_ACD_Settings::reminder_email_enabled() || ! is_email( $email ) ) {
+			return new WP_Error( 'ghca_message_email_not_ready', __( 'Email is not ready for this employee. The saved message was not scheduled.', 'ghca-acd' ) );
+		}
+		if ( $inactive && ! GHCA_ACD_Settings::allow_inactive_reminders() ) {
+			return new WP_Error( 'ghca_message_inactive_blocked', __( 'Reminders to inactive employees are disabled. The saved message was not scheduled.', 'ghca-acd' ) );
+		}
+
+		if ( ! GHCA_ACD_Messaging_Repository::acquire_schedule_lock( $delivery_id ) ) {
+			return array( 'status' => 'busy', 'state' => (string) $delivery['state'], 'message' => __( 'Another request is scheduling this message right now. Check again in a moment.', 'ghca-acd' ) );
+		}
+		try {
+			// Re-read under the lock: another request may have finished first.
+			$delivery = GHCA_ACD_Messaging_Repository::get_delivery( $delivery_id );
+			$status   = $delivery ? self::delivery_status( $delivery ) : array( 'status' => 'missing' );
+			if ( 'unscheduled' === $status['status'] && ! GHCA_ACD_Messaging_Repository::requeue_failed( $delivery_id ) ) {
+				$fresh = GHCA_ACD_Messaging_Repository::get_delivery( $delivery_id );
+				return $fresh ? self::delivery_status( $fresh ) : new WP_Error( 'ghca_message_delivery_not_found', __( 'The message record could not be found.', 'ghca-acd' ) );
+			}
+			if ( ! in_array( $status['status'], array( 'needs_job', 'unscheduled' ), true ) ) {
+				return $status;
+			}
+			if ( GHCA_ACD_Messaging_Worker::schedule( $delivery_id ) ) {
+				return array( 'status' => 'recovered', 'state' => 'queued', 'message' => __( 'The saved message is now scheduled. Delivery status appears in Communication History.', 'ghca-acd' ) );
+			}
+			GHCA_ACD_Messaging_Repository::mark_schedule_failed( $delivery_id );
+			return array( 'status' => 'unscheduled', 'state' => 'failed', 'message' => __( 'Saved, but the background job still could not be scheduled. Nothing was sent.', 'ghca-acd' ) );
+		} finally {
+			GHCA_ACD_Messaging_Repository::release_schedule_lock( $delivery_id );
+		}
+	}
+
+	/**
+	 * Lifecycle reading of one delivery, without changing it.
+	 *
+	 * @param array<string,mixed> $delivery
+	 * @return array{status:string,state:string,message:string}
+	 */
+	private static function delivery_status( array $delivery ): array {
+		$id    = (int) $delivery['id'];
+		$state = (string) $delivery['state'];
+		if ( in_array( $state, array( 'accepted', 'sent', 'delivered' ), true ) ) {
+			return array( 'status' => 'sent', 'state' => $state, 'message' => __( 'Already sent. Not sent again.', 'ghca-acd' ) );
+		}
+		if ( 'processing' === $state ) {
+			return array( 'status' => 'processing', 'state' => $state, 'message' => __( 'Being sent now. Not touched.', 'ghca-acd' ) );
+		}
+		if ( 'queued' === $state ) {
+			return GHCA_ACD_Messaging_Worker::is_scheduled( $id )
+				? array( 'status' => 'pending', 'state' => $state, 'message' => __( 'Already queued; its background job is waiting to run.', 'ghca-acd' ) )
+				: array( 'status' => 'needs_job', 'state' => $state, 'message' => __( 'Saved and queued, but no background job exists.', 'ghca-acd' ) );
+		}
+		if ( 'failed' === $state && 'queue_schedule_failed' === (string) ( $delivery['last_error_code'] ?? '' ) && 0 === (int) ( $delivery['attempt_count'] ?? 0 ) ) {
+			return array( 'status' => 'unscheduled', 'state' => $state, 'message' => __( 'Saved, but never scheduled. Nothing was sent.', 'ghca-acd' ) );
+		}
+		$summary = trim( (string) ( $delivery['last_error_summary'] ?? '' ) );
+		return array( 'status' => 'delivery_failed', 'state' => $state, 'message' => ( '' !== $summary ? $summary . ' ' : '' ) . __( 'Review it in Communication History before trying again.', 'ghca-acd' ) );
 	}
 
 	public static function retry( int $delivery_id ) {

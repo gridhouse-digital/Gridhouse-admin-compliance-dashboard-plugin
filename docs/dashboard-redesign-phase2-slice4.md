@@ -196,7 +196,7 @@ Regression: phase-1 screens 0 of 1,026 element/viewport combinations changed. Ev
 
 ## Correction after staging review: bulletin pages inside the theme (`c422dc2`)
 
-Taz's review of Slices 1–4 on Akanso staging (build `d93f640`) found that the ODP bulletin library (`/odp-bulletins/`) and each bulletin page (`/odp-bulletins/<id>/`) did not use the site's theme. They were sent as standalone documents with the plugin's own app bar (logo, navigation, avatar), so the theme header and footer were missing and the plugin header duplicated them.
+Taz's review of Slices 1–4 on Akansoh staging (build `d93f640`) found that the ODP bulletin library (`/odp-bulletins/`) and each bulletin page (`/odp-bulletins/<id>/`) did not use the site's theme. They were sent as standalone documents with the plugin's own app bar (logo, navigation, avatar), so the theme header and footer were missing and the plugin header duplicated them.
 
 | | Before | After |
 | --- | --- | --- |
@@ -290,7 +290,7 @@ Suggested staging checks for Taz, after the package is approved for staging (fic
 
 ## Package
 
-### Corrections build (current)
+### Corrections build (installed on Akansoh staging, checked November 7)
 
 | | |
 | --- | --- |
@@ -336,7 +336,7 @@ Verification:
 | Contents | Cumulative Slices 1–4, the bulletin-page correction, and the page-background fix. 161 entries (139 runtime files, `BUILD.txt`, 21 folders). Same root folder `Gridhouse-admin-compliance-dashboard-plugin-main/` and entry file `gridhouse-admin-compliance-dashboard.php`. |
 | `BUILD.txt` | Inside the ZIP: the commit, branch, version and the SHA-256 of every file. A file inside an archive cannot hold that archive's own size and checksum, so the sidecar `…b2da862.BUILD.txt` next to the ZIP carries the byte size and SHA-256 above, plus the same record. |
 | Difference from `0f5d4e0` (correction build, not installed) | `assets/gh-redesign.css`, `gridhouse-admin-compliance-dashboard.php`, `includes/odp/class-odp-bulletins.php` |
-| Difference from `d93f640` (installed on staging) | Those three files plus `includes/odp/class-odp-ui.php` |
+| Difference from `d93f640` (the build staging ran before `51d8679`) | Those three files plus `includes/odp/class-odp-ui.php` |
 
 Verification:
 
@@ -353,12 +353,12 @@ Verification:
 | SHA-256 | `947fc47aba628e2984f0252ed42507f2bde0f93873b7c802e41766769396ffa9` |
 | Built from | `0f5d4e043c50aa4dfc9669f9d21ca5e50c5038f2` on `gridhouse-overview-odp-bulletins-af45` (PR 19), plugin version `1.7.3-rc.8` |
 | Contents | Cumulative Slices 1–4 plus the bulletin-page correction. 161 entries: 139 runtime files, `BUILD.txt`, 21 folder entries, under the same root folder `Gridhouse-admin-compliance-dashboard-plugin-main/` and entry file `gridhouse-admin-compliance-dashboard.php`. |
-| Difference from the installed `d93f640` build | Three runtime files: `assets/gh-redesign.css`, `includes/odp/class-odp-bulletins.php`, `includes/odp/class-odp-ui.php` (plus `BUILD.txt`). Checked by comparing every extracted file's SHA-256. |
+| Difference from the `d93f640` build (installed at the time) | Three runtime files: `assets/gh-redesign.css`, `includes/odp/class-odp-bulletins.php`, `includes/odp/class-odp-ui.php` (plus `BUILD.txt`). Checked by comparing every extracted file's SHA-256. |
 | Earlier build | `…-d93f640.zip` kept unchanged (SHA-256 `556295da…5e115609`, re-checked). |
 
 The archive was verified the same way as before. `unzip -t` reports no errors. There is one root folder, with the entry file at its expected path. The 139 files are byte-identical to the commit, and the `BUILD.txt` manifest verifies. Fonts are present, and `php -l` and `node --check` pass. All 73 PHP scripts, the JS and Playwright tests, and the browser suites pass against the extracted package (lists 51, tables 53, drawer 159, themed bulletin pages 34). Building again with the same name was refused. Commits after `0f5d4e0` change only `docs/`.
 
-### First Slices 1–4 build (installed on staging)
+### First Slices 1–4 build (installed on staging earlier; replaced by `51d8679` on November 7)
 
 | | |
 | --- | --- |
@@ -394,7 +394,7 @@ Verification of the archive (synthetic, in this environment):
 **Rollback, fastest first:**
 
 1. **Switch the redesign off** (GHCA Settings → the redesign setting, `ghca_acd_ui_redesign`). The legacy dashboard returns at once, with no file change. The legacy screens are byte-identical to before (golden checks). This is a setting change, so it needs the owner's approval on staging.
-2. **Reinstall the previous build** the same way, Replace current with uploaded. For the correction build, that is the Slice 1–4 package staging runs now, `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-d93f640.zip`; before that, the Slice 3 package (`a890189`). Only the bulletin pages differ between `d93f640` and the correction build. Keep that package and the existing private rollback copies; this package does not replace them.
+2. **Reinstall the previous build** the same way, Replace current with uploaded. Staging status is kept in `docs/staging-builds.md`: Akansoh staging runs `51d8679` (installed and checked November 7); the build it replaced was `d93f640`, and before that the Slice 3 package (`a890189`). Keep that package and the existing private rollback copies; this package does not replace them.
 3. After either step, clear any page cache or CDN for the dashboard pages. Asset URLs carry the file time, so browsers need no action.
 
 No data rollback is needed: Slice 4 writes nothing.

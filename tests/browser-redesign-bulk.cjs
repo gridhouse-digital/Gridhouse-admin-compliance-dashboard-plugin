@@ -55,7 +55,7 @@ async function open(browser, width, opt = {}) {
       if (String(params.action || '').startsWith('ghca_acd_bulk_')) {
         log.bulk.push(params);
         if (opt.delay) { await new Promise((r) => setTimeout(r, opt.delay)); }
-        const out = execFileSync('php', [runner, JSON.stringify(params)], { env: { ...process.env, GHCA_BULK_STATE: state, GHCA_BULK_PEOPLE: JSON.stringify(people(count)), GHCA_BULK_FAIL_ID: '103' } }).toString();
+        const out = execFileSync('php', [runner, JSON.stringify(params)], { env: { ...process.env, GHCA_BULK_STATE: state, GHCA_BULK_PEOPLE: JSON.stringify(people(count)), GHCA_BULK_FAIL_ID: '103', GHCA_BULK_FAIL_TIMES: '2' } }).toString();
         return route.fulfill({ status: 200, contentType: 'application/json', body: out });
       }
       const out = execFileSync('php', [preview, 'ajax', JSON.stringify(params), String(count)], { env: penv }).toString();
@@ -234,28 +234,45 @@ async function waitRefresh(page) { await page.waitForFunction(() => !document.qu
     assert.equal(sends[0].reviewed, '1');
     ok('one send request despite repeated clicks; it carries only the 3 reviewed, ready recipients');
 
-    assert.match(await modal.locator('[data-ghca-bulk-summary]').innerText(), /^2 of 3 queued\. 1 not sent\.$/);
-    const res = await modal.locator('[data-ghca-bulk-results] li').allInnerTexts();
-    assert.match(res.join('|'), /Alder Reyes[\s\S]*Queued/);
-    assert.match(res.join('|'), /Dune Ellis[\s\S]*Not sent[\s\S]*could not be scheduled/);
+    // Dune Ellis (103): the message is saved, then scheduling its job fails (twice in this run).
+    const summary = () => modal.locator('[data-ghca-bulk-summary]').innerText();
+    assert.equal(await summary(), '2 of 3 queued. 1 saved but not scheduled (nothing sent).');
+    let res = (await modal.locator('[data-ghca-bulk-results] li').allInnerTexts()).join('|');
+    assert.match(res, /Alder Reyes[\s\S]*Queued/);
+    assert.match(res, /Dune Ellis[\s\S]*Saved, not scheduled[\s\S]*Nothing was sent/);
     let st = stateRead();
-    assert.equal(st.communications.length, 3);
-    assert.deepEqual(st.communications.map((c) => c.employee_user_id), [100, 101, 103]);
-    assert.ok(st.communications.every((c) => c.deliveries.length === 1 && c.deliveries[0].channel === 'email'));
-    assert.match(st.communications[0].message, /^Hi Alder,/);
-    assert.match(st.communications[1].message, /^Hi Birch,/);
-    ok('partial failure reported per person: 2 queued, 1 not sent; three separate personalised email records, no group email');
+    const comms = () => Object.values(stateRead().communications);
+    const dly = (emp) => Object.values(stateRead().deliveries).filter((d) => d.employee_user_id === emp);
+    const jobs = (id) => stateRead().cron.filter((e) => e[1][0] === id).length;
+    assert.equal(comms().length, 3);
+    assert.deepEqual(comms().map((c) => c.employee_user_id), [100, 101, 103]);
+    assert.ok(comms().every((c) => c.deliveries.length === 1 && c.deliveries[0].channel === 'email'));
+    assert.match(comms()[0].message, /^Hi Alder,/);
+    assert.match(comms()[1].message, /^Hi Birch,/);
+    const d103 = dly(103);
+    assert.equal(d103.length, 1);
+    assert.deepEqual([d103[0].state, d103[0].last_error_code, d103[0].attempt_count, jobs(d103[0].id)], ['failed', 'queue_schedule_failed', 0, 0]);
+    assert.equal(jobs(dly(100)[0].id) + jobs(dly(101)[0].id), 2);
+    ok('partial failure: 2 queued with one job each; Dune Ellis saved but not scheduled (no job, never attempted) and not counted as queued');
 
     const retry = modal.locator('[data-ghca-bulk-retry]');
-    assert.equal(await retry.innerText(), 'Retry the 1 not sent');
+    assert.equal(await retry.innerText(), 'Retry the 1 not queued');
     await retry.click();
-    await page.waitForFunction(() => /Already recorded/.test(document.querySelector('#ghca-acd-bulk-modal [data-ghca-bulk-results]').innerText));
-    st = stateRead();
-    assert.equal(st.communications.length, 3);
+    await page.waitForFunction(() => /still could not be scheduled/.test(document.querySelector('#ghca-acd-bulk-modal [data-ghca-bulk-results]').innerText));
+    assert.equal(await summary(), '2 of 3 queued. 1 saved but not scheduled (nothing sent).');
+    assert.deepEqual([comms().length, dly(103).length, dly(103)[0].state, jobs(dly(103)[0].id)], [3, 1, 'failed', 0]);
+    ok('a retry that fails to schedule again says so; same record, still no job, still not counted as queued');
+
+    await retry.click();
+    await page.waitForFunction(() => /Queued now \(recovered\)/.test(document.querySelector('#ghca-acd-bulk-modal [data-ghca-bulk-results]').innerText));
+    assert.equal(await summary(), '3 of 3 queued.');
+    assert.equal(await retry.isHidden(), true);
+    const after = dly(103);
+    assert.deepEqual([comms().length, after.length, after[0].id, after[0].state, after[0].attempt_count, jobs(after[0].id)], [3, 1, d103[0].id, 'queued', 0, 1]);
     const retried = log.bulk.filter((p) => p.action === 'ghca_acd_bulk_message_send').pop();
     assert.equal(retried.ids, '103');
     assert.equal(retried.token, sends[0].token);
-    ok('retry sends only the failed recipient with the same batch token; the server reports it already recorded and creates nothing new');
+    ok('the next retry recovers the same record: one job, no new message; the total is now 3 of 3 queued and Retry disappears');
 
     await page.keyboard.press('Escape');
     assert.equal(await modal.isHidden(), true);
