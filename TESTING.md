@@ -204,3 +204,8 @@ Replace this beta with the retained, verified 1.7.2 ZIP. Do not uninstall/delete
 Verified employment-date metadata also remains after code rollback. Earlier betas/1.7.2 ignore it and return to their earlier date calculations. Retain the beta 2 ZIP as a code rollback option; do not delete date or training evidence to roll back.
 
 Report the tested page, action, expected result, actual result and a redacted screenshot. Do not include passwords or personal records.
+
+## Bulk-message recovery against a real database
+
+`tests/integration-bulk-recovery.php` runs the scheduling lock, the recovery transition and `recover_delivery()` in separate processes against one database. It needs a disposable WordPress site with the plugin active, `mysqli` and `pcntl`, and refuses to run unless `wp-config.php` defines `GHCA_DISPOSABLE_TEST_SITE` and the database name starts with `ghca_test`. Copy the plugin into that site's `wp-content/plugins/` and run `php wp-content/plugins/<plugin folder>/tests/integration-bulk-recovery.php`. It creates and then deletes synthetic users' messaging rows; it never runs cron or sends mail. Never point it at staging or live.
+

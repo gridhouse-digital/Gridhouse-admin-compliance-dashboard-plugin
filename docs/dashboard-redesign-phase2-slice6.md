@@ -175,6 +175,45 @@ Staging checks from earlier builds remain open; staging is not cleared.
 
 **Limits.** The tests run against an in-memory stand-in for the database; the real SQL is checked by inspection and source assertions, not executed against MySQL here. WordPress cron itself is not transactional: if a scheduling call succeeds but its option write is lost, the delivery stays queued without a job until the next bulk retry or the hourly maintenance job schedules it; the worker's compare-and-set claim keeps that from ever sending twice. A message whose worker was interrupted mid-send is deliberately not resent automatically.
 
+## Concurrency hardening (after `ef5d03d`)
+
+Two gaps found in review of `ef5d03d`, both in the recovery path only:
+
+1. **Lock ownership.** The lock stored a timestamp and release deleted the row unconditionally, so a request that outlived its 60-second lease could delete a successor's lock.
+2. **Eligibility.** The PHP check allowed recovery only for `queue_schedule_failed` with zero attempts, but the write used `requeue_failed()`, whose SQL accepts any failed delivery below the attempt ceiling.
+
+**Changes** (`class-messaging-repository.php`, `class-messaging-service.php`, `class-messaging-worker.php`):
+
+- Lock rows hold `token|expires`. `acquire_schedule_lock()` returns a random 128-bit token: an `INSERT IGNORE` for a free lock, or one `UPDATE … WHERE expires < now` to take over an expired one (the expiry test and the write are a single statement). `release_schedule_lock( $id, $token )` is one `DELETE` matching the caller's token; a stale owner or a repeated release deletes nothing. No read-then-delete, and the timeout is unchanged.
+- `requeue_unscheduled( $id, $token )` (new) is the only recovery transition: one `UPDATE` requiring `state = 'failed' AND last_error_code = 'queue_schedule_failed' AND attempt_count = 0` **and** `EXISTS` an unexpired lock row with the caller's token. `mark_schedule_failed_as_owner()` carries the same ownership predicate. `requeue_failed()` is unchanged, so the Communication History retry keeps its existing policy.
+- `recover_delivery()` holds the lock for its whole recovery step, checks ownership again before scheduling (the one step that is not a database write), and when a guarded write changes nothing it reads the delivery again and reports its real state (or "being scheduled elsewhere" if the lock was lost). It never schedules blindly.
+- **Found by the real-database test and fixed:** WordPress caches the cron option per request. A request that took the lock after another had scheduled the job still saw its own stale copy, concluded no job existed, and two of eight racing retries marked the scheduled delivery failed again. The worker now drops the cached cron option before checking for or scheduling a job.
+
+Permission, agency scope, email readiness, the inactive policy, idempotency, the stored message records and the per-recipient statuses are unchanged.
+
+### Evidence, by kind
+
+**Verified against a real database** (`tests/integration-bulk-recovery.php`, 29 checks; WordPress 6.6.2 and MariaDB 10.11.14 (InnoDB) on a disposable local site in this session; separate PHP processes, each with its own connection, started at the same instant; the plugin active; passed in six consecutive runs):
+
+- 8 processes acquiring at once: exactly one token, and the stored row is that token; release, then a repeated release that deletes nothing.
+- Expired owner A, successor B in another process: B's token is stored; A's release leaves it; A's `requeue_unscheduled()` and `mark_schedule_failed_as_owner()` change nothing; B's succeed.
+- 8 processes taking over one expired lock at once: exactly one succeeds.
+- A stale owner's recovery write issued while a takeover is uncommitted **waits for the takeover to commit (about 1.2 s) and then changes nothing**: the ownership subquery in the `UPDATE` is a locking read on InnoDB, so the two statements are serialised.
+- State or attempt changes between the read and the write (attempt_count 1, an ambiguous `worker_interrupted`, already accepted): no requeue. The manual `requeue_failed()` still requeues an attempted failure.
+- 8 simultaneous full `recover_delivery()` calls: exactly one "recovered"; the rest "busy" or "already queued"; the database holds the same delivery, queued, never attempted, with exactly one pending cron job, and no lock row left.
+- 6 simultaneous retries while cron refuses every event: none recovered; the delivery is back to failed/unscheduled with no job and no lock; a later retry recovers it with one job.
+- Processing, accepted and attempted-failure deliveries under 4 racing retries: unchanged, no job.
+- 8 processes claiming one queued delivery: exactly one claim (the worker's existing compare-and-set; claim only, nothing sent).
+- No mail attempted: the worker's `process()` is never called and a `pre_wp_mail` filter blocks and counts any attempt.
+
+Boundaries of that evidence: LearnDash is not installed on the disposable site (three-line stand-ins give the employee no courses so a record can be built); there is no persistent object cache (Redis or Memcached), no multi-server setup and no replication; and WordPress cron was never run (`DISABLE_WP_CRON`), so no delivery was processed or sent.
+
+**Simulated** (`tests/test-bulk-messaging.php`, 102 checks, in-memory repository with the same rules and a controllable clock): every scenario above plus the bulk endpoint's per-recipient statuses, totals, permission and scope, mixed batches, lost responses and the lease expiring mid-recovery (the stale request reports busy, changes nothing, schedules nothing, and the successor's lock survives).
+
+**Source inspection** (assertions in the same test): the real SQL of the lock, `requeue_unscheduled()`, `mark_schedule_failed_as_owner()`, `requeue_failed()` and `claim_delivery()` carries the predicates described above.
+
+**Not claimed.** These tests do not prove at-most-once delivery in production. What they show: one recovery transition and one job per delivery under the races tested, and that a delivery can be claimed by only one worker. Duplicate jobs for one delivery remain possible outside this path (WordPress cron writes are not atomic across requests, and the hourly maintenance job can schedule a queued delivery); the worker's compare-and-set claim is what stops a second job from sending, and that is verified at the claim level only. A worker that dies after its mail call but before recording the outcome leaves an ambiguous delivery, which is never retried automatically.
+
 ## Rollback
 
 Uncheck the redesign option: the legacy screens return unchanged (the export handler behaves as before when no selection is posted). Or reinstall the build Akansoh staging runs, `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-51d8679.zip` (installed and checked November 7; see `docs/staging-builds.md`). `ce36016` (Slice 5) was never installed. No schema change; bulk reminders write the same communication records a single reminder writes.

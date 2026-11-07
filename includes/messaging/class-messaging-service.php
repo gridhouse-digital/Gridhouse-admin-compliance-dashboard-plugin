@@ -313,28 +313,67 @@ final class GHCA_ACD_Messaging_Service {
 			return new WP_Error( 'ghca_message_inactive_blocked', __( 'Reminders to inactive employees are disabled. The saved message was not scheduled.', 'ghca-acd' ) );
 		}
 
-		if ( ! GHCA_ACD_Messaging_Repository::acquire_schedule_lock( $delivery_id ) ) {
-			return array( 'status' => 'busy', 'state' => (string) $delivery['state'], 'message' => __( 'Another request is scheduling this message right now. Check again in a moment.', 'ghca-acd' ) );
+		$token = GHCA_ACD_Messaging_Repository::acquire_schedule_lock( $delivery_id );
+		if ( '' === $token ) {
+			return self::busy( $delivery );
 		}
 		try {
-			// Re-read under the lock: another request may have finished first.
-			$delivery = GHCA_ACD_Messaging_Repository::get_delivery( $delivery_id );
-			$status   = $delivery ? self::delivery_status( $delivery ) : array( 'status' => 'missing' );
-			if ( 'unscheduled' === $status['status'] && ! GHCA_ACD_Messaging_Repository::requeue_failed( $delivery_id ) ) {
-				$fresh = GHCA_ACD_Messaging_Repository::get_delivery( $delivery_id );
-				return $fresh ? self::delivery_status( $fresh ) : new WP_Error( 'ghca_message_delivery_not_found', __( 'The message record could not be found.', 'ghca-acd' ) );
-			}
-			if ( ! in_array( $status['status'], array( 'needs_job', 'unscheduled' ), true ) ) {
-				return $status;
-			}
-			if ( GHCA_ACD_Messaging_Worker::schedule( $delivery_id ) ) {
-				return array( 'status' => 'recovered', 'state' => 'queued', 'message' => __( 'The saved message is now scheduled. Delivery status appears in Communication History.', 'ghca-acd' ) );
-			}
-			GHCA_ACD_Messaging_Repository::mark_schedule_failed( $delivery_id );
-			return array( 'status' => 'unscheduled', 'state' => 'failed', 'message' => __( 'Saved, but the background job still could not be scheduled. Nothing was sent.', 'ghca-acd' ) );
+			return self::recover_as_owner( $delivery_id, $token );
 		} finally {
-			GHCA_ACD_Messaging_Repository::release_schedule_lock( $delivery_id );
+			GHCA_ACD_Messaging_Repository::release_schedule_lock( $delivery_id, $token );
 		}
+	}
+
+	/**
+	 * The locked part of recover_delivery(). Every database change carries the lock token in its own WHERE clause
+	 * (requeue_unscheduled(), mark_schedule_failed_as_owner()), so if this request outlives its lease and another
+	 * takes the lock, its writes match nothing. Ownership is checked again before scheduling, which is not a
+	 * database write. Whenever a guarded write changes nothing, the delivery is read again and its real state is
+	 * reported; nothing is scheduled blindly.
+	 *
+	 * @return array{status:string,state:string,message:string}|WP_Error
+	 */
+	private static function recover_as_owner( int $delivery_id, string $token ) {
+		$delivery = GHCA_ACD_Messaging_Repository::get_delivery( $delivery_id );
+		if ( ! $delivery ) {
+			return new WP_Error( 'ghca_message_delivery_not_found', __( 'The message record could not be found.', 'ghca-acd' ) );
+		}
+		$status = self::delivery_status( $delivery );
+		if ( 'unscheduled' === $status['status'] ) {
+			if ( ! GHCA_ACD_Messaging_Repository::requeue_unscheduled( $delivery_id, $token ) ) {
+				return self::reread( $delivery_id, $token );
+			}
+		} elseif ( 'needs_job' !== $status['status'] ) {
+			return $status;
+		}
+		if ( ! GHCA_ACD_Messaging_Repository::holds_schedule_lock( $delivery_id, $token ) ) {
+			return self::reread( $delivery_id, $token );
+		}
+		if ( GHCA_ACD_Messaging_Worker::schedule( $delivery_id ) ) {
+			return array( 'status' => 'recovered', 'state' => 'queued', 'message' => __( 'The saved message is now scheduled. Delivery status appears in Communication History.', 'ghca-acd' ) );
+		}
+		if ( GHCA_ACD_Messaging_Repository::mark_schedule_failed_as_owner( $delivery_id, $token ) ) {
+			return array( 'status' => 'unscheduled', 'state' => 'failed', 'message' => __( 'Saved, but the background job still could not be scheduled. Nothing was sent.', 'ghca-acd' ) );
+		}
+		return self::reread( $delivery_id, $token );
+	}
+
+	/** The real state after a guarded step changed nothing; a lost lock is reported as busy. */
+	private static function reread( int $delivery_id, string $token ) {
+		$fresh = GHCA_ACD_Messaging_Repository::get_delivery( $delivery_id );
+		if ( ! $fresh ) {
+			return new WP_Error( 'ghca_message_delivery_not_found', __( 'The message record could not be found.', 'ghca-acd' ) );
+		}
+		$status = self::delivery_status( $fresh );
+		if ( in_array( $status['status'], array( 'unscheduled', 'needs_job' ), true ) && ! GHCA_ACD_Messaging_Repository::holds_schedule_lock( $delivery_id, $token ) ) {
+			return self::busy( $fresh );
+		}
+		return $status;
+	}
+
+	/** @param array<string,mixed> $delivery */
+	private static function busy( array $delivery ): array {
+		return array( 'status' => 'busy', 'state' => (string) $delivery['state'], 'message' => __( 'Another request is scheduling this message right now. Check again in a moment.', 'ghca-acd' ) );
 	}
 
 	/**

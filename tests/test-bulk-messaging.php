@@ -142,10 +142,10 @@ $GLOBALS['ghca_bulk']['schedule_fail'] = array();
 
 // ---- E. Simultaneous retries: the scheduling lock and the compare-and-set allow one job at most.
 $did = $batch2[0]['id'];
-GHCA_ACD_Messaging_Repository::acquire_schedule_lock( $did ); // another request is scheduling it now
+$other = GHCA_ACD_Messaging_Repository::acquire_schedule_lock( $did ); // another request is scheduling it now
 list( $res ) = $send_ids( '306', $t2 );
 check( 'busy' === $res[306]['status'] && 0 === ghca_bulk_jobs_for( $did ) && 'failed' === $GLOBALS['ghca_bulk']['deliveries'][ $did ]['state'], 'E: while another request holds the lock: reported busy, nothing scheduled, state untouched' );
-GHCA_ACD_Messaging_Repository::release_schedule_lock( $did );
+GHCA_ACD_Messaging_Repository::release_schedule_lock( $did, $other );
 // The other request requeued it but died before scheduling: queued with no job.
 GHCA_ACD_Messaging_Repository::requeue_failed( $did );
 check( false === GHCA_ACD_Messaging_Repository::requeue_failed( $did ), 'E: requeue_failed is compare-and-set: a second requeue of the same delivery is refused' );
@@ -203,6 +203,54 @@ check( 'pending' === $res[301]['status'] && 'sent' === $res[302]['status'] && 'f
 check( array( 'pending' => 1, 'sent' => 1, 'failed' => 1, 'recovered' => 1, 'delivery_failed' => 1 ) + $zero == $counts, 'H: totals match the outcomes; only pending and recovered have jobs' );
 check( 1 === ghca_bulk_jobs_for( $by6[301] ) && 0 === ghca_bulk_jobs_for( $by6[302] ) && 1 === ghca_bulk_jobs_for( $by6[306] ) && 0 === ghca_bulk_jobs_for( $by6[307] ) && 14 === $ncomm(), 'H: jobs exactly where the totals say; no new records (303 was refused before saving)' );
 
+// ---- L. Lock ownership (simulated store with the same rules as the real SQL; see the MySQL integration test).
+$t7 = wp_generate_uuid4();
+$GLOBALS['ghca_bulk']['schedule_fail'] = array( 302 => 1 );
+$send_ids( '302', $t7 );
+$GLOBALS['ghca_bulk']['schedule_fail'] = array();
+$all302 = array_values( array_filter( $GLOBALS['ghca_bulk']['deliveries'], static function ( $d ) { return 302 === $d['employee_user_id']; } ) );
+$lid = end( $all302 )['id'];
+check( 'failed' === $GLOBALS['ghca_bulk']['deliveries'][ $lid ]['state'] && 'queue_schedule_failed' === $GLOBALS['ghca_bulk']['deliveries'][ $lid ]['last_error_code'], 'L: setup: a saved, unscheduled delivery' );
+$A = GHCA_ACD_Messaging_Repository::acquire_schedule_lock( $lid, 60 );
+check( 32 === strlen( $A ) && '' === GHCA_ACD_Messaging_Repository::acquire_schedule_lock( $lid, 60 ), 'L: simultaneous acquisition: the first gets a token; the second, while it is unexpired, gets none' );
+$GLOBALS['ghca_bulk']['clock'] = 61; // A outlived its lease
+$B = GHCA_ACD_Messaging_Repository::acquire_schedule_lock( $lid, 60 );
+check( '' !== $B && $B !== $A, 'L: after expiry, successor B takes the lock with its own token' );
+check( false === GHCA_ACD_Messaging_Repository::release_schedule_lock( $lid, $A ) && GHCA_ACD_Messaging_Repository::holds_schedule_lock( $lid, $B ), 'L: stale owner A releasing does nothing; B\'s lock survives' );
+check( false === GHCA_ACD_Messaging_Repository::requeue_unscheduled( $lid, $A ) && 'failed' === $GLOBALS['ghca_bulk']['deliveries'][ $lid ]['state'] && 0 === ghca_bulk_jobs_for( $lid ), 'L: stale owner A cannot requeue the delivery; record and jobs unchanged' );
+check( true === GHCA_ACD_Messaging_Repository::requeue_unscheduled( $lid, $B ) && 'queued' === $GLOBALS['ghca_bulk']['deliveries'][ $lid ]['state'], 'L: owner B can' );
+check( false === GHCA_ACD_Messaging_Repository::mark_schedule_failed_as_owner( $lid, $A ) && 'queued' === $GLOBALS['ghca_bulk']['deliveries'][ $lid ]['state'], 'L: stale owner A cannot mark B\'s requeued delivery failed' );
+check( true === GHCA_ACD_Messaging_Repository::release_schedule_lock( $lid, $B ) && false === GHCA_ACD_Messaging_Repository::release_schedule_lock( $lid, $B ) && ! GHCA_ACD_Messaging_Repository::holds_schedule_lock( $lid, $B ), 'L: B releases once; a repeated release is a harmless no-op' );
+$GLOBALS['ghca_bulk']['clock'] = 0;
+GHCA_ACD_Messaging_Repository::force( $lid, array( 'state' => 'failed', 'last_error_code' => 'queue_schedule_failed' ) );
+
+// ---- M. Eligibility is decided by the transition itself, not by the earlier read.
+$tok = GHCA_ACD_Messaging_Repository::acquire_schedule_lock( $lid );
+GHCA_ACD_Messaging_Repository::force( $lid, array( 'attempt_count' => 1 ) ); // a worker attempted it after the read
+check( false === GHCA_ACD_Messaging_Repository::requeue_unscheduled( $lid, $tok ) && 'failed' === $GLOBALS['ghca_bulk']['deliveries'][ $lid ]['state'], 'M: an attempt between the read and the update: not requeued' );
+check( true === GHCA_ACD_Messaging_Repository::requeue_failed( $lid ) && 'queued' === $GLOBALS['ghca_bulk']['deliveries'][ $lid ]['state'], 'M: the manual retry (requeue_failed) keeps its broader policy for Communication History' );
+GHCA_ACD_Messaging_Repository::force( $lid, array( 'state' => 'failed', 'attempt_count' => 0, 'last_error_code' => 'wp_mail_failed' ) );
+check( false === GHCA_ACD_Messaging_Repository::requeue_unscheduled( $lid, $tok ), 'M: a different failure reason: not requeued' );
+GHCA_ACD_Messaging_Repository::force( $lid, array( 'state' => 'accepted', 'last_error_code' => 'queue_schedule_failed' ) );
+check( false === GHCA_ACD_Messaging_Repository::requeue_unscheduled( $lid, $tok ) && 'accepted' === $GLOBALS['ghca_bulk']['deliveries'][ $lid ]['state'], 'M: already sent: not requeued' );
+GHCA_ACD_Messaging_Repository::release_schedule_lock( $lid, $tok );
+// Through the service: the read says unscheduled, but the row changes before the transition runs.
+GHCA_ACD_Messaging_Repository::force( $lid, array( 'state' => 'failed', 'attempt_count' => 0, 'last_error_code' => 'queue_schedule_failed' ) );
+$GLOBALS['ghca_bulk']['before_requeue'] = static function () use ( $lid ) { GHCA_ACD_Messaging_Repository::force( $lid, array( 'state' => 'processing', 'attempt_count' => 1 ) ); };
+$r = GHCA_ACD_Messaging_Service::recover_delivery( $lid );
+unset( $GLOBALS['ghca_bulk']['before_requeue'] );
+check( ! is_wp_error( $r ) && 'processing' === $r['status'] && 'processing' === $GLOBALS['ghca_bulk']['deliveries'][ $lid ]['state'] && 0 === ghca_bulk_jobs_for( $lid ), 'M: the transition loses the race, the service rereads and reports "processing"; nothing scheduled' );
+check( array() === array_filter( array_keys( $GLOBALS['ghca_bulk']['locks'] ), static function ( $k ) use ( $lid ) { return 'ghca_acd_sched_lock_' . $lid === $k; } ), 'M: the service released its own lock' );
+// The lease expires and another request takes over mid-recovery: the stale request schedules nothing.
+GHCA_ACD_Messaging_Repository::force( $lid, array( 'state' => 'failed', 'attempt_count' => 0, 'last_error_code' => 'queue_schedule_failed' ) );
+$GLOBALS['ghca_bulk']['before_requeue'] = static function () use ( $lid, &$succ ) { $GLOBALS['ghca_bulk']['clock'] = 61; $succ = GHCA_ACD_Messaging_Repository::acquire_schedule_lock( $lid ); };
+$r = GHCA_ACD_Messaging_Service::recover_delivery( $lid );
+unset( $GLOBALS['ghca_bulk']['before_requeue'] );
+check( ! is_wp_error( $r ) && 'busy' === $r['status'] && 'failed' === $GLOBALS['ghca_bulk']['deliveries'][ $lid ]['state'] && 0 === ghca_bulk_jobs_for( $lid ), 'M: lease lost mid-recovery: the stale request reports busy, changes nothing and schedules nothing' );
+check( GHCA_ACD_Messaging_Repository::holds_schedule_lock( $lid, $succ ), 'M: and the successor\'s lock survives the stale request\'s release' );
+GHCA_ACD_Messaging_Repository::release_schedule_lock( $lid, $succ );
+$GLOBALS['ghca_bulk']['clock'] = 0;
+
 // ---- I. Recovery keeps every gate.
 $GLOBALS['ghca_bulk']['can_remind'] = false;
 $r = GHCA_ACD_Messaging_Service::recover_delivery( $by6[301] );
@@ -223,11 +271,11 @@ $GLOBALS['ghca_bulk']['email_on'] = true;
 
 // ---- J. A new batch token is a deliberate new message.
 list( $res ) = $send_ids( '301', wp_generate_uuid4() );
-check( 'queued' === $res[301]['status'] && 15 === $ncomm(), 'J: a new batch (new token) is a new message, as a deliberate second send' );
+check( 'queued' === $res[301]['status'] && 16 === $ncomm(), 'J: a new batch (new token) is a new message, as a deliberate second send' );
 
 // ---- K. Directly posted ids that are not ready or out of scope are refused one by one.
 list( $res ) = $send_ids( '303,304,305', $token );
-check( 'failed' === $res[303]['status'] && 'failed' === $res[304]['status'] && 'failed' === $res[305]['status'] && 15 === $ncomm(), 'K: not-ready or out-of-scope ids posted directly are refused by the service' );
+check( 'failed' === $res[303]['status'] && 'failed' === $res[304]['status'] && 'failed' === $res[305]['status'] && 16 === $ncomm(), 'K: not-ready or out-of-scope ids posted directly are refused by the service' );
 
 // ---- Sender rate limit: the service's own limit, reported per recipient.
 ghca_bulk_reset();
@@ -242,7 +290,10 @@ $fn   = static function ( string $name ) use ( $repo ): string { $i = strpos( $r
 check( str_contains( $fn( 'mark_schedule_failed' ), 'WHERE id = %d AND state = %s' ) && str_contains( $fn( 'mark_schedule_failed' ), "'queued'" ) && str_contains( $fn( 'mark_schedule_failed' ), '1 !== (int) $updated' ), 'real mark_schedule_failed is compare-and-set on queued: it cannot overwrite processing or sent' );
 check( str_contains( $fn( 'requeue_failed' ), 'WHERE id = %d AND state = %s AND attempt_count < %d' ), 'real requeue_failed is compare-and-set on failed, bounded by the attempt ceiling' );
 check( str_contains( $fn( 'claim_delivery' ), 'WHERE id = %d AND state = %s AND attempt_count < %d' ), 'real claim_delivery is compare-and-set on queued: two jobs for one delivery still send once' );
-check( str_contains( $fn( 'acquire_schedule_lock' ), 'INSERT IGNORE INTO' ) && str_contains( $fn( 'acquire_schedule_lock' ), 'AND option_value = %s' ), 'real scheduling lock: atomic insert, stale takeover is itself compare-and-set' );
+check( str_contains( $fn( 'acquire_schedule_lock' ), 'INSERT IGNORE INTO' ) && str_contains( $fn( 'acquire_schedule_lock' ), "AS UNSIGNED ) < %d" ) && str_contains( $fn( 'acquire_schedule_lock' ), 'random_bytes' ), 'real scheduling lock: random owner token; atomic insert; takeover is one UPDATE conditioned on the stored expiry' );
+check( str_contains( $fn( 'release_schedule_lock' ), "DELETE FROM" ) && str_contains( $fn( 'release_schedule_lock' ), "SUBSTRING_INDEX( option_value, '|', 1 ) = %s" ), 'real release deletes only the row whose token matches the caller (no read-then-delete)' );
+check( str_contains( $fn( 'requeue_unscheduled' ), 'WHERE id = %d AND state = %s AND last_error_code = %s AND attempt_count = 0' ) && str_contains( $fn( 'requeue_unscheduled' ), 'AND EXISTS ( SELECT 1 FROM' ), 'real recovery transition: exactly failed + queue_schedule_failed + zero attempts, and lock ownership, in one UPDATE' );
+check( str_contains( $fn( 'mark_schedule_failed_as_owner' ), 'AND EXISTS ( SELECT 1 FROM' ) && str_contains( $fn( 'requeue_failed' ), 'WHERE id = %d AND state = %s AND attempt_count < %d' ) && ! str_contains( $fn( 'requeue_failed' ), 'last_error_code = %s' ), 'owner-conditional schedule-failure mark; the manual retry transition (requeue_failed) is unchanged' );
 $worker = (string) file_get_contents( __DIR__ . '/../includes/messaging/class-messaging-worker.php' );
 check( str_contains( $worker, 'return self::is_scheduled( $delivery_id );' ), 'real worker: a refused duplicate event counts as scheduled' );
 

@@ -53,6 +53,10 @@ function ghca_bulk_save(): void {
 function ghca_bulk_reset(): void {
 	$GLOBALS['ghca_bulk'] = array_merge( $GLOBALS['ghca_bulk'], array( 'communications' => array(), 'deliveries' => array(), 'cron' => array(), 'scheduled' => array(), 'locks' => array(), 'schedule_fail' => array(), 'actor_count' => 0, 'next_id' => 1, 'can_remind' => true, 'email_on' => true ) );
 }
+/** The fixture clock (seconds); tests move it forward to expire a lock. */
+function ghca_bulk_now(): int {
+	return time() + (int) ( $GLOBALS['ghca_bulk']['clock'] ?? 0 );
+}
 /** Communication rows as a list, in creation order (as Communication History lists them per employee). */
 function ghca_bulk_comms(): array {
 	return array_values( $GLOBALS['ghca_bulk']['communications'] );
@@ -234,14 +238,41 @@ final class GHCA_ACD_Messaging_Repository {
 	}
 	/** Test helper: force a state as the worker or provider would have left it. */
 	public static function force( int $id, array $values ): void { self::set( $id, $values ); }
-	public static function acquire_schedule_lock( int $id, int $ttl = 60 ): bool {
+	// Lock rows hold [token, expires], with the same rules as the real SQL: insert-or-fail, takeover only when expired,
+	// release only by the owning token, and recovery writes only while the token owns an unexpired lock.
+	public static function acquire_schedule_lock( int $id, int $ttl = 60 ): string {
+		$name  = 'ghca_acd_sched_lock_' . $id;
+		$now   = ghca_bulk_now();
+		$held  = $GLOBALS['ghca_bulk']['locks'][ $name ] ?? null;
+		if ( null !== $held && $held[1] >= $now ) { return ''; }
+		$token = bin2hex( random_bytes( 16 ) );
+		$GLOBALS['ghca_bulk']['locks'][ $name ] = array( $token, $now + max( 1, $ttl ) );
+		return $token;
+	}
+	public static function release_schedule_lock( int $id, string $token ): bool {
 		$name = 'ghca_acd_sched_lock_' . $id;
-		$held = $GLOBALS['ghca_bulk']['locks'][ $name ] ?? null;
-		if ( null !== $held && $held > time() - $ttl ) { return false; }
-		$GLOBALS['ghca_bulk']['locks'][ $name ] = time();
+		if ( '' === $token || ( $GLOBALS['ghca_bulk']['locks'][ $name ][0] ?? null ) !== $token ) { return false; }
+		unset( $GLOBALS['ghca_bulk']['locks'][ $name ] );
 		return true;
 	}
-	public static function release_schedule_lock( int $id ): void { unset( $GLOBALS['ghca_bulk']['locks'][ 'ghca_acd_sched_lock_' . $id ] ); }
+	public static function holds_schedule_lock( int $id, string $token ): bool {
+		$held = $GLOBALS['ghca_bulk']['locks'][ 'ghca_acd_sched_lock_' . $id ] ?? null;
+		return '' !== $token && null !== $held && $held[0] === $token && $held[1] >= ghca_bulk_now();
+	}
+	public static function requeue_unscheduled( int $id, string $token ): bool {
+		// Test seam: something happens between the service's read and this write (another request, a worker, time).
+		if ( isset( $GLOBALS['ghca_bulk']['before_requeue'] ) ) { $hook = $GLOBALS['ghca_bulk']['before_requeue']; unset( $GLOBALS['ghca_bulk']['before_requeue'] ); $hook(); }
+		$d = $GLOBALS['ghca_bulk']['deliveries'][ $id ] ?? null;
+		if ( ! $d || 'failed' !== $d['state'] || 'queue_schedule_failed' !== $d['last_error_code'] || 0 !== (int) $d['attempt_count'] || ! self::holds_schedule_lock( $id, $token ) ) { return false; }
+		self::set( $id, array( 'state' => 'queued', 'last_error_code' => null, 'last_error_summary' => null ) );
+		return true;
+	}
+	public static function mark_schedule_failed_as_owner( int $id, string $token ): bool {
+		$d = $GLOBALS['ghca_bulk']['deliveries'][ $id ] ?? null;
+		if ( ! $d || 'queued' !== $d['state'] || 0 !== (int) $d['attempt_count'] || ! self::holds_schedule_lock( $id, $token ) ) { return false; }
+		self::set( $id, array( 'state' => 'failed', 'last_error_code' => 'queue_schedule_failed', 'last_error_summary' => 'The background email job could not be scheduled.' ) );
+		return true;
+	}
 }
 
 /**

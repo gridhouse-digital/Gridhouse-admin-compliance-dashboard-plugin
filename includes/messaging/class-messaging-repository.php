@@ -407,29 +407,123 @@ final class GHCA_ACD_Messaging_Repository {
 	}
 
 	/**
-	 * A short-lived lock around scheduling one delivery, so simultaneous requests cannot both schedule it. Same
-	 * pattern as WordPress core's WP_Upgrader::create_lock(): an INSERT IGNORE into the options table succeeds for
-	 * exactly one caller; a lock older than $ttl seconds (a request that died) is taken over.
+	 * Scheduling lock for one delivery, owned by a random token. The option row holds "token|expires" (Unix time).
+	 *
+	 * - Acquire: INSERT IGNORE succeeds for exactly one caller. If a row exists, a single UPDATE takes it over only
+	 *   when its stored expiry has passed; the expiry test and the write are one statement, so two callers cannot
+	 *   both take over the same expired lock.
+	 * - Release: one DELETE that matches the caller's token, so a request that outlived its lease cannot remove a
+	 *   successor's lock. Releasing twice, or after losing the lock, deletes nothing.
+	 * - Every recovery write that follows carries lock_predicate() in its own WHERE clause, so a caller whose lease
+	 *   expired or was taken over changes nothing even if it keeps running.
+	 *
+	 * @return string The owner token, or '' when another owner holds an unexpired lock.
 	 */
-	public static function acquire_schedule_lock( int $delivery_id, int $ttl = 60 ): bool {
+	public static function acquire_schedule_lock( int $delivery_id, int $ttl = 60 ): string {
 		global $wpdb;
-		$name    = 'ghca_acd_sched_lock_' . $delivery_id;
-		$created = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` ( `option_name`, `option_value`, `autoload` ) VALUES ( %s, %s, 'no' )", $name, (string) time() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$name    = self::lock_name( $delivery_id );
+		$token   = bin2hex( random_bytes( 16 ) );
+		$now     = time();
+		$value   = $token . '|' . ( $now + max( 1, $ttl ) );
+		$created = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` ( `option_name`, `option_value`, `autoload` ) VALUES ( %s, %s, 'no' )", $name, $value ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		if ( 1 === (int) $created ) {
-			return true;
+			return $token;
 		}
-		$held = (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM `{$wpdb->options}` WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		if ( $held > time() - $ttl ) {
-			return false;
-		}
-		// Stale: take it over only if nobody else did first.
-		$taken = $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET option_value = %s WHERE option_name = %s AND option_value = %s", (string) time(), $name, (string) $held ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		return 1 === (int) $taken;
+		$taken = $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET option_value = %s WHERE option_name = %s AND CAST( SUBSTRING_INDEX( option_value, '|', -1 ) AS UNSIGNED ) < %d", $value, $name, $now ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return 1 === (int) $taken ? $token : '';
 	}
 
-	public static function release_schedule_lock( int $delivery_id ): void {
+	/** Removes the lock only if this token still owns it. Returns true when this call removed it. */
+	public static function release_schedule_lock( int $delivery_id, string $token ): bool {
 		global $wpdb;
-		$wpdb->delete( $wpdb->options, array( 'option_name' => 'ghca_acd_sched_lock_' . $delivery_id ), array( '%s' ) );
+		if ( '' === $token ) {
+			return false;
+		}
+		$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM `{$wpdb->options}` WHERE option_name = %s AND SUBSTRING_INDEX( option_value, '|', 1 ) = %s", self::lock_name( $delivery_id ), $token ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return 1 === (int) $deleted;
+	}
+
+	/** Whether this token holds an unexpired lock right now (used before non-database steps such as scheduling). */
+	public static function holds_schedule_lock( int $delivery_id, string $token ): bool {
+		global $wpdb;
+		if ( '' === $token ) {
+			return false;
+		}
+		return 1 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->options}` WHERE " . self::lock_predicate(), self::lock_name( $delivery_id ), $token, time() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	private static function lock_name( int $delivery_id ): string {
+		return 'ghca_acd_sched_lock_' . $delivery_id;
+	}
+
+	/** Placeholders: lock name, token, current time. */
+	private static function lock_predicate(): string {
+		return "option_name = %s AND SUBSTRING_INDEX( option_value, '|', 1 ) = %s AND CAST( SUBSTRING_INDEX( option_value, '|', -1 ) AS UNSIGNED ) >= %d";
+	}
+
+	/**
+	 * Recovery transition for a message that was saved but never scheduled: failed -> queued, only when the row is
+	 * exactly failed with queue_schedule_failed and zero attempts, and only while $token owns the unexpired lock.
+	 * One UPDATE: a worker attempt, a different failure reason or a lost lock between the caller's read and this
+	 * write makes it change nothing. Separate from requeue_failed(), which keeps the manual retry policy.
+	 */
+	public static function requeue_unscheduled( int $delivery_id, string $token ): bool {
+		global $wpdb;
+		$now     = current_time( 'mysql', true );
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				'UPDATE ' . GHCA_ACD_Messaging_Schema::deliveries_table() . '
+				 SET state = %s, queued_at = %s, updated_at = %s, failed_at = NULL, last_error_code = NULL, last_error_summary = NULL
+				 WHERE id = %d AND state = %s AND last_error_code = %s AND attempt_count = 0
+				 AND EXISTS ( SELECT 1 FROM `' . $wpdb->options . '` WHERE ' . self::lock_predicate() . ' )',
+				'queued',
+				$now,
+				$now,
+				$delivery_id,
+				'failed',
+				'queue_schedule_failed',
+				self::lock_name( $delivery_id ),
+				$token,
+				time()
+			)
+		);
+		if ( 1 !== (int) $updated ) {
+			return false;
+		}
+		self::sync_communication_state( $delivery_id, 'queued' );
+		return true;
+	}
+
+	/**
+	 * mark_schedule_failed() for the recovery path: also requires that $token still owns the lock, so a stale
+	 * owner cannot mark a delivery its successor has since scheduled.
+	 */
+	public static function mark_schedule_failed_as_owner( int $delivery_id, string $token ): bool {
+		global $wpdb;
+		$now     = current_time( 'mysql', true );
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				'UPDATE ' . GHCA_ACD_Messaging_Schema::deliveries_table() . '
+				 SET state = %s, failed_at = %s, updated_at = %s, last_error_code = %s, last_error_summary = %s
+				 WHERE id = %d AND state = %s AND attempt_count = 0
+				 AND EXISTS ( SELECT 1 FROM `' . $wpdb->options . '` WHERE ' . self::lock_predicate() . ' )',
+				'failed',
+				$now,
+				$now,
+				'queue_schedule_failed',
+				__( 'The background email job could not be scheduled.', 'ghca-acd' ),
+				$delivery_id,
+				'queued',
+				self::lock_name( $delivery_id ),
+				$token,
+				time()
+			)
+		);
+		if ( 1 !== (int) $updated ) {
+			return false;
+		}
+		self::sync_communication_state( $delivery_id, 'failed' );
+		return true;
 	}
 
 	public static function requeue_failed( int $delivery_id ): bool {
