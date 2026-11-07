@@ -232,7 +232,7 @@ Uncheck the redesign option: the legacy screens return unchanged (the export han
 
 Downloaded and integrity-verified by the reviewer; not installed. Superseded by the bulk-retry fix build below, which should be installed instead. Older builds are kept unchanged.
 
-### Bulk-retry fix build (install this instead of `63c3287`)
+### Bulk-retry fix build `ef5d03d` (superseded by `826d342`; not installed)
 
 | | |
 | --- | --- |
@@ -246,4 +246,19 @@ Downloaded and integrity-verified by the reviewer; not installed. Superseded by 
 | Checks on the archive | `unzip -t` clean; every file compared with `git show ef5d03d:<path>`; every file's SHA-256 found in the manifest; `php -l` on every PHP file |
 
 Not installed anywhere. No schema change: the scheduling lock is a short-lived row in the options table, removed when the request finishes. Older builds are kept unchanged.
+
+### Concurrency-hardening build (the build to verify next)
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-826d342.zip` |
+| Source commit | `826d34249dec358ed46855ad8d3b97cf84d2b3a3` |
+| Byte size | 679,974 |
+| SHA-256 | `755c96a0b6cd6dfa57171196ac6452a3d1dbba1fae07dc2a82209baaf0d68e38` |
+| Root folder / entry file | `Gridhouse-admin-compliance-dashboard-plugin-main/gridhouse-admin-compliance-dashboard.php` (same as staging; updates in place) |
+| Contents | Cumulative Slices 1-6, the bulk-retry fix and the concurrency hardening. 142 runtime files, each byte-identical to the commit; `BUILD.txt` lists every file's SHA-256 |
+| Runtime difference from `ef5d03d` | `includes/messaging/class-messaging-repository.php`, `class-messaging-service.php`, `class-messaging-worker.php`, `TESTING.md` |
+| Checks on the archive | `unzip -t` clean; every file compared with `git show 826d342:<path>` and found in the manifest; `php -l` on every PHP file; the extracted package installed on the disposable WordPress 6.6.2 / MariaDB site passes `integration-bulk-recovery.php` (29 checks) |
+
+Not installed on staging or live. No schema change; lock rows are short-lived options removed on release (an abandoned one expires after 60 seconds and is taken over). Older builds are kept unchanged.
 
