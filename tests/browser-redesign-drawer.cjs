@@ -47,6 +47,22 @@ function origin(file, state) {
         const out = execFileSync('php', [preview, 'card', JSON.stringify(state.env || {})]).toString();
         return route.fulfill({ contentType: 'application/json', body: out });
       }
+      if (params.action === 'ghca_acd_get_reminder_context') {
+        state.contexts = (state.contexts || 0) + 1;
+        return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: Object.assign({
+          employee_id: 42, employee_name: 'Jordan Ellis', idempotency_token: 'tok-' + state.contexts, masked_email: 'j•••••@example.org', masked_phone: '•••• 4471', email_ready: true, sms_ready: true, email_reason: '', sms_reason: '',
+          templates: [
+            { id: 7, name: 'Course due soon', subject: 'Your Fatal Five course is due', message: 'Hi Jordan, please start with Fatal Five.', urgency: 'normal', channels: ['email', 'sms', 'email_sms'], reason: '' },
+            { id: 8, name: 'Overdue - action needed', subject: 'Action needed', message: 'Hi Jordan, you have overdue courses.', urgency: 'urgent', channels: ['email'], reason: '' },
+          ],
+        }, state.context || {}) }) });
+      }
+      if (params.action === 'ghca_acd_send_reminder') {
+        // Canned. Nothing is queued, so nothing can be sent. The posted fields are kept for the assertions.
+        state.sent = params; state.sends = (state.sends || 0) + 1;
+        if (state.sendFail) { return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: false, data: { message: 'The mail server refused the message.' } }) }); }
+        return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, data: { message: 'Reminder queued for Jordan Ellis.' } }) });
+      }
       if (params.action === 'ghca_acd_get_edit_records_form') {
         state.editRequest = params;
         delete params.action; delete params.nonce;
@@ -527,6 +543,212 @@ const metrics = (page) => page.evaluate(() => {
     assert.equal(g.w, g.vw); assert.ok(g.doc <= g.vw + 1); assert.equal(g.over, 0); ok('phone: the sub-page fills the screen with no sideways overflow');
     assert.ok(g.ctl.every((h) => h >= 42), 'controls: ' + g.ctl.join(',')); ok('phone: inputs, selects and buttons are at least 42px tall');
     if (shots) { await page.screenshot({ path: path.join(shots, 'drawer-edit-390.png') }); }
+    await context.close();
+  }
+
+  // ---------- Send reminder modal ----------
+  {
+    const state = { calls: [], env: { messaging: true } };
+    const file = build(path.join(dir, 'l'), { env: state.env });
+    const { context, page, errors } = await open(browser, file, { width: 1440, height: 900 }, state);
+    assert.equal(await page.locator('#ghca-acd-reminder-modal').count(), 1); ok('reminder: one modal on the page, inside the themed wrapper');
+    assert.equal(await page.evaluate(() => !!document.querySelector('#ghca-acd-reminder-modal').closest('.ghca-ui, #ghca-ui-scope')), true);
+    assert.equal(await page.locator('#ghca-acd-reminder-modal').isHidden(), true); ok('reminder: it starts closed');
+    await page.click('#open-drawer'); await drawerOpen(page);
+    await page.click('.gh-drawer-ft [data-ghca-reminder]');
+    await page.waitForSelector('[data-ghca-reminder-form]:not([hidden])');
+    assert.equal(await page.locator('#ghca-acd-reminder-modal [data-ghca-reminder-name]').innerText(), 'Jordan Ellis');
+    assert.match(await page.locator('[data-ghca-reminder-destination]').innerText(), /j•••••@example\.org/); ok('reminder: the recipient strip shows the name and the masked destinations from the messaging context');
+    assert.equal(await page.locator('[data-ghca-reminder-avatar]').innerText(), 'JE'); ok('reminder: the avatar carries the initials');
+    const top = await page.evaluate(() => { const m = document.querySelector('[data-ghca-reminder-dialog]').getBoundingClientRect(); const el = document.elementFromPoint(m.left + m.width / 2, m.top + 30); return !!(el && el.closest('#ghca-acd-reminder-modal')); });
+    assert.equal(top, true); ok('reminder: the modal opens above the drawer');
+    const g = await page.evaluate(() => { const m = document.querySelector('[data-ghca-reminder-dialog]').getBoundingClientRect(); return { w: Math.round(m.width), cx: Math.round(m.left + m.width / 2), cy: Math.round(m.top + m.height / 2) }; });
+    assert.equal(g.w, 560); assert.equal(g.cx, 720); ok('reminder: a 560px dialog centred on the screen');
+    assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-ghca-reminder-subject')), true); ok('reminder: focus lands on the subject');
+    assert.equal(await page.locator('[data-ghca-reminder-channel-option]:checked').getAttribute('value'), 'email'); ok('reminder: Email is the starting delivery method');
+
+    // Validation stays inline and sends nothing.
+    await page.click('[data-ghca-reminder-submit]');
+    assert.match(await page.locator('[data-ghca-reminder-error]').innerText(), /Enter both a subject and a message/);
+    assert.equal(await page.locator('[data-ghca-reminder-confirm]').isVisible(), false); ok('reminder: an empty form is stopped inline, before any confirm');
+
+    // Template fills the form; the preview and the urgency badge follow.
+    await page.selectOption('[data-ghca-reminder-template]', '8');
+    assert.equal(await page.inputValue('[data-ghca-reminder-subject]'), 'Action needed');
+    assert.equal(await page.locator('[data-ghca-reminder-urgency]').inputValue(), 'urgent'); ok('reminder: choosing a template fills subject, message and urgency');
+    assert.match(await page.locator('[data-ghca-reminder-preview-subject]').innerText(), /^URGENT: Action needed$/); ok('reminder: the preview shows the subject as it will be sent, with the urgency prefix');
+    assert.equal(await page.locator('[data-ghca-reminder-urgency-badge]').isVisible(), true);
+    assert.match(await page.getAttribute('[data-ghca-reminder-urgency-badge]', 'class'), /gh-st--overdue/); ok('reminder: an urgent message is flagged with the board overdue chip');
+    assert.match(await page.locator('[data-ghca-reminder-count]').innerText(), /^\d+$/);
+
+    // Step 2: confirm.
+    await page.selectOption('[data-ghca-reminder-template]', '7');
+    await page.fill('[data-ghca-reminder-message]', 'Hi Jordan, please start with Fatal Five.');
+    await page.click('[data-ghca-reminder-submit]');
+    assert.equal(await page.locator('[data-ghca-reminder-confirm]').isVisible(), true);
+    assert.equal(await page.locator('[data-ghca-reminder-dialog]').isVisible(), false); ok('reminder: Review & send opens a confirm step and hides the form');
+    assert.equal(state.sends || 0, 0); ok('reminder: nothing is sent by reviewing');
+    assert.match(await page.locator('[data-ghca-confirm-title]').innerText(), /^Send this email to Jordan Ellis\?$/);
+    assert.equal(await page.locator('[data-ghca-confirm-to]').innerText(), 'j•••••@example.org');
+    assert.equal(await page.locator('[data-ghca-confirm-subject]').innerText(), 'Your Fatal Five course is due');
+    assert.equal(await page.locator('[data-ghca-confirm-urgency]').innerText(), 'Normal'); ok('reminder: the confirm step states who, how, the subject and the urgency');
+    assert.equal(await page.getAttribute('[data-ghca-reminder-confirm]', 'role'), 'alertdialog'); ok('reminder: the confirm step is an alert dialog');
+    assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-ghca-confirm-back')), true); ok('reminder: focus starts on Back, the safe choice');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('[data-ghca-reminder-dialog]').isVisible(), true);
+    assert.equal(await page.inputValue('[data-ghca-reminder-subject]'), 'Your Fatal Five course is due'); ok('reminder: Escape steps back to the form with everything still typed');
+    await page.click('[data-ghca-reminder-submit]');
+    await page.click('[data-ghca-confirm-back]');
+    assert.equal(await page.locator('[data-ghca-reminder-dialog]').isVisible(), true); ok('reminder: Back returns to the form');
+
+    // A refused send: the error is a toast above the modal, and the text is kept.
+    state.sendFail = true;
+    await page.click('[data-ghca-reminder-submit]');
+    await page.click('[data-ghca-confirm-send]');
+    await page.waitForSelector('[data-ghca-toasts] .gh-toast--error');
+    assert.match(await page.locator('[data-ghca-toasts] .gh-toast--error').innerText(), /The mail server refused the message\./); ok('reminder: a refused send shows the reason in an error toast');
+    assert.equal(await page.locator('[data-ghca-reminder-dialog]').isVisible(), true);
+    assert.equal(await page.inputValue('[data-ghca-reminder-message]'), 'Hi Jordan, please start with Fatal Five.'); ok('reminder: and keeps the form, so nothing is retyped');
+    const toastTop = await page.evaluate(() => { const t = document.querySelector('[data-ghca-toasts] .gh-toast--error').getBoundingClientRect(); const el = document.elementFromPoint(t.left + t.width / 2, t.top + t.height / 2); return !!(el && el.closest('[data-ghca-toasts]')); });
+    assert.equal(toastTop, true); ok('reminder: the toast is above the modal and scrim');
+    assert.equal(await page.locator('[data-ghca-reminder-submit]').isDisabled(), false); ok('reminder: the form can be sent again');
+
+    // A successful send.
+    state.sendFail = false;
+    const reloadsBefore = state.calls.filter((c) => c === 'ghca_acd_get_employee_drawer').length;
+    await page.click('[data-ghca-reminder-submit]');
+    await page.click('[data-ghca-confirm-send]');
+    await page.waitForSelector('#ghca-acd-reminder-modal[hidden]', { state: 'attached' });
+    assert.equal(state.sent.channel, 'email'); assert.equal(state.sent.user_id, '42'); assert.equal(state.sent.template_id, '7');
+    assert.equal(state.sent.subject, 'Your Fatal Five course is due'); assert.equal(state.sent.urgency, 'normal'); assert.match(state.sent.idempotency_token, /^tok-/); ok('reminder: the send posts the existing action with channel, template, subject, urgency and the one-time token');
+    assert.equal(state.sent.sms_safe_confirmed, undefined); ok('reminder: no SMS consent is claimed for an email-only send');
+    await page.waitForFunction(() => document.querySelector('[data-ghca-toasts] .gh-toast--success'));
+    assert.match(await page.locator('[data-ghca-toasts] .gh-toast--success').innerText(), /Reminder queued for Jordan Ellis\./); ok('reminder: success is a toast, shown only after the server accepted it');
+    await page.waitForFunction((n) => true, reloadsBefore);
+    assert.ok(state.calls.filter((c) => c === 'ghca_acd_get_employee_drawer').length > reloadsBefore); ok('reminder: the drawer reloads so the new message appears in Communications');
+    assert.equal(await page.locator('#ghca-acd-employee-drawer').isVisible(), true); ok('reminder: the drawer stays open underneath');
+
+    // The toast sits bottom-right, over the drawer footer, as on the board. Dismissing it clears the way.
+    await page.locator('[data-ghca-toasts] .gh-toast-x').first().click();
+    await page.waitForFunction(() => document.querySelectorAll('[data-ghca-toasts] .gh-toast').length === 0);
+    // Escape closes the modal and not the drawer; a fresh open starts on the form.
+    await page.click('.gh-drawer-ft [data-ghca-reminder]');
+    await page.waitForSelector('[data-ghca-reminder-form]:not([hidden])');
+    await page.fill('[data-ghca-reminder-subject]', 'Hello'); await page.fill('[data-ghca-reminder-message]', 'Hello');
+    await page.click('[data-ghca-reminder-submit]');
+    await page.keyboard.press('Escape'); // back to the form
+    await page.keyboard.press('Escape'); // close
+    await page.waitForSelector('#ghca-acd-reminder-modal[hidden]', { state: 'attached' });
+    assert.equal(await page.locator('#ghca-acd-employee-drawer').isVisible(), true); ok('reminder: Escape twice goes back, then closes the modal and leaves the drawer');
+    await page.click('.gh-drawer-ft [data-ghca-reminder]');
+    await page.waitForSelector('[data-ghca-reminder-form]:not([hidden])');
+    assert.equal(await page.locator('[data-ghca-reminder-dialog]').isVisible(), true);
+    assert.equal(await page.locator('[data-ghca-reminder-confirm]').isVisible(), false); ok('reminder: reopening always starts on the form');
+    // Tab stays inside the modal.
+    for (let i = 0; i < 14; i++) { await page.keyboard.press('Tab'); }
+    assert.equal(await page.evaluate(() => !!document.activeElement.closest('#ghca-acd-reminder-modal')), true); ok('reminder: Tab stays inside the modal');
+    await page.click('.gh-scrim[data-ghca-reminder-close]', { position: { x: 20, y: 20 } });
+    await page.waitForSelector('#ghca-acd-reminder-modal[hidden]', { state: 'attached' }); ok('reminder: a click on the scrim closes it');
+
+    // SMS: the consent box is required, the subject is not used, and the confirm step says so.
+    await page.click('.gh-drawer-ft [data-ghca-reminder]');
+    await page.waitForSelector('[data-ghca-reminder-form]:not([hidden])');
+    await page.locator('[data-ghca-reminder-channel-option][value="sms"]').check();
+    assert.equal(await page.locator('[data-ghca-sms-confirm]').isVisible(), true);
+    assert.equal(await page.locator('[data-ghca-reminder-subject]').isDisabled(), true); ok('reminder: SMS shows the consent box and does not use the subject line');
+    await page.fill('[data-ghca-reminder-message]', 'Please start Fatal Five.');
+    await page.click('[data-ghca-reminder-submit]');
+    assert.match(await page.locator('[data-ghca-reminder-error]').innerText(), /Confirm that the SMS contains no sensitive information/);
+    assert.equal(await page.locator('[data-ghca-reminder-confirm]').isVisible(), false); ok('reminder: an SMS cannot be reviewed until the no-sensitive-information box is ticked');
+    await page.check('[data-ghca-sms-safe]');
+    await page.click('[data-ghca-reminder-submit]');
+    assert.match(await page.locator('[data-ghca-confirm-title]').innerText(), /^Send this text to Jordan Ellis\?$/);
+    assert.equal(await page.locator('[data-ghca-confirm-to]').innerText(), '•••• 4471');
+    assert.equal(await page.locator('[data-ghca-confirm-subject]').isVisible(), false); ok('reminder: the SMS confirm step shows the phone, not a subject');
+    await page.click('[data-ghca-confirm-send]');
+    await page.waitForSelector('#ghca-acd-reminder-modal[hidden]', { state: 'attached' });
+    assert.equal(state.sent.channel, 'sms'); assert.equal(state.sent.sms_safe_confirmed, '1'); ok('reminder: the SMS send carries the consent confirmation to the existing action');
+
+    // Fonts.
+    await page.click('.gh-drawer-ft [data-ghca-reminder]');
+    await page.waitForSelector('[data-ghca-reminder-form]:not([hidden])');
+    await page.selectOption('[data-ghca-reminder-template]', '7');
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('DOM.enable'); await cdp.send('CSS.enable');
+    const doc = await cdp.send('DOM.getDocument', { depth: -1 });
+    for (const sel of ['#ghca-acd-reminder-title', '#ghca-acd-reminder-modal [data-ghca-reminder-name]', '.gh-mod-form .gh-label', '.gh-mod-form .gh-input', '.gh-mod-form .gh-select', '.gh-seg--radio label > span', '[data-ghca-reminder-preview-subject]', '.gh-mod-ft .gh-small', '[data-ghca-reminder-submit]']) {
+      const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: doc.root.nodeId, selector: sel });
+      const { fonts } = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
+      assert.ok(fonts.length > 0 && fonts.every((x) => /Wix Madefor/.test(x.familyName)), 'rendered font for ' + sel + ': ' + JSON.stringify(fonts));
+    }
+    assert.match(await page.evaluate(() => getComputedStyle(document.querySelector('.gh-mod-form .gh-textarea')).fontFamily), /Wix Madefor Text/); // its text sits in the browser's own shadow tree, which the renderer check cannot reach
+    ok('reminder: the rendered font is Wix Madefor on every element checked');
+    if (shots) { await page.screenshot({ path: path.join(shots, 'reminder-compose-1440.png') }); await page.click('[data-ghca-reminder-submit]').catch(() => {}); }
+    assert.equal(errors.length, 0, 'console errors: ' + errors.join(' | ')); ok('no console or page errors');
+    await context.close();
+  }
+
+  // ---------- Send reminder: a channel that is not ready ----------
+  {
+    const state = { calls: [], env: {}, context: { email_ready: false, email_reason: 'Email sending is switched off for this site.', sms_ready: false, sms_reason: 'No mobile number on file.' } };
+    const { context, page } = await open(browser, build(path.join(dir, 'm'), {}), { width: 1440, height: 900 }, state);
+    await page.click('#open-drawer'); await drawerOpen(page);
+    await page.click('.gh-drawer-ft [data-ghca-reminder]');
+    await page.waitForSelector('[data-ghca-reminder-form]:not([hidden])');
+    assert.equal(await page.locator('[data-ghca-reminder-readiness]').isVisible(), true);
+    assert.match(await page.locator('[data-ghca-reminder-readiness]').innerText(), /Email sending is switched off/); ok('reminder: when a channel is not ready the reason is shown');
+    assert.equal(await page.locator('[data-ghca-reminder-submit]').isDisabled(), true); ok('reminder: and the form cannot be sent');
+    await context.close();
+  }
+
+  // ---------- Retry a failed delivery ----------
+  {
+    const history = [{ communication_id: 5, delivery_id: 322, channel: 'sms', delivery_state: 'failed', actor_user_id: 3, urgency: 'normal', created_at: '2026-10-27 16:42:00', subject: 'Due', message: 'Hi.', last_error_code: 'no_phone', last_error_summary: 'No mobile number.', attempt_count: 1, provider_ref: '' }];
+    const env = { jotform: true, messaging: true, history, hist_total: 1 };
+    const state = { calls: [], env };
+    const { context, page } = await open(browser, build(path.join(dir, 'n'), { env }), { width: 1440, height: 900 }, state);
+    await page.click('#open-drawer'); await drawerOpen(page);
+    await page.click('#ghca-acd-drawer-tab-communications');
+    const reloads = state.calls.filter((c) => c === 'ghca_acd_get_employee_drawer').length;
+    await page.click('[data-ghca-reminder-retry="322"]');
+    await page.waitForFunction(() => document.querySelector('[data-ghca-toasts] .gh-toast--success'));
+    assert.equal(state.retried, '322'); ok('retry: Retry posts the existing action with this delivery id');
+    assert.match(await page.locator('[data-ghca-toasts] .gh-toast--success').innerText(), /queued for retry/); ok('retry: the result is a toast');
+    assert.ok(state.calls.filter((c) => c === 'ghca_acd_get_employee_drawer').length > reloads); ok('retry: the drawer reloads to show the new state');
+    await context.close();
+  }
+
+  // ---------- Send reminder: hostile theme and phone ----------
+  {
+    const grab = async (opts) => {
+      const state = { calls: [], env: {} };
+      const { context, page } = await open(browser, build(path.join(dir, opts.dir), { hostile: opts.hostile }), { width: 1440, height: 900 }, state);
+      await page.click('#open-drawer'); await drawerOpen(page);
+      await page.click('.gh-drawer-ft [data-ghca-reminder]');
+      await page.waitForSelector('[data-ghca-reminder-form]:not([hidden])');
+      await page.selectOption('[data-ghca-reminder-template]', '8');
+      const m = (sel) => page.evaluate((x) => { const e = document.querySelector(x); if (!e) { return 'missing'; } const c = getComputedStyle(e); return [c.fontFamily, c.fontSize, c.fontWeight, c.lineHeight, c.textTransform, c.color, c.backgroundColor, c.paddingLeft, c.borderTopWidth, c.listStyleType, Math.round(e.getBoundingClientRect().height)].join('|'); }, sel);
+      const out = {};
+      for (const [k, sel] of Object.entries({ title: '#ghca-acd-reminder-title', who: '.gh-mod-who', label: '.gh-mod-form .gh-label', input: '.gh-mod-form .gh-input', select: '.gh-mod-form .gh-select', area: '.gh-mod-form .gh-textarea', seg: '.gh-seg--radio', segOn: '.gh-seg--radio input:checked + span', pv: '.gh-mod-pv-hd', pvs: '.gh-mod-pv-s', badge: '[data-ghca-reminder-urgency-badge]', send: '[data-ghca-reminder-submit]', cancel: '.gh-mod-ft .gh-btn--secondary', x: '[data-ghca-reminder-x]' })) { out[k] = await m(sel); }
+      await context.close();
+      return out;
+    };
+    const clean = await grab({ dir: 'o1', hostile: false });
+    const hostile = await grab({ dir: 'o2', hostile: true });
+    const drift = Object.keys(clean).filter((k) => clean[k] !== hostile[k]).map((k) => k + ': ' + clean[k] + '  vs  ' + hostile[k]);
+    assert.deepEqual(drift, []); ok('reminder: title, recipient, labels, controls, segmented control, preview, badge and buttons measure the same under a hostile theme');
+
+    const state = { calls: [], env: {} };
+    const { context, page } = await open(browser, build(path.join(dir, 'p'), {}), { width: 390, height: 844 }, state);
+    await page.click('#open-drawer'); await drawerOpen(page);
+    await page.click('.gh-drawer-ft [data-ghca-reminder]');
+    await page.waitForSelector('[data-ghca-reminder-form]:not([hidden])');
+    const g = await page.evaluate(() => { const d = document.querySelector('[data-ghca-reminder-dialog]').getBoundingClientRect(); return { w: Math.round(d.width), vw: window.innerWidth, bottom: Math.round(window.innerHeight - d.bottom), h: Math.round(d.height), vh: window.innerHeight, doc: document.documentElement.scrollWidth, over: Array.from(document.querySelectorAll('#ghca-acd-reminder-modal [data-ghca-reminder-dialog] *')).filter((e) => e.offsetParent !== null && e.getBoundingClientRect().right > d.right + 1).length, ctl: Array.from(document.querySelectorAll('#ghca-acd-reminder-modal .gh-input, #ghca-acd-reminder-modal .gh-select, #ghca-acd-reminder-modal .gh-mod-ft .gh-btn')).filter((e) => e.offsetParent !== null).map((e) => Math.round(e.getBoundingClientRect().height)), cols: getComputedStyle(document.querySelector('.gh-mod-grid')).gridTemplateColumns.split(' ').length }; });
+    assert.equal(g.w, g.vw); assert.equal(g.bottom, 0); assert.ok(g.h <= g.vh * 0.92 + 1); ok('phone: the modal is a bottom sheet, full width and no taller than 92% of the screen');
+    assert.equal(g.over, 0); assert.ok(g.doc <= g.vw + 1); ok('phone: no sideways overflow');
+    assert.equal(g.cols, 1); ok('phone: urgency and template stack');
+    assert.ok(g.ctl.every((h) => h >= 42), 'controls: ' + g.ctl.join(',')); ok('phone: inputs, selects and buttons are at least 42px tall');
+    if (shots) { await page.screenshot({ path: path.join(shots, 'reminder-compose-390.png') }); }
     await context.close();
   }
 

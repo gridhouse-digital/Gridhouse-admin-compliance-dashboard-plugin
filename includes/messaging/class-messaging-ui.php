@@ -83,7 +83,8 @@ final class GHCA_ACD_Messaging_UI {
 			return;
 		}
 		?>
-		<?php if ( GHCA_ACD_Roles::user_can_send_reminders() ) : ?>
+		<?php /* The redesigned dashboard prints its own copy of this modal inside its themed wrapper. */ ?>
+		<?php if ( GHCA_ACD_Roles::user_can_send_reminders() && ! GHCA_ACD_Redesign::dashboard_rendered() ) : ?>
 		<div class="ghca-acd__reminder-modal ghca-acd__overlay ghca-acd__overlay--reminder" id="ghca-acd-reminder-modal" hidden aria-hidden="true">
 			<div class="ghca-acd__reminder-modal-backdrop" data-ghca-reminder-close></div>
 			<div class="ghca-acd__reminder-modal-dialog ghca-acd__v2-modal" role="dialog" aria-modal="true" aria-labelledby="ghca-acd-reminder-title">

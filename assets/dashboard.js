@@ -1783,8 +1783,8 @@
     var closeReminder = function() {};
 
     if (modal) {
-      var dialog = modal.querySelector('.ghca-acd__reminder-modal-dialog');
-      var closeBtn = modal.querySelector('.ghca-acd__reminder-modal-close');
+      var dialog = modal.querySelector('.ghca-acd__reminder-modal-dialog, [data-ghca-reminder-dialog]');
+      var closeBtn = modal.querySelector('.ghca-acd__reminder-modal-close, [data-ghca-reminder-x]');
       var loading = modal.querySelector('[data-ghca-reminder-loading]');
       var form = modal.querySelector('[data-ghca-reminder-form]');
       var userIdInput = modal.querySelector('[data-ghca-reminder-user-id]');
@@ -1809,6 +1809,11 @@
       var submitBtn = modal.querySelector('[data-ghca-reminder-submit]');
       var smsConfirm = modal.querySelector('[data-ghca-sms-confirm]');
       var smsSafe = modal.querySelector('[data-ghca-sms-safe]');
+      // The redesigned modal has a second, confirm step. The legacy modal has none: confirmEl is null there.
+      var isBoardModal = modal.getAttribute('data-ghca-ui') === 'board';
+      var confirmEl = isBoardModal ? modal.querySelector('[data-ghca-reminder-confirm]') : null;
+      var confirmSendBtn = confirmEl ? confirmEl.querySelector('[data-ghca-confirm-send]') : null;
+      var confirmed = false;
       var templates = [];
       var context = null;
       var reminderOpener = null;
@@ -1837,6 +1842,9 @@
           urgencyBadge.hidden = !raised;
           urgencyBadge.textContent = raised ? (urgencyInput.value === 'urgent' ? 'Urgent' : 'Elevated') : '';
           urgencyBadge.className = 'ghca-acd__reminder-urgency-badge' + (urgencyInput.value === 'urgent' ? ' is-urgent' : '');
+          if (urgencyBadge.hasAttribute('data-ghca-board')) {
+            urgencyBadge.className = 'gh-st gh-mod-badge ' + (urgencyInput.value === 'urgent' ? 'gh-st--overdue' : 'gh-st--duesoon');
+          }
         }
 
         var usesSms = channelInput.value === 'sms' || channelInput.value === 'email_sms';
@@ -1950,7 +1958,45 @@
         updatePreview();
       }
 
+      // Step 2 of the redesigned modal: a plain summary of what is about to be sent, before it is.
+      function selectedText(select) {
+        return select.options[select.selectedIndex] ? select.options[select.selectedIndex].textContent : select.value;
+      }
+      function showConfirm() {
+        var email = channelUsesEmail();
+        var sms = channelUsesSms();
+        var name = nameEl.textContent || 'this employee';
+        var kind = email && sms ? 'email and text' : (sms ? 'text' : 'email');
+        confirmEl.querySelector('[data-ghca-confirm-title]').textContent = 'Send this ' + kind + ' to ' + name + '?';
+        var to = [];
+        if (email) to.push((context && context.masked_email) || 'Email unavailable');
+        if (sms) to.push((context && context.masked_phone) || 'SMS unavailable');
+        confirmEl.querySelector('[data-ghca-confirm-to]').textContent = to.join(' · ');
+        confirmEl.querySelector('[data-ghca-confirm-subject]').textContent = urgencyPrefix(subjectInput.value || '');
+        confirmEl.querySelector('[data-ghca-confirm-subject]').hidden = !email;
+        confirmEl.querySelector('[data-ghca-confirm-subject-dt]').hidden = !email;
+        confirmEl.querySelector('[data-ghca-confirm-urgency]').textContent = selectedText(urgencyInput);
+        confirmEl.querySelector('[data-ghca-confirm-send-label]').textContent = 'Send ' + channelLabel(channelInput.value).toLowerCase().replace('sms', 'SMS');
+        dialog.hidden = true;
+        confirmEl.hidden = false;
+        var back = confirmEl.querySelector('[data-ghca-confirm-back]');
+        if (back) back.focus();
+      }
+      function hideConfirm(focusCompose) {
+        if (!confirmEl) return;
+        confirmed = false;
+        confirmEl.hidden = true;
+        dialog.hidden = false;
+        if (focusCompose) submitBtn.focus();
+      }
+      // Escape and the scrim go back one step first, then close.
+      function stepBackOrClose() {
+        if (confirmEl && !confirmEl.hidden) { hideConfirm(true); return; }
+        closeReminder();
+      }
+
       closeReminder = function() {
+        if (confirmEl) { confirmEl.hidden = true; dialog.hidden = false; }
         modal.hidden = true;
         modal.setAttribute('aria-hidden', 'true');
         document.documentElement.classList.remove('ghca-acd--reminder-open');
@@ -1965,7 +2011,7 @@
         modal.hidden = false;
         modal.setAttribute('aria-hidden', 'false');
         document.documentElement.classList.add('ghca-acd--reminder-open');
-        ghcaAcdOverlay.open(modal, reminderOpener, closeReminder);
+        ghcaAcdOverlay.open(modal, reminderOpener, isBoardModal ? stepBackOrClose : closeReminder);
         loading.textContent = 'Loading reminder options…';
         loading.hidden = false;
         form.hidden = true;
@@ -2010,7 +2056,8 @@
           loading.textContent = 'Network error. Please close the form and try again.';
         });
 
-        if (!reminderRelease) reminderRelease = ghcaFocusTrap(dialog, closeBtn);
+        // The board modal holds two dialogs, one visible at a time, so its trap covers the whole layer.
+        if (!reminderRelease) reminderRelease = ghcaFocusTrap(isBoardModal ? modal : dialog, closeBtn);
       };
 
       templateInput.addEventListener('change', function() { populateTemplate(templateInput.value); });
@@ -2024,6 +2071,15 @@
           updateChannel(true);
         });
       });
+
+      if (confirmEl) {
+        confirmEl.querySelector('[data-ghca-confirm-back]').addEventListener('click', function() { hideConfirm(true); });
+        confirmSendBtn.addEventListener('click', function() {
+          confirmed = true;
+          if (typeof form.requestSubmit === 'function') { form.requestSubmit(); }
+          else { form.dispatchEvent(new Event('submit', { cancelable: true })); }
+        });
+      }
 
       form.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -2041,10 +2097,16 @@
           return;
         }
         if (submitBtn.disabled) return;
+        if (isBoardModal && !confirmed) { showConfirm(); return; }
+        confirmed = false;
 
+        // Legacy: the Send button itself shows the progress. Redesigned: the confirm step's button does.
+        var busyBtn = confirmSendBtn || submitBtn;
+        var busyText = busyBtn.querySelector('[data-ghca-confirm-send-label]') || busyBtn;
         submitBtn.disabled = true;
-        var originalLabel = submitBtn.textContent;
-        submitBtn.textContent = 'Queueing…';
+        busyBtn.disabled = true;
+        var originalLabel = busyText.textContent;
+        busyText.textContent = 'Queueing…';
         var params = new URLSearchParams();
         params.append('action', 'ghca_acd_send_reminder');
         params.append('user_id', userIdInput.value);
@@ -2056,11 +2118,17 @@
         params.append('message', messageInput.value);
         if (channelUsesSms() && smsSafe.checked) params.append('sms_safe_confirmed', '1');
 
+        // A failed send keeps everything typed. The redesigned modal says so in a toast, as the board does.
+        function sendFailed(message) {
+          if (isBoardModal) { hideConfirm(true); ghcaToast(message, true); } else { setError(message); }
+        }
+
         post(params, reminderController ? reminderController.signal : undefined).then(function(json) {
-          submitBtn.textContent = originalLabel;
+          busyText.textContent = originalLabel;
+          busyBtn.disabled = false;
           updateChannel(false);
           if (!json || !json.success) {
-            setError((json && json.data && json.data.message) || 'The reminder could not be queued.');
+            sendFailed((json && json.data && json.data.message) || 'The reminder could not be queued.');
             return;
           }
           ghcaToast((json.data && json.data.message) || 'The reminder was queued.', false);
@@ -2070,9 +2138,10 @@
           if (window.ghcaAcdReloadDrawer) window.ghcaAcdReloadDrawer(employeeId);
         }).catch(function(err) {
           if (err && err.name === 'AbortError') return;
-          submitBtn.textContent = originalLabel;
+          busyText.textContent = originalLabel;
+          busyBtn.disabled = false;
           submitBtn.disabled = false;
-          setError('Network error. Please try again.');
+          sendFailed('Network error. Please try again.');
         });
       });
     }
