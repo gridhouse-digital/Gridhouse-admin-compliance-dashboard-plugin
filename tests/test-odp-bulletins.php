@@ -279,11 +279,31 @@ check( false !== strpos( $overview, 'Issued<small>· active employees in this vi
 check( false !== strpos( $overview, 'class="ghca-ui' ) && false !== strpos( $overview, 'class="gh-app ghca-acd ghca-acd--v2" data-theme="gridhouse"' ), 'Overview renders inside the isolated board root' );
 check( false !== strpos( $overview, 'gh-grid gh-grid--kpi gh-kpi--overview' ) && 6 === preg_match_all( '/class="gh-stat(?: gh-stat--[a-z]+)?"/', $overview ), 'Overview renders the six-figure board strip' );
 check( false !== strpos( $overview, 'class="gh-ovp gh-ovp--3"' ) && false !== strpos( $overview, 'stroke-dasharray=' ), 'Overview uses the board grid and SVG donut' );
-check( false === strpos( $overview, 'Issued, all time' ) && false !== strpos( $overview, 'Issued for active employees in this view' ), 'Certificates are labeled as the active view' );
-check( false === strpos( $overview, 'Training now' ) && false !== strpos( $overview, 'have not started' ), 'In progress does not say training now' );
-check( false !== strpos( $overview, 'existing compliance rate' ), 'The donut states the existing rate' );
+check( false === strpos( $overview, 'Issued, all time' ) && false !== strpos( $overview, 'Issued, active employees' ), 'Certificates are labeled as the active view' );
+check( false === strpos( $overview, 'Training now' ) && false !== strpos( $overview, 'Includes not started' ), 'In progress does not say training now' );
+check( false !== strpos( $overview, 'aria-label="40% compliant: completed or expiring soon"' ), 'The donut keeps the rate definition as its accessible label only' );
 check( false !== strpos( $overview, '<div class="gh-donut-c"><strong>40%</strong><span>Compliant</span></div>' ), 'The donut centre reads the percent and Compliant only' );
-check( false !== strpos( $overview, 'gh-health-note">The percent is the existing compliance rate: completed plus expiring soon.' ), 'The rate explanation stays below the donut' );
+check( false === strpos( $overview, 'The percent is the existing compliance rate' ) && false === strpos( $overview, 'gh-health-note' ), 'No visible rate explanation on the health card' );
+check( false === strpos( $overview, 'gh-appbar' ) && false === strpos( $overview, 'gh-nav' ) && false === strpos( $overview, '<header' ), 'The embedded overview has no app bar or site navigation of its own' );
+check( false === strpos( $overview, '<footer' ) && false === strpos( $overview, 'Powered by Gridhouse Digital' ) && false !== strpos( $overview, 'gh-help-row' ), 'No plugin footer; the support strip stays' );
+check( false !== strpos( $overview, 'role="tablist" data-ghca-tablist-main' ) && false !== strpos( $overview, 'data-ghca-tab-target="ghca-tab-overview"' ), 'Dashboard section tabs stay' );
+check( 2 === substr_count( $overview, 'gh-card-hd gh-card-hd--rule' ) && false !== strpos( $overview, 'gh-card-hd gh-card-hd--rule"><div><h2 class="gh-h3" id="gh-health-h">' ) && false !== strpos( $overview, 'gh-card-hd gh-card-hd--rule"><div><h2 class="gh-h3" id="gh-groups-h">' ), 'Health and group cards have a header divider' );
+foreach ( array( '#7a1f5c', '#e0a800', '#2aa7ff' ) as $brand ) {
+	$vars = array();
+	foreach ( explode( ';', GHCA_ACD_Redesign::agency_brand_style( $brand ) ) as $pair ) {
+		list( $k, $v ) = explode( ':', $pair, 2 );
+		$vars[ $k ] = $v;
+	}
+	check(
+		GHCA_ACD_Redesign::contrast( $vars['--gh-agency-ink'], '#ffffff' ) >= 4.5
+		&& GHCA_ACD_Redesign::contrast( $vars['--gh-agency-ink'], $vars['--gh-agency-soft'] ) >= 4.5
+		&& GHCA_ACD_Redesign::contrast( $vars['--gh-agency'], $vars['--gh-agency-on'] ) >= 4.5
+		&& GHCA_ACD_Redesign::contrast( $vars['--gh-agency-hover'], $vars['--gh-agency-on-hover'] ) >= 4.5,
+		'Agency colour ' . $brand . ' keeps 4.5:1 in link, hover, and button states'
+	);
+}
+check( '#7a1f5c' === explode( ':', explode( ';', GHCA_ACD_Redesign::agency_brand_style( '#7a1f5c' ) )[0] )[1], 'A dark agency primary is used as-is for the button fill' );
+check( '' === GHCA_ACD_Redesign::agency_brand_style( 'blue;}x{' ), 'Invalid agency colours are ignored' );
 $css_unscoped = array();
 $css_depth    = 0;
 $css_frames   = 0;
@@ -307,6 +327,14 @@ foreach ( file( __DIR__ . '/../assets/gh-redesign.css' ) as $css_line ) {
 	}
 }
 check( array() === $css_unscoped, 'Redesign CSS lines stay under plugin roots' . ( $css_unscoped ? ': ' . $css_unscoped[0] : '' ) );
+$redesign_css = file_get_contents( __DIR__ . '/../assets/gh-redesign.css' );
+check( 0 === preg_match( '/site-header|masthead|site-footer|elementor-location-(header|footer)|bb-header|#wpadminbar/i', $redesign_css ), 'Redesign CSS does not touch theme headers, footers, or the admin bar' );
+check( false !== strpos( $redesign_css, '.gh-app a.gh-qlink:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:active { background-color: var(--gh-agency-soft, var(--gh-surface-hover)) !important;' ), 'Quick link hover uses the agency colour and outranks theme !important link rules' );
+check( false !== strpos( $redesign_css, '.gh-app a:where(:not(.gh-legacy, .gh-legacy *)) { color: var(--gh-text-link) !important;' ) && false !== strpos( $redesign_css, '.gh-app a:hover:where(:not(.gh-legacy, .gh-legacy *)) { color: var(--gh-color-primary-hover) !important; }' ), 'Board link colours on bare anchors outrank theme !important link rules' );
+check( false !== strpos( $redesign_css, ':where(.gh-app a:not(.gh-legacy *)) { background-color: transparent !important; }' ), 'Theme link-hover backgrounds are cleared on redesign links without adding specificity' );
+check( false !== strpos( $redesign_css, '.gh-app .gh-health-ft a:is(:link, :visited, :hover, :focus, :active)' ), 'The overdue link keeps its danger colour on hover, like the board inline style' );
+check( 1 === preg_match( '/@media \(max-width: 600px\) \{\s*:is\(\.ghca-ui, #ghca-ui-scope\) \.gh-odp \{ font-size: 15px; \}/', $redesign_css ), 'Bulletin pages use the phone board 15px base below 600px' );
+check( false !== strpos( $redesign_css, '.gh-app a.gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:focus-visible' ) && false !== strpos( $redesign_css, 'var(--gh-agency-hover, var(--gh-color-primary-hover)) !important' ), 'Primary button hover and focus use the agency colour' );
 $bulletin_js = file_get_contents( __DIR__ . '/../assets/gh-bulletins.js' );
 check( false !== strpos( $bulletin_js, "setAttribute('inert'" ) && false !== strpos( $bulletin_js, "setAttribute('tabindex', '-1')" ), 'Animated ticker copies are inert and removed from tab order' );
 $not_in_view = GHCA_ODP_UI::single( array( 'result' => 'not_in_view', 'library_url' => '/odp-bulletins/', 'kicker' => 'ODP Bulletin', 'item' => null, 'audience_label' => 'Agency leads', 'audience_note' => '' ) );
