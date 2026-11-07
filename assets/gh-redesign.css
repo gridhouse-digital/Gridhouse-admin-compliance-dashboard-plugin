@@ -1272,7 +1272,10 @@ body.gh-ui-body { margin: 0; background: #F3EFEA; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-prog-cell { min-width: 160px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-row-act { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-row-more { position: relative; display: inline-block; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-row-more > summary.gh-btn--icon { padding: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-more > summary { list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-more > summary::-webkit-details-marker { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-menu .gh-menu-i { font-weight: 400; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-menu .gh-menu-i small { font-size: smaller; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-row-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; text-align: left; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-empty.gh-empty--ok { padding: 32px; }
 :is(.ghca-ui, #ghca-ui-scope) .gh-empty--ok .gh-empty-ico { background: var(--gh-status-success-bg); color: var(--gh-status-success-fg); }

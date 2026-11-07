@@ -66,7 +66,9 @@ check( false !== strpos( $html, 'Documentation Essentials &lt;Intro&gt;' ) && fa
 check( false !== strpos( $html, '<strong class="gh-soon">9</strong>' ) && false !== strpos( $html, '<strong class="gh-soon">13</strong>' ), 'days left for due-soon employees' );
 check( false !== strpos( $html, '2 courses not complete' ) && false !== strpos( $html, 'Next: Recognizing and Reporting Incidents' ), 'courses due and the next course' );
 check( 10 === substr_count( $html, 'data-ghca-reminder="' ), 'Remind on every row and every card (5 + 5)' );
-check( 6 === substr_count( $html, 'gh-btn--primary gh-btn--sm gh-btn--lnk" data-ghca-reminder=' ), 'Remind is primary on the 3 overdue rows and their cards, secondary on due soon' );
+check( 3 === substr_count( $html, 'gh-btn--primary gh-btn--sm gh-btn--lnk" data-ghca-reminder=' ) && 3 === substr_count( $html, 'gh-btn--primary gh-btn--lnk" data-ghca-reminder=' ), 'Remind is primary on the 3 overdue rows (small) and their cards (full size), secondary on due soon' );
+preg_match_all( '#<div class="gh-mcard-act">(.*?)</div>#s', $html, $acts );
+check( 5 === count( $acts[1] ) && ! preg_grep( '/gh-btn--sm/', $acts[1] ), 'phone card buttons are full size (44px touch targets)' );
 check( false === stripos( $html, 'Remind all' ), 'no bulk "Remind all": there is no bulk send' );
 check( false === strpos( $html, 'Last reminder' ), 'no Last reminder column without the communication-history permission' );
 check( false === strpos( $html, 'Last contact' ), 'no Last contact column: contact logs are not read' );

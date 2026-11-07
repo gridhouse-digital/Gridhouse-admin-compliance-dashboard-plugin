@@ -155,13 +155,14 @@ final class GHCA_ACD_Redesign_Lists {
 		return '<div class="gh-person"><span class="gh-avatar" aria-hidden="true">' . esc_html( GHCA_ACD_Data_Provider::get_avatar_initials( $name ) ) . '</span><div><a class="gh-person-n" href="' . esc_url( $report ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '">' . esc_html( $name ) . '</a><span class="gh-person-s">' . esc_html( $sub ) . '</span></div></div>';
 	}
 
-	private static function view_link( int $id, string $name, string $extra_class = '' ): string {
-		return '<a class="gh-btn gh-btn--secondary gh-btn--sm' . $extra_class . '" href="' . esc_url( GHCA_ACD_Data_Provider::get_user_report_url( $id ) ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'View %s', 'ghca-acd' ), $name ) ) . '">' . esc_html__( 'View', 'ghca-acd' ) . '</a>';
+	/** $small: the table's 32px button. Cards on phones take the full-size button, a 44px touch target. */
+	private static function view_link( int $id, string $name, bool $small = true ): string {
+		return '<a class="gh-btn gh-btn--secondary' . ( $small ? ' gh-btn--sm' : '' ) . '" href="' . esc_url( GHCA_ACD_Data_Provider::get_user_report_url( $id ) ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'View %s', 'ghca-acd' ), $name ) ) . '">' . esc_html__( 'View', 'ghca-acd' ) . '</a>';
 	}
 
 	/** Opens the redesigned Send reminder modal (slice 3). Only offered to people who can send reminders. */
-	private static function remind_button( int $id, string $name, bool $primary, string $extra_class = '' ): string {
-		return '<button type="button" class="gh-btn gh-btn--' . ( $primary ? 'primary' : 'secondary' ) . ' gh-btn--sm gh-btn--lnk' . $extra_class . '" data-ghca-reminder="' . esc_attr( (string) $id ) . '" data-ghca-reminder-name="' . esc_attr( $name ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'Send a reminder to %s', 'ghca-acd' ), $name ) ) . '">' . self::icon( 'send', 'sm' ) . esc_html__( 'Remind', 'ghca-acd' ) . '</button>';
+	private static function remind_button( int $id, string $name, bool $primary, bool $small = true ): string {
+		return '<button type="button" class="gh-btn gh-btn--' . ( $primary ? 'primary' : 'secondary' ) . ( $small ? ' gh-btn--sm' : '' ) . ' gh-btn--lnk" data-ghca-reminder="' . esc_attr( (string) $id ) . '" data-ghca-reminder-name="' . esc_attr( $name ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'Send a reminder to %s', 'ghca-acd' ), $name ) ) . '">' . self::icon( 'send', 'sm' ) . esc_html__( 'Remind', 'ghca-acd' ) . '</button>';
 	}
 
 	/* ---------------------------------------------------------------------
@@ -342,7 +343,7 @@ final class GHCA_ACD_Redesign_Lists {
 		if ( null !== $last ) {
 			$kv[] = array( __( 'Last reminder', 'ghca-acd' ), self::last_reminder_html( $last[ $id ] ?? null ) );
 		}
-		$card_actions = self::view_link( $id, $name ) . ( $can_remind ? self::remind_button( $id, $name, true ) : '' );
+		$card_actions = self::view_link( $id, $name, false ) . ( $can_remind ? self::remind_button( $id, $name, true, false ) : '' );
 		$card         = self::card_html( '<a class="gh-person-n" href="' . esc_url( GHCA_ACD_Data_Provider::get_user_report_url( $id ) ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '">' . esc_html( $name ) . '</a>', (string) $row['group'], $chip, $kv, $card_actions, true );
 		return array( 'row' => $h, 'card' => $card );
 	}
@@ -381,7 +382,7 @@ final class GHCA_ACD_Redesign_Lists {
 		if ( null !== $last ) {
 			$kv[] = array( __( 'Last reminder', 'ghca-acd' ), self::last_reminder_html( $last[ $id ] ?? null ) );
 		}
-		$card = self::card_html( '<a class="gh-person-n" href="' . esc_url( GHCA_ACD_Data_Provider::get_user_report_url( $id ) ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '">' . esc_html( $name ) . '</a>', (string) $row['group'], $chip, $kv, self::view_link( $id, $name ) . ( $can_remind ? self::remind_button( $id, $name, false ) : '' ), false );
+		$card = self::card_html( '<a class="gh-person-n" href="' . esc_url( GHCA_ACD_Data_Provider::get_user_report_url( $id ) ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '">' . esc_html( $name ) . '</a>', (string) $row['group'], $chip, $kv, self::view_link( $id, $name, false ) . ( $can_remind ? self::remind_button( $id, $name, false, false ) : '' ), false );
 		return array( 'row' => $h, 'card' => $card );
 	}
 
@@ -836,9 +837,9 @@ final class GHCA_ACD_Redesign_Lists {
 	 *
 	 * @param array<string,mixed> $row
 	 */
-	private static function certificate_action_html( array $row, bool $can_docs ): string {
+	private static function certificate_action_html( array $row, bool $can_docs, bool $small = true ): string {
 		if ( 'missing' === $row['kind'] ) {
-			return self::view_link( (int) $row['user_id'], (string) $row['name'] );
+			return self::view_link( (int) $row['user_id'], (string) $row['name'], $small );
 		}
 		if ( ! $can_docs ) {
 			return '';
@@ -846,7 +847,8 @@ final class GHCA_ACD_Redesign_Lists {
 		$url = GHCA_ACD_Certificate_Download::download_url( (int) $row['user_id'], (int) $row['course_id'] );
 		/* translators: 1: course title, 2: employee name */
 		$label = sprintf( __( 'Download PDF, %1$s, %2$s', 'ghca-acd' ), (string) $row['course'], (string) $row['name'] );
-		return '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm gh-btn--lnk" data-ghca-cert-pdf="' . esc_url( $url ) . '" data-ghca-cert-title="' . esc_attr( (string) $row['course'] ) . '" aria-label="' . esc_attr( $label ) . '">' . self::icon( 'download', 'sm' ) . esc_html__( 'PDF', 'ghca-acd' ) . '</button>';
+		// A <button> on the board too, so it keeps the button cascade (no gh-btn--lnk).
+		return '<button type="button" class="gh-btn gh-btn--secondary' . ( $small ? ' gh-btn--sm' : '' ) . '" data-ghca-cert-pdf="' . esc_url( $url ) . '" data-ghca-cert-title="' . esc_attr( (string) $row['course'] ) . '" aria-label="' . esc_attr( $label ) . '">' . self::icon( 'download', 'sm' ) . esc_html__( 'PDF', 'ghca-acd' ) . '</button>';
 	}
 
 	/**
@@ -898,7 +900,7 @@ final class GHCA_ACD_Redesign_Lists {
 					array( __( 'Completed', 'ghca-acd' ), esc_html( $done ) ),
 					array( 'missing' === $view ? __( 'Certificate', 'ghca-acd' ) : __( 'Expires', 'ghca-acd' ), 'missing' === $row['kind'] ? esc_html__( 'No certificate link', 'ghca-acd' ) : self::expires_html( $row ) ),
 				),
-				$action,
+				self::certificate_action_html( $row, $can_docs, false ),
 				'missing' === $row['kind']
 			) . '</div>';
 		}
@@ -962,7 +964,8 @@ final class GHCA_ACD_Redesign_Lists {
 			/* translators: %d: completed courses without a certificate link */
 			$title = sprintf( _n( '%d completed course has no certificate link', '%d completed courses have no certificate link', $missing, 'ghca-acd' ), $missing );
 			$h    .= '<div class="gh-alert gh-alert--danger" role="note">' . self::icon( 'file-x' ) . '<div class="gh-alert-body"><span class="gh-alert-t">' . esc_html( $title ) . '</span><p>' . esc_html__( 'The course issues a certificate, but LearnDash has not produced one for these completions. The Missing list shows who and which course.', 'ghca-acd' ) . '</p></div>';
-			$h    .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-set-field="ghca_cert_view" data-ghca-set-value="missing" data-ghca-set-form="' . esc_attr( $form ) . '">' . esc_html__( 'Show missing', 'ghca-acd' ) . '</button></div>';
+			// A link on the board; it filters this page, so it is a button styled as the board's link (gh-btn--lnk).
+			$h    .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm gh-btn--lnk" data-ghca-set-field="ghca_cert_view" data-ghca-set-value="missing" data-ghca-set-form="' . esc_attr( $form ) . '">' . esc_html__( 'Show missing', 'ghca-acd' ) . '</button></div>';
 		}
 
 		$tabs = array(
