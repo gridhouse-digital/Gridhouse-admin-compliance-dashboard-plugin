@@ -68,6 +68,10 @@ final class GHCA_ACD_AJAX {
     if ( ! is_singular() ) {
       return;
     }
+    // The redesigned dashboard prints its own drawer inside the themed wrapper; two drawers would share one id.
+    if ( class_exists( 'GHCA_ACD_Redesign' ) && GHCA_ACD_Redesign::dashboard_rendered() ) {
+      return;
+    }
     $post = get_post();
     if ( ! $post || ! GHCA_Admin_Compliance_Dashboard::page_uses_dashboard( $post ) || ! is_user_logged_in() || ! GHCA_ACD_Roles::user_can_view() ) {
       return;
@@ -105,6 +109,23 @@ final class GHCA_ACD_AJAX {
       wp_send_json_error( array( 'message' => __( 'Employee not found.', 'ghca-acd' ) ) );
     }
 
+    // The redesigned dashboard asks for board markup; the choice is markup only, every gate above has already passed.
+    $board = GHCA_ACD_Redesign_Tables::board_requested();
+    $m     = self::drawer_model( $user_id, $employee, $board );
+    $html  = $board ? GHCA_ACD_Redesign_Drawer::render( $m ) : self::render_legacy_drawer( $m );
+    wp_send_json_success( array( 'html' => $html, 'name' => $m['employee_name'] ) );
+  }
+
+  /**
+   * Everything the employee drawer shows, calculated once and shared by the legacy and the redesigned
+   * markup. Nothing here is new: it is the data preparation that used to sit inline in the handler.
+   *
+   * @param array<string,mixed> $employee Record from GHCA_ACD_Data_Provider::get_employee_record().
+   * @param bool                $board    True for the redesigned drawer, which takes structured data for the Documents and
+   *                                      Communications fragments instead of the legacy markup.
+   * @return array<string,mixed>
+   */
+  public static function drawer_model( int $user_id, array $employee, bool $board = false ): array {
     $employee_name = (string) ( $employee['name'] ?? '' );
     $employee_email = (string) ( $employee['email'] ?? '' );
     $group_label = (string) ( $employee['group'] ?? '' );
@@ -239,15 +260,19 @@ final class GHCA_ACD_AJAX {
       }
     }
 
+    $can_remind    = GHCA_ACD_Roles::user_can_send_reminders();
     $can_documents = GHCA_ACD_Roles::user_can_view_employee_documents();
     $can_admin     = GHCA_ACD_Roles::user_can_edit_records();
     $document_count = 0;
     if ( $can_documents && class_exists( 'GHCA_ACD_Jotform_Schema' ) && class_exists( 'GHCA_ACD_Jotform_Repository' ) && GHCA_ACD_Jotform_Schema::tables_exist() ) {
       $document_count = GHCA_ACD_Jotform_Repository::employee_record_count( $user_id );
     }
-    $documents_html = $can_documents ? (string) GHCA_ACD_Jotform_UI::render_recent_documents( $user_id ) : '';
-    $manual_html    = $can_documents && class_exists( 'GHCA_ACD_Jotform_UI' ) && method_exists( 'GHCA_ACD_Jotform_UI', 'render_manual_entry_form' ) ? (string) GHCA_ACD_Jotform_UI::render_manual_entry_form( $user_id ) : '';
-    $history_html   = $can_communications ? (string) GHCA_ACD_Messaging_UI::render_history_section( $user_id ) : '';
+    $documents_html = ! $board && $can_documents ? (string) GHCA_ACD_Jotform_UI::render_recent_documents( $user_id ) : '';
+    $manual_html    = ! $board && $can_documents && class_exists( 'GHCA_ACD_Jotform_UI' ) && method_exists( 'GHCA_ACD_Jotform_UI', 'render_manual_entry_form' ) ? (string) GHCA_ACD_Jotform_UI::render_manual_entry_form( $user_id ) : '';
+    $history_html   = ! $board && $can_communications ? (string) GHCA_ACD_Messaging_UI::render_history_section( $user_id ) : '';
+    $documents_data = $board && $can_documents ? GHCA_ACD_Redesign_Drawer::documents_data( $user_id ) : null;
+    $manual_data    = $board && $can_documents ? GHCA_ACD_Redesign_Drawer::manual_entry_data( $user_id ) : null;
+    $history_data   = $board && $can_communications && $history_schema_ready ? GHCA_ACD_Redesign_Drawer::history_data( $user_id ) : null;
 	$oltl_html      = class_exists( 'GHCA_ACD_OLTL_UI' ) ? GHCA_ACD_OLTL_UI::render_employee_card( $user_id ) : '';
 
     $report_url = GHCA_ACD_Data_Provider::get_user_report_url( $user_id );
@@ -262,7 +287,8 @@ final class GHCA_ACD_AJAX {
     }
     $is_suspended      = method_exists( 'GHCA_ACD_Data_Provider', 'is_user_suspended' ) && GHCA_ACD_Data_Provider::is_user_suspended( $user_id );
     $employment_label  = $is_suspended ? __( 'Inactive', 'ghca-acd' ) : __( 'Active', 'ghca-acd' );
-    $employment_label .= ' · ' . GHCA_ACD_Data_Provider::employment_type_label( $user_id );
+    $employment_type_label = GHCA_ACD_Data_Provider::employment_type_label( $user_id );
+    $employment_label .= ' · ' . $employment_type_label;
     $employment_class  = $is_suspended ? 'inactive' : 'active';
     $attention_class   = empty( $employee['courses'] ) ? ' is-empty' : ( empty( $attention_courses ) ? ' is-ok' : '' );
     $remaining_count   = count( $attention_courses );
@@ -291,6 +317,7 @@ final class GHCA_ACD_AJAX {
       $timestamp = '' !== trim( $value ) ? ( preg_match( '#^(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})$#D', trim( $value ) ) ? GHCA_Audit_Calculator::completion_timestamp( trim( $value ) ) : strtotime( $value ) ) : 0;
       return $timestamp ? wp_date( get_option( 'date_format', 'M j, Y' ), $timestamp ) : __( 'Not recorded', 'ghca-acd' );
     };
+    $verified_start_ts  = GHCA_ACD_Employment_Record::timestamp( $user_id );
     $registration_label = $user && ! empty( $user->user_registered ) ? $format_record_date( (string) $user->user_registered ) : __( 'Not recorded', 'ghca-acd' );
     $first_service_label = $format_record_date( (string) get_user_meta( $user_id, 'ghca_first_service_date', true ) );
     $orientation_total = 0;
@@ -304,6 +331,63 @@ final class GHCA_ACD_AJAX {
     }
     $orientation_label = $orientation_total > 0 ? sprintf( __( '%1$d of %2$d complete', 'ghca-acd' ), $orientation_complete, $orientation_total ) : __( 'Not configured', 'ghca-acd' );
 
+
+    return array(
+      'attention_class' => $attention_class,
+      'attention_courses' => $attention_courses,
+      'can_admin' => $can_admin,
+      'can_communications' => $can_communications,
+      'can_documents' => $can_documents,
+      'cert_count' => $cert_count,
+      'communication_count' => $communication_count,
+      'completed_count' => $completed_count,
+      'completed_courses' => $completed_courses,
+      'document_count' => $document_count,
+      'documents_html' => $documents_html,
+      'due_context' => $due_context,
+      'due_date_label' => $due_date_label,
+      'due_date_short' => $due_date_short,
+      'employee' => $employee,
+      'employee_name' => $employee_name,
+      'employment_label' => $employment_label,
+      'first_attention' => $first_attention,
+      'first_due_label' => $first_due_label,
+      'first_service_label' => $first_service_label,
+      'group_label' => $group_label,
+      'history_html' => $history_html,
+      'initials' => $initials,
+      'is_suspended' => $is_suspended,
+      'last_reminder_label' => $last_reminder_label,
+      'manual_html' => $manual_html,
+      'oltl_html' => $oltl_html,
+      'orientation_label' => $orientation_label,
+      'pct_class' => $pct_class,
+      'progress_pct' => $progress_pct,
+      'registration_label' => $registration_label,
+      'report_url' => $report_url,
+      'review' => $review,
+      'role_label' => $role_label,
+      'status_label' => $status_label,
+      'status_slug' => $status_slug,
+      'total_courses' => $total_courses,
+      'user_id' => $user_id,
+      'can_remind' => $can_remind,
+      'employee_email' => $employee_email,
+      'employment_type_label' => $employment_type_label,
+      'verified_start_ts' => $verified_start_ts,
+      'documents_data' => $documents_data,
+      'manual_data' => $manual_data,
+      'history_data' => $history_data,
+      'first_due_ts' => $first_due_ts,
+      'due_timestamp' => $due_timestamp,
+      'remaining_count' => $remaining_count,
+      'audit_mapping' => $audit_mapping,
+    );
+  }
+
+  /** @param array<string,mixed> $m Result of drawer_model(). */
+  private static function render_legacy_drawer( array $m ): string {
+    extract( $m, EXTR_SKIP ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract -- the template below is the original markup, unchanged.
     ob_start();
     ?>
     <div class="ghca-acd__drawer-chrome">
@@ -550,8 +634,7 @@ final class GHCA_ACD_AJAX {
       </div>
     </footer>
     <?php
-    $html = (string) ob_get_clean();
-    wp_send_json_success( array( 'html' => $html, 'name' => $employee_name ) );
+    return (string) ob_get_clean();
   }
 
   /**
@@ -717,6 +800,19 @@ final class GHCA_ACD_AJAX {
       wp_send_json_error( array( 'message' => __( 'Employee not found.', 'ghca-acd' ) ) );
     }
 
+    $m    = self::edit_records_model( $user_id );
+    $html = GHCA_ACD_Redesign_Tables::board_requested() ? GHCA_ACD_Redesign_Edit::render( $m ) : self::render_legacy_edit_form( $m );
+    wp_send_json_success( array( 'html' => $html, 'name' => $m['employee']['name'] ) );
+  }
+
+  /**
+   * Everything the Edit Records form shows, calculated once and shared by the legacy and the redesigned markup.
+   * It is the data preparation that used to sit inline in the handler, unchanged.
+   *
+   * @return array<string,mixed>
+   */
+  public static function edit_records_model( int $user_id ): array {
+    $user = get_userdata( $user_id );
     $employee = GHCA_ACD_Data_Provider::get_employee_record( $user_id );
 
     // user_registered is stored as GMT; convert to a site-local value for the picker.
@@ -726,9 +822,6 @@ final class GHCA_ACD_AJAX {
       $registered_local = wp_date( 'Y-m-d\TH:i', $reg_ts );
     }
 
-    ob_start();
-    ?>
-    <?php
     /*
      * Read-only context for section 1. These values are DERIVED (WP role, group
      * assignment, suspension state) and are not writable through this endpoint,
@@ -765,6 +858,53 @@ final class GHCA_ACD_AJAX {
     $edit_first_val  = $to_input( $edit_first_raw );
     $edit_alone_val  = $to_input( $edit_alone_raw );
     $employment_record = GHCA_ACD_Employment_Record::get( $user_id );
+    // Used by the redesigned form; the legacy template computes its own per-course values inline.
+    $edit_courses = array();
+    foreach ( $employee['courses'] ?? array() as $course ) {
+      $cid          = (int) $course['id'];
+      $completed_ts = (int) ( $course['completed_ts'] ?? 0 );
+      $started_ts   = self::get_course_activity_started( $user_id, $cid );
+      $edit_courses[] = array(
+        'id'              => $cid,
+        'title'           => self::display_course_title( (string) $course['title'] ),
+        'completed'       => ! empty( $course['completed'] ),
+        'completed_local' => $completed_ts > 0 ? wp_date( 'Y-m-d\TH:i', $completed_ts ) : '',
+        'minutes'         => ( $completed_ts > 0 && $started_ts > 0 && $completed_ts > $started_ts ) ? (int) round( ( $completed_ts - $started_ts ) / 60 ) : 0,
+      );
+    }
+    $employment_type       = GHCA_ACD_Data_Provider::employment_type( $user_id );
+    $employment_type_label = GHCA_ACD_Data_Provider::employment_type_label( $user_id );
+    $employment_options    = GHCA_ACD_Data_Provider::employment_type_options( $employment_type, $employment_type_label );
+    $actor                 = wp_get_current_user();
+    $actor_login           = $actor && $actor->user_login ? (string) $actor->user_login : '';
+
+    return array(
+      'user_id' => $user_id,
+      'user' => $user,
+      'employee' => $employee,
+      'registered_local' => $registered_local,
+      'edit_role_label' => $edit_role_label,
+      'edit_group' => $edit_group,
+      'edit_suspended' => $edit_suspended,
+      'edit_status' => $edit_status,
+      'edit_orient' => $edit_orient,
+      'edit_first_val' => $edit_first_val,
+      'edit_alone_val' => $edit_alone_val,
+      'employment_record' => $employment_record,
+      'edit_courses' => $edit_courses,
+      'employment_type' => $employment_type,
+      'employment_type_label' => $employment_type_label,
+      'employment_options' => $employment_options,
+      'actor_login' => $actor_login,
+    );
+  }
+
+  /** @param array<string,mixed> $m Result of edit_records_model(). */
+  private static function render_legacy_edit_form( array $m ): string {
+    extract( $m, EXTR_SKIP ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract -- the template below is the original markup, unchanged.
+    ob_start();
+    ?>
+    <?php
     ?>
     <form class="ghca-acd__edit-form ghca-acd__v2-edit-form" data-ghca-edit-form data-user-id="<?php echo esc_attr( (string) $user_id ); ?>">
 
@@ -916,7 +1056,7 @@ final class GHCA_ACD_AJAX {
       </div>
     </form>
     <?php
-    wp_send_json_success( array( 'html' => (string) ob_get_clean(), 'name' => $employee['name'] ) );
+    return (string) ob_get_clean();
   }
 
   /** Processes the submitted overrides and syncs them into LearnDash. */
@@ -1309,25 +1449,47 @@ final class GHCA_ACD_AJAX {
 
     $table = isset( $_POST['ghca_table'] ) ? sanitize_key( wp_unslash( (string) $_POST['ghca_table'] ) ) : 'employees';
 
+    // The redesigned tabs ask for board markup; the choice is markup only, never access.
+    $board = GHCA_ACD_Redesign_Tables::board_requested();
+
     switch ( $table ) {
       case 'inactive_employees':
         if ( ! GHCA_ACD_Roles::user_can_manage_users() ) {
           wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'ghca-acd' ) ), 403 );
         }
         $filters = GHCA_ACD_Data_Provider::get_employee_filters( 'inactive' );
-        $html    = GHCA_ACD_Shortcodes::get_employee_table_html( $filters, 'inactive' );
+        if ( $board ) {
+          wp_send_json_success( GHCA_ACD_Redesign_Tables::employee_table_parts( $filters, 'inactive' ) );
+        }
+        $html = GHCA_ACD_Shortcodes::get_employee_table_html( $filters, 'inactive' );
         break;
       case 'priority':
         $filters = GHCA_ACD_Data_Provider::get_priority_filters();
+        if ( $board ) {
+          wp_send_json_success( GHCA_ACD_Redesign_Lists::priority_parts( $filters ) );
+        }
         $html    = GHCA_ACD_Shortcodes::get_priority_table_html( $filters );
         break;
       case 'courses':
         $filters = GHCA_ACD_Data_Provider::get_course_filters();
+        if ( $board ) {
+          wp_send_json_success( GHCA_ACD_Redesign_Lists::course_parts( $filters, GHCA_ACD_Redesign_Lists::course_sort() ) );
+        }
         $html    = GHCA_ACD_Shortcodes::get_course_table_html( $filters );
+        break;
+      case 'certificates':
+        // Only the redesigned Certificates tab has this table; the legacy panel has no list to refresh.
+        if ( ! $board ) {
+          wp_send_json_error( array( 'message' => __( 'Unknown table.', 'ghca-acd' ) ), 400 );
+        }
+        wp_send_json_success( GHCA_ACD_Redesign_Lists::certificate_parts( GHCA_ACD_Redesign_Lists::certificate_filters() ) );
         break;
       default:
         $filters = GHCA_ACD_Data_Provider::get_employee_filters();
-        $html    = GHCA_ACD_Shortcodes::get_employee_table_html( $filters );
+        if ( $board && 'employees' === $table ) {
+          wp_send_json_success( GHCA_ACD_Redesign_Tables::employee_table_parts( $filters ) );
+        }
+        $html = GHCA_ACD_Shortcodes::get_employee_table_html( $filters );
         break;
     }
 

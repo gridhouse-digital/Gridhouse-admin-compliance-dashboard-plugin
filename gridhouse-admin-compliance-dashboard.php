@@ -24,6 +24,18 @@ require_once __DIR__ . '/includes/class-data-provider.php';
 require_once __DIR__ . '/includes/class-shortcodes.php';
 require_once __DIR__ . '/includes/class-ajax-handlers.php';
 require_once __DIR__ . '/includes/class-announcements.php';
+require_once __DIR__ . '/includes/odp/class-odp-contract.php';
+require_once __DIR__ . '/includes/odp/class-odp-feed.php';
+require_once __DIR__ . '/includes/odp/class-odp-access.php';
+require_once __DIR__ . '/includes/odp/class-odp-ui.php';
+require_once __DIR__ . '/includes/class-redesign.php';
+require_once __DIR__ . '/includes/class-redesign-tables.php';
+require_once __DIR__ . '/includes/class-redesign-drawer.php';
+require_once __DIR__ . '/includes/class-redesign-edit.php';
+require_once __DIR__ . '/includes/class-redesign-reminder.php';
+require_once __DIR__ . '/includes/class-redesign-lists.php';
+require_once __DIR__ . '/includes/class-redesign-admin.php';
+require_once __DIR__ . '/includes/odp/class-odp-bulletins.php';
 require_once __DIR__ . '/includes/class-export.php';
 require_once __DIR__ . '/includes/class-fluentcrm.php';
 require_once __DIR__ . '/includes/class-nav.php';
@@ -106,6 +118,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     GHCA_ACD_Shortcodes::init();
     GHCA_ACD_AJAX::init();
     GHCA_ACD_Announcements::init();
+    GHCA_ODP_Bulletins::init();
     add_action( 'wp_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
     add_filter( 'body_class', array( __CLASS__, 'add_body_class' ) );
     add_action( 'init', array( __CLASS__, 'register_roles_on_activation' ), 20 );
@@ -120,6 +133,11 @@ final class GHCA_Admin_Compliance_Dashboard {
     $post = get_post();
     if ( $post && self::page_uses_dashboard( $post ) ) {
       $classes[] = 'ghca-acd-page';
+      // The redesigned dashboard paints the page body warm (#F3EFEA) through this class; see gh-redesign.css.
+      // Without the redesign the class is absent and dashboard.css keeps the legacy body colour.
+      if ( class_exists( 'GHCA_ACD_Settings' ) && GHCA_ACD_Settings::ui_redesign_enabled() ) {
+        $classes[] = 'ghca-ui-page';
+      }
     }
 
     return $classes;
@@ -174,9 +192,19 @@ final class GHCA_Admin_Compliance_Dashboard {
         'pdfError'         => __( 'Packet generation failed. No packet was created. Please try again.', 'ghca-acd' ),
         'tableError'       => __( 'Could not update the table. Your session may have expired — please reload the page.', 'ghca-acd' ),
         'tableNetworkError' => __( 'Could not reach the server. The table below may be out of date.', 'ghca-acd' ),
+        'certDownloadError' => __( 'The certificate could not be downloaded. Nothing was saved.', 'ghca-acd' ),
       )
     );
     wp_enqueue_script( 'ghca-agency-training', plugin_dir_url( __FILE__ ) . 'assets/agency-training.js', array( 'ghca-admin-dashboard' ), self::VERSION . '-' . (string) filemtime( plugin_dir_path( __FILE__ ) . 'assets/agency-training.js' ), true );
+    if ( class_exists( 'GHCA_ACD_Settings' ) && GHCA_ACD_Settings::ui_redesign_enabled() ) {
+      wp_enqueue_style( 'ghca-redesign', plugin_dir_url( __FILE__ ) . 'assets/gh-redesign.css', array( 'ghca-admin-dashboard' ), self::VERSION . '-' . (string) filemtime( plugin_dir_path( __FILE__ ) . 'assets/gh-redesign.css' ) );
+      wp_enqueue_script( 'ghca-bulletins', plugin_dir_url( __FILE__ ) . 'assets/gh-bulletins.js', array(), self::VERSION . '-' . (string) filemtime( plugin_dir_path( __FILE__ ) . 'assets/gh-bulletins.js' ), true );
+      wp_localize_script( 'ghca-bulletins', 'ghcaOdp', array(
+        'restRoot' => rest_url( 'ghca-odp/v1/' ),
+        'nonce'    => wp_create_nonce( 'wp_rest' ),
+        'context'  => GHCA_ODP_Access::context_for( GHCA_ACD_Roles::user_can_view() ),
+      ) );
+    }
   }
 
   public static function page_uses_dashboard( WP_Post $post ): bool {
@@ -220,4 +248,5 @@ register_activation_hook( __FILE__, static function (): void {
 register_deactivation_hook( __FILE__, static function (): void {
   GHCA_ACD_Messaging_Worker::clear_schedules();
   GHCA_ACD_Jotform_Sync::clear_schedule();
+  GHCA_ODP_Bulletins::deactivate();
 } );

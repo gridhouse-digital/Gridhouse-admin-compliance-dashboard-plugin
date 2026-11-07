@@ -76,6 +76,32 @@
     }
   }, true);
 
+  // The redesigned drawer's More menu is the same disclosure with board classes. It has its own handler so the
+  // legacy one above stays exactly as it was.
+  function closeBoardMoreMenus(target) {
+    document.querySelectorAll('[data-ghca-more][open]').forEach(function (menu) {
+      var selectedAction = target && target.closest && target.closest('[data-ghca-more] .gh-menu-i');
+      if (!target || !menu.contains(target) || selectedAction) menu.removeAttribute('open');
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    closeBoardMoreMenus(e.target);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var open = document.querySelector('[data-ghca-more][open]');
+    if (!open) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    open.removeAttribute('open');
+    var summary = open.querySelector('summary');
+    if (summary && typeof summary.focus === 'function') {
+      try { summary.focus({preventScroll: true}); } catch (err) { summary.focus(); }
+    }
+  }, true);
+
   var tableConfigs = {
     employees: {
       fields: ['ghca_group', 'ghca_course', 'ghca_status', 'ghca_emp_search', 'ghca_emp_per', 'ghca_orderby', 'ghca_order'],
@@ -99,9 +125,18 @@
       orderField: 'ghca_order'
     },
     courses: {
-      fields: ['ghca_crs_group', 'ghca_crs_search', 'ghca_crs_cert', 'ghca_crs_per'],
+      // ghca_crs_sort is sent by the redesigned tab only; the legacy table ignores it.
+      fields: ['ghca_crs_group', 'ghca_crs_search', 'ghca_crs_cert', 'ghca_crs_per', 'ghca_crs_sort'],
       checkboxFields: [],
       pageField: 'ghca_crs_page'
+    },
+    // The redesigned Certificates tab (slice 4). There is no legacy version of this table.
+    certificates: {
+      fields: ['ghca_cert_view', 'ghca_cert_course', 'ghca_cert_search', 'ghca_cert_when', 'ghca_cert_per', 'ghca_cert_orderby', 'ghca_cert_order'],
+      checkboxFields: [],
+      pageField: 'ghca_cert_page',
+      orderbyField: 'ghca_cert_orderby',
+      orderField: 'ghca_cert_order'
     }
   };
 
@@ -109,10 +144,92 @@
     initTableFilters(form);
   });
 
+  /*
+   * Board buttons that set one form field and refresh its table: the Certificates sub-tabs (Issued, Expiring,
+   * Missing) and the "Show missing" alert button. Pressed state follows the field, so it is never out of step.
+   */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-ghca-set-field]');
+    if (!btn) { return; }
+    var formId = btn.getAttribute('data-ghca-set-form');
+    var form = formId ? document.getElementById(formId) : btn.closest('form');
+    var name = btn.getAttribute('data-ghca-set-field');
+    var field = form && form.elements ? form.elements.namedItem(name) : null;
+    if (!form || !field) { return; }
+    e.preventDefault();
+    field.value = btn.getAttribute('data-ghca-set-value') || '';
+    var pressed = null;
+    form.querySelectorAll('[data-ghca-set-field="' + name + '"]').forEach(function (other) {
+      var on = other.getAttribute('data-ghca-set-value') === field.value;
+      other.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (on) { pressed = other; }
+    });
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    // From outside the form (the alert), take the user to the list it changed.
+    if (formId && pressed) {
+      try { pressed.focus({ preventScroll: false }); } catch (err) { pressed.focus(); }
+    }
+  });
+
+  /*
+   * Certificates tab PDF button. Same endpoint and broker as the drawer, ids only. Only a real PDF is saved;
+   * anything else leaves nothing behind and says so.
+   */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-ghca-cert-pdf]');
+    if (!btn) { return; }
+    e.preventDefault();
+    if (btn.getAttribute('aria-busy') === 'true') { return; }
+    var url;
+    try {
+      url = new URL(btn.getAttribute('data-ghca-cert-pdf') || '', window.location.href);
+    } catch (err) { url = null; }
+    var failure = (window.ghcaAcd && window.ghcaAcd.certDownloadError) || 'The certificate could not be downloaded. Nothing was saved.';
+    if (!url || url.origin !== window.location.origin) {
+      if (typeof ghcaToast === 'function') { ghcaToast(failure, true); }
+      return;
+    }
+    var name = (btn.getAttribute('data-ghca-cert-title') || 'certificate').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'certificate';
+    btn.setAttribute('aria-busy', 'true');
+    btn.disabled = true;
+    fetch(url.href, { credentials: 'same-origin' })
+      .then(function (res) {
+        if (!res.ok) { throw new Error('download failed'); }
+        var type = res.headers && res.headers.get ? res.headers.get('Content-Type') : '';
+        return res.arrayBuffer().then(function (buffer) {
+          if (!ghcaCertificateResponseIsPdf(type, new Uint8Array(buffer.slice(0, 5)))) { throw new Error('not a pdf'); }
+          return new Blob([buffer], { type: 'application/pdf' });
+        });
+      })
+      .then(function (blob) {
+        var objectUrl = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = name + '.pdf';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
+      })
+      .catch(function () {
+        if (typeof ghcaToast === 'function') { ghcaToast(failure, true); }
+      })
+      .finally(function () {
+        btn.removeAttribute('aria-busy');
+        btn.disabled = false;
+      });
+  });
+
   function initTableFilters(form) {
     var tableId = form.getAttribute('data-ghca-table') || 'employees';
     var config = tableConfigs[tableId] || tableConfigs.employees;
-    var mount = form.parentElement && form.parentElement.querySelector('[data-ghca-table-id="' + tableId + '"]');
+    // The redesigned filter card keeps the mount outside the form's parent, so fall back to the page.
+    var mount = (form.parentElement && form.parentElement.querySelector('[data-ghca-table-id="' + tableId + '"]')) ||
+      document.querySelector('[data-ghca-table-id="' + tableId + '"]');
+    var isBoard = form.getAttribute('data-ghca-ui') === 'board';
+    var debounceMs = parseInt(form.getAttribute('data-ghca-debounce'), 10) || 400;
+    var chipHost = isBoard ? document.querySelector('[data-ghca-chips="' + tableId + '"]') : null;
+    var statusHost = isBoard ? document.querySelector('[data-ghca-table-status="' + tableId + '"]') : null;
     var controller = null;
     var searchTimer = null;
 
@@ -133,6 +250,7 @@
 
     function setLoading(isLoading) {
       mount.classList.toggle('is-loading', isLoading);
+      mount.setAttribute('aria-busy', isLoading ? 'true' : 'false');
       var btn = form.querySelector('button[type="submit"]');
       if (btn) {
         btn.disabled = isLoading;
@@ -157,6 +275,9 @@
       params.append('action', 'ghca_acd_filter_table');
       params.append('nonce', window.ghcaAcd.nonce);
       params.append('ghca_table', tableId);
+      if (isBoard) {
+        params.append('ghca_ui', 'board');
+      }
 
       config.fields.forEach(function (key) {
         params.append(key, data.get(key) || '');
@@ -205,10 +326,33 @@
       window.history.replaceState({}, '', url.toString());
     }
 
+    // The rows are replaced wholesale, which would drop keyboard focus from a pager or sort control.
+    function focusMarker() {
+      var el = document.activeElement;
+      if (!isBoard || !el || !mount.contains(el)) {
+        return null;
+      }
+      var page = el.closest('[data-ghca-page]');
+      if (page) { return { attr: 'data-ghca-page', value: page.getAttribute('data-ghca-page') }; }
+      var sort = el.closest('[data-ghca-sort]');
+      if (sort) { return { attr: 'data-ghca-sort', value: sort.getAttribute('data-ghca-sort') }; }
+      return null;
+    }
+
+    function restoreFocus(marker) {
+      if (!marker) { return; }
+      var target = mount.querySelector('[' + marker.attr + '="' + marker.value + '"]');
+      target = target && (target.matches('button, a, input, select') ? target : target.querySelector('button'));
+      if (target && !target.disabled) {
+        try { target.focus({ preventScroll: true }); } catch (err) { target.focus(); }
+      }
+    }
+
     function refresh(resetPage) {
       if (resetPage) {
         setPage(1);
       }
+      var marker = focusMarker();
 
       if (controller) {
         controller.abort();
@@ -230,6 +374,13 @@
           if (json && json.success && json.data && typeof json.data.html === 'string') {
             mount.innerHTML = json.data.html;
             mount.classList.remove('is-error');
+            if (chipHost && typeof json.data.chips === 'string') {
+              chipHost.innerHTML = json.data.chips;
+            }
+            if (statusHost && typeof json.data.summary === 'string') {
+              statusHost.textContent = json.data.summary;
+            }
+            restoreFocus(marker);
             syncUrl();
             return;
           }
@@ -264,6 +415,14 @@
       if (!e.target) {
         return;
       }
+      // A board Sort select has no name: it writes "orderby:order" into the form's existing hidden sort fields.
+      if (e.target.hasAttribute && e.target.hasAttribute('data-ghca-sort-select')) {
+        var parts = (e.target.value || '').split(':');
+        var by = form.querySelector('input[name="' + (config.orderbyField || 'ghca_orderby') + '"]');
+        var dir = form.querySelector('input[name="' + (config.orderField || 'ghca_order') + '"]');
+        if (by) { by.value = parts[0] || ''; }
+        if (dir) { dir.value = parts[1] || 'asc'; }
+      }
       if (e.target.tagName === 'SELECT' || e.target.type === 'checkbox') {
         refresh(true);
       }
@@ -276,7 +435,7 @@
       clearTimeout(searchTimer);
       searchTimer = setTimeout(function () {
         refresh(true);
-      }, 400);
+      }, debounceMs);
     });
 
     form.addEventListener('click', function (e) {
@@ -305,6 +464,40 @@
       setPage(pageBtn.getAttribute('data-ghca-page') || '1');
       refresh(false);
     });
+
+    // Clearing one filter (a chip's x) or all of them. Per page, sort and the page field are not filters.
+    function clearFilters(name) {
+      var controls = Array.prototype.slice.call(form.elements).filter(function (el) {
+        if (el.type === 'hidden' || el.type === 'submit' || el.type === 'button' || el.hasAttribute('data-ghca-per-page')) { return false; }
+        // Sort and the Certificates view are not filters, so clearing filters leaves them as they are.
+        if (el.hasAttribute('data-ghca-sort-select') || el.hasAttribute('data-ghca-not-filter')) { return false; }
+        return name === 'all' || el.name === name;
+      });
+      controls.forEach(function (el) {
+        if (el.type === 'checkbox') { el.checked = false; } else { el.value = ''; }
+      });
+      refresh(true);
+      var first = form.querySelector('input[type="search"]');
+      if (first) { first.focus(); }
+    }
+
+    function onClear(e) {
+      var clear = e.target.closest('[data-ghca-filter-clear]');
+      if (!clear) { return; }
+      e.preventDefault();
+      clearFilters(clear.getAttribute('data-ghca-filter-clear'));
+    }
+
+    if (isBoard) {
+      if (chipHost) { chipHost.addEventListener('click', onClear); }
+      mount.addEventListener('click', onClear);
+      // The per-page select lives in the pager, outside the form, so the form's own change event never sees it.
+      mount.addEventListener('change', function (e) {
+        if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-ghca-per-page')) {
+          refresh(true);
+        }
+      });
+    }
 
     mount.addEventListener('click', function (e) {
       var sortHeader = e.target.closest('[data-ghca-sort]');
@@ -488,7 +681,7 @@
     };
 
     document.addEventListener('click', function (e) {
-      var trigger = e.target.closest('.ghca-acd__cert-trigger');
+      var trigger = e.target.closest('.ghca-acd__cert-trigger, [data-ghca-cert-trigger]');
       if (trigger) {
         e.preventDefault();
         openModal(trigger);
@@ -512,14 +705,19 @@
     });
   }
 
+  // The redesigned overview uses .gh-tab buttons without the legacy classes,
+  // whose !important colours would override the board styling.
+  var GHCA_TAB = '.ghca-acd__tab-btn, .gh-tab[data-ghca-tab-target]';
+  var GHCA_TABLIST = '.ghca-acd__tabs, .gh-tabs[data-ghca-tablist-main]';
+
   function activateTab(targetId, moveFocus) {
     if (!targetId) return;
 
-    var tabBtn = document.querySelector('.ghca-acd__tab-btn[data-ghca-tab-target="' + targetId + '"]');
+    var tabBtn = document.querySelector('.ghca-acd__tab-btn[data-ghca-tab-target="' + targetId + '"], .gh-tab[data-ghca-tab-target="' + targetId + '"]');
     if (!tabBtn) return;
 
-    var tabContainer = tabBtn.closest('.ghca-acd__tabs');
-    var allBtns = tabContainer ? tabContainer.querySelectorAll('.ghca-acd__tab-btn') : document.querySelectorAll('.ghca-acd__tab-btn');
+    var tabContainer = tabBtn.closest(GHCA_TABLIST);
+    var allBtns = tabContainer ? tabContainer.querySelectorAll(GHCA_TAB) : document.querySelectorAll(GHCA_TAB);
     var allContents = document.querySelectorAll('.ghca-acd__tab-content');
 
     allBtns.forEach(function(btn) {
@@ -538,6 +736,10 @@
     }
     if (moveFocus) {
       tabBtn.focus();
+      // On phones the redesigned tab bar scrolls sideways; keep the selected tab fully in view (legacy tabs unchanged).
+      if (tabContainer && tabContainer.hasAttribute('data-ghca-tablist-main') && typeof tabBtn.scrollIntoView === 'function') {
+        tabBtn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
     }
   }
 
@@ -566,7 +768,7 @@
         return;
       }
 
-      var tabBtn = e.target.closest('.ghca-acd__tab-btn');
+      var tabBtn = e.target.closest(GHCA_TAB);
       if (!tabBtn) return;
       var targetId = tabBtn.getAttribute('data-ghca-tab-target');
       if (!targetId) return;
@@ -583,10 +785,10 @@
      * Bound per-tablist rather than on document so the drawer's own tablist
      * (.ghca-acd__drawer-tabs, injected later by AJAX) is never intercepted.
      */
-    document.querySelectorAll('.ghca-acd__tabs').forEach(function (tablist) {
+    document.querySelectorAll(GHCA_TABLIST).forEach(function (tablist) {
       if (tablist.closest('.ghca-acd__drawer')) return;
       tablist.addEventListener('keydown', function (e) {
-        var btns = Array.prototype.slice.call(tablist.querySelectorAll('.ghca-acd__tab-btn'));
+        var btns = Array.prototype.slice.call(tablist.querySelectorAll(GHCA_TAB));
         if (!btns.length) return;
         var current = btns.indexOf(document.activeElement);
         if (current === -1) return;
@@ -613,8 +815,10 @@
     var drawer = document.getElementById('ghca-acd-employee-drawer');
     if (!drawer) return;
 
-    var dialog = drawer.querySelector('.ghca-acd__drawer-dialog');
-    var closeBtn = drawer.querySelector('[data-ghca-drawer-close]');
+    var dialog = drawer.querySelector('[data-ghca-drawer-dialog], .ghca-acd__drawer-dialog');
+    // The redesigned drawer has a real close button after its scrim; prefer it as the first focus target.
+    var closeBtn = drawer.querySelector('button[data-ghca-drawer-close]') || drawer.querySelector('[data-ghca-drawer-close]');
+    var isBoard = drawer.getAttribute('data-ghca-ui') === 'board';
     var bodyContainer = document.getElementById('ghca-acd-employee-drawer-body');
     var loadingHtml = bodyContainer.innerHTML;
     var controller = null;
@@ -623,10 +827,21 @@
     var selectedTabs = Object.create(null);
 
     function errorState(message) {
+      if (isBoard) {
+        // Message text comes from the server or this file; it is set as text, never as markup.
+        return '<div class="gh-empty gh-dr-error" role="alert"><span class="gh-empty-ico"><span class="gh-i gh-i--xl i-alert" aria-hidden="true"></span></span>' +
+          '<strong class="gh-h4" data-ghca-error-msg></strong>' +
+          '<button type="button" class="gh-btn gh-btn--secondary" data-ghca-drawer-retry>Try again</button></div>';
+      }
       return '<div class="ghca-acd__overlay-state ghca-acd__overlay-state--error" role="alert">' +
         '<p class="ghca-acd__overlay-state-msg">' + message + '</p>' +
         '<button type="button" class="ghca-acd__overlay-retry" data-ghca-drawer-retry>Try again</button>' +
         '</div>';
+    }
+
+    function fillErrorText(message) {
+      var slot = bodyContainer.querySelector('[data-ghca-error-msg]');
+      if (slot) { slot.textContent = message; }
     }
 
     function initEmployeeDrawerTabs(userId) {
@@ -642,12 +857,21 @@
       function selectTab(name, moveFocus) {
         if (allowed.indexOf(name) === -1) name = 'training';
         selectedTabs[String(userId)] = name;
+        var activeTab = null;
         tabs.forEach(function (tab) {
           var active = tab.getAttribute('data-ghca-tab') === name;
           tab.setAttribute('aria-selected', active ? 'true' : 'false');
           tab.setAttribute('tabindex', active ? '0' : '-1');
-          if (active && moveFocus) tab.focus();
+          if (active) activeTab = tab;
         });
+        // Focus after every tab has its final state: the selected tab is bolder, so focusing first scrolled the
+        // phone tab bar to a width that then changed. The board tab bar also scrolls the tab fully into view.
+        if (activeTab && moveFocus) {
+          activeTab.focus();
+          if (tablist.classList.contains('gh-drh-tabs') && typeof activeTab.scrollIntoView === 'function') {
+            activeTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          }
+        }
         panels.forEach(function (panel) {
           panel.hidden = panel.getAttribute('data-ghca-tabpanel') !== name;
         });
@@ -688,6 +912,7 @@
       params.append('action', 'ghca_acd_get_employee_drawer');
       params.append('nonce', window.ghcaAcd.nonce);
       params.append('user_id', userId);
+      if (isBoard) { params.append('ghca_ui', 'board'); }
 
       fetch(window.ghcaAcd.ajaxUrl, {
         method: 'POST',
@@ -703,12 +928,14 @@
           initEmployeeDrawerTabs(String(userId));
         } else {
           bodyContainer.innerHTML = errorState((json && json.data && json.data.message) || 'We couldn’t load this employee.');
+          fillErrorText((json && json.data && json.data.message) || 'We couldn’t load this employee.');
         }
       })
       .catch(function(err) {
         if (err && err.name === 'AbortError') return;
         bodyContainer.removeAttribute('aria-busy');
         bodyContainer.innerHTML = errorState('Network error. Please check your connection and try again.');
+        fillErrorText('Network error. Please check your connection and try again.');
       });
 
       if (!release) {
@@ -810,7 +1037,7 @@
     var controller = null;
 
     function panel() {
-      return document.querySelector('.ghca-acd__drawer-panel--administration');
+      return document.querySelector('.ghca-acd__drawer-panel--administration, [data-ghca-tabpanel="administration"]');
     }
     function views() {
       var p = panel();
@@ -821,9 +1048,21 @@
       return (overview && subpage && body) ? { overview: overview, subpage: subpage, body: body } : null;
     }
 
+    // The redesigned drawer widens while its Edit Records sub-page is open (the Drawer-EditRecords board is 920px).
+    function setWide(on) {
+      var host = document.getElementById('ghca-acd-employee-drawer');
+      var dlg = host && host.querySelector('[data-ghca-drawer-dialog]');
+      if (dlg) { dlg.classList.toggle('is-subpage', !!on); }
+    }
+    function isBoardDrawer() {
+      var host = document.getElementById('ghca-acd-employee-drawer');
+      return !!host && host.getAttribute('data-ghca-ui') === 'board';
+    }
+
     function showOverview(focusTrigger) {
       var v = views();
       if (!v) return;
+      setWide(false);
       v.subpage.hidden = true;
       v.overview.hidden = false;
       if (controller) { controller.abort(); controller = null; }
@@ -837,6 +1076,7 @@
       var v = views();
       if (!v) return;
       currentUserId = userId;
+      setWide(true);
       v.overview.hidden = true;
       v.subpage.hidden = false;
       v.body.setAttribute('aria-busy', 'true');
@@ -845,7 +1085,7 @@
 
       // Move focus to the sub-page heading so keyboard and screen-reader users
       // follow the navigation rather than being left on the old view.
-      var heading = v.subpage.querySelector('.ghca-acd__subpage-head h4');
+      var heading = v.subpage.querySelector('.ghca-acd__subpage-head h4, [data-ghca-subpage-head]');
       if (heading) {
         heading.setAttribute('tabindex', '-1');
         heading.focus();
@@ -858,6 +1098,7 @@
       params.append('action', 'ghca_acd_get_edit_records_form');
       params.append('nonce', window.ghcaAcd.nonce);
       params.append('user_id', userId);
+      if (isBoardDrawer()) { params.append('ghca_ui', 'board'); }
 
       fetch(window.ghcaAcd.ajaxUrl, {
         method: 'POST',
@@ -885,7 +1126,7 @@
     }
 
     function submitForm(form) {
-      var saveBtn = form.querySelector('.ghca-acd__edit-btn--save');
+      var saveBtn = form.querySelector('.ghca-acd__edit-btn--save, [data-ghca-edit-save]');
       var prevText = saveBtn ? saveBtn.textContent : '';
       if (saveBtn) {
         saveBtn.disabled = true;
@@ -948,6 +1189,33 @@
       submitForm(form);
     });
 
+    // "Unsaved changes: N fields": how many controls differ from what the server rendered. The redesigned form
+    // only; it reads defaults the browser already keeps, so nothing is stored and nothing is sent.
+    function countChanged(form) {
+      var changed = 0;
+      Array.prototype.forEach.call(form.elements, function (el) {
+        if (!el.name || el.type === 'hidden' || el.type === 'submit' || el.type === 'button') { return; }
+        if (el.type === 'checkbox' || el.type === 'radio') {
+          if (el.checked !== el.defaultChecked) { changed += 1; }
+        } else if (el.tagName === 'SELECT') {
+          var was = Array.prototype.some.call(el.options, function (o) { return o.defaultSelected; }) ? Array.prototype.filter.call(el.options, function (o) { return o.defaultSelected; })[0].value : el.options[0].value;
+          if (el.value !== was) { changed += 1; }
+        } else if (el.value !== el.defaultValue) {
+          changed += 1;
+        }
+      });
+      return changed;
+    }
+    function updateDirty(e) {
+      var form = e.target && e.target.closest ? e.target.closest('[data-ghca-edit-form]') : null;
+      var slot = form && form.querySelector('[data-ghca-edit-dirty]');
+      if (!slot) { return; }
+      var n = countChanged(form);
+      slot.textContent = n === 0 ? 'No unsaved changes' : (n === 1 ? 'Unsaved changes: 1 field' : 'Unsaved changes: ' + n + ' fields');
+    }
+    document.addEventListener('input', updateDirty);
+    document.addEventListener('change', updateDirty);
+
     // The drawer's overlay close handler invokes this when Escape reaches it.
     window.ghcaAcdEditSubpageBack = function () {
       var v = views();
@@ -957,7 +1225,74 @@
     };
   }
 
+  /*
+   * Redesigned screens carry a toast stack inside the themed wrapper (.ghca-ui), so toasts there use the
+   * board component. Anywhere else the original toast is unchanged. Success clears itself after 6 seconds,
+   * an error stays until dismissed, and at most three show at once.
+   */
+  function ghcaToastWire(stack, toast) {
+    var isError = toast.classList.contains('gh-toast--error');
+    var timer = null;
+    function dismiss() {
+      clearTimeout(timer);
+      if (toast.parentNode) { toast.parentNode.removeChild(toast); }
+    }
+    function arm() {
+      clearTimeout(timer);
+      if (!isError) { timer = setTimeout(dismiss, 6000); }
+    }
+    var close = toast.querySelector('.gh-toast-x');
+    if (close) { close.addEventListener('click', dismiss); }
+    toast.addEventListener('mouseenter', function () { clearTimeout(timer); });
+    toast.addEventListener('mouseleave', arm);
+    toast.addEventListener('focusin', function () { clearTimeout(timer); });
+    toast.addEventListener('focusout', arm);
+    arm();
+    var all = stack.querySelectorAll('.gh-toast');
+    for (var i = 0; i < all.length - 3; i++) {
+      if (all[i].parentNode) { all[i].parentNode.removeChild(all[i]); }
+    }
+  }
+
+  function ghcaBoardToast(stack, message, isError) {
+    var text = String(message || '');
+    var title = text;
+    var body = '';
+    var split = text.length > 70 ? text.match(/^(.+?[.!?])\s+(.+)$/) : null;
+    if (split) { title = split[1]; body = split[2]; }
+
+    function el(tag, cls, content) {
+      var node = document.createElement(tag);
+      if (cls) { node.className = cls; }
+      if (content) { node.textContent = content; }
+      return node;
+    }
+    var toast = el('div', 'gh-toast ' + (isError ? 'gh-toast--error' : 'gh-toast--success'));
+    toast.setAttribute('role', isError ? 'alert' : 'status');
+    var icon = el('span', 'gh-i ' + (isError ? 'i-x-circle' : 'i-check-circle'));
+    icon.setAttribute('aria-hidden', 'true');
+    var copy = el('div');
+    copy.appendChild(el('div', 'gh-toast-t', title));
+    if (body) { copy.appendChild(el('p', '', body)); }
+    var close = el('button', 'gh-toast-x');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Dismiss');
+    var closeIcon = el('span', 'gh-i gh-i--sm i-x');
+    closeIcon.setAttribute('aria-hidden', 'true');
+    close.appendChild(closeIcon);
+    toast.appendChild(icon);
+    toast.appendChild(copy);
+    toast.appendChild(close);
+    stack.appendChild(toast);
+    ghcaToastWire(stack, toast);
+  }
+
   function ghcaToast(message, isError) {
+    var stack = document.querySelector('.ghca-ui [data-ghca-toasts]');
+    if (stack) {
+      ghcaBoardToast(stack, message, isError);
+      return;
+    }
     var toast = document.createElement('div');
     toast.className = 'ghca-acd__toast' + (isError ? ' ghca-acd__toast--error' : '');
     toast.setAttribute('role', isError ? 'alert' : 'status');
@@ -1035,7 +1370,7 @@
   }
 
   function ghcaDrawerRestoreTarget() {
-    var target = document.querySelector('#ghca-acd-employee-drawer [data-ghca-drawer-close]');
+    var target = document.querySelector('#ghca-acd-employee-drawer button[data-ghca-drawer-close]') || document.querySelector('#ghca-acd-employee-drawer [data-ghca-drawer-close]');
     return target && !target.closest('[hidden]') ? target : null;
   }
 
@@ -1089,6 +1424,8 @@
     function post(extra, onDone) {
       var params = new URLSearchParams();
       params.append('nonce', window.ghcaAcd.nonce);
+      var format = listEl.getAttribute('data-ghca-announce-format');
+      if (format) params.append('format', format);
       Object.keys(extra).forEach(function (k) { params.append(k, extra[k]); });
       fetch(window.ghcaAcd.ajaxUrl, {
         method: 'POST',
@@ -1341,9 +1678,17 @@
         var mSummary = mirror.querySelector('[data-ghca-packet-step="summary"]');
         var mCerts = mirror.querySelector('[data-ghca-packet-step="certificates"]');
         var mMerge = mirror.querySelector('[data-ghca-packet-step="merge"]');
-        if (mSummary) mSummary.className = state(pct >= 5, pct < 5);
-        if (mCerts) mCerts.className = state(pct >= 92, pct >= 5 && pct < 92);
-        if (mMerge) mMerge.className = isErr ? 'ghca-acd__packet-mirror-step is-error' : state(pct >= 100, pct >= 92);
+        if (mirror.hasAttribute('data-ghca-board')) {
+          // Redesigned mirror: the step keeps its board classes and only its state changes.
+          var set = function (el, done, active, err) { if (el) { el.setAttribute('data-state', err ? 'error' : (done ? 'done' : (active ? 'active' : ''))); } };
+          set(mSummary, pct >= 5, pct < 5, false);
+          set(mCerts, pct >= 92, pct >= 5 && pct < 92, false);
+          set(mMerge, pct >= 100, pct >= 92, isErr);
+        } else {
+          if (mSummary) mSummary.className = state(pct >= 5, pct < 5);
+          if (mCerts) mCerts.className = state(pct >= 92, pct >= 5 && pct < 92);
+          if (mMerge) mMerge.className = isErr ? 'ghca-acd__packet-mirror-step is-error' : state(pct >= 100, pct >= 92);
+        }
       }
 
       if (summaryStep && certificateStep && mergeStep) {
@@ -1413,7 +1758,7 @@
 
     function run(userId, tracker, opener) {
       if (running) return;
-      var drawer = opener.closest('.ghca-acd__drawer');
+      var drawer = opener.closest('.ghca-acd__drawer, #ghca-acd-employee-drawer');
       var period = drawer && drawer.querySelector('[data-ghca-audit-period]');
       var custom = tracker === 'annual' && period && period.querySelector('[data-ghca-audit-mode]').value === 'custom';
       var start, end;
@@ -1546,8 +1891,8 @@
     var closeReminder = function() {};
 
     if (modal) {
-      var dialog = modal.querySelector('.ghca-acd__reminder-modal-dialog');
-      var closeBtn = modal.querySelector('.ghca-acd__reminder-modal-close');
+      var dialog = modal.querySelector('.ghca-acd__reminder-modal-dialog, [data-ghca-reminder-dialog]');
+      var closeBtn = modal.querySelector('.ghca-acd__reminder-modal-close, [data-ghca-reminder-x]');
       var loading = modal.querySelector('[data-ghca-reminder-loading]');
       var form = modal.querySelector('[data-ghca-reminder-form]');
       var userIdInput = modal.querySelector('[data-ghca-reminder-user-id]');
@@ -1572,6 +1917,11 @@
       var submitBtn = modal.querySelector('[data-ghca-reminder-submit]');
       var smsConfirm = modal.querySelector('[data-ghca-sms-confirm]');
       var smsSafe = modal.querySelector('[data-ghca-sms-safe]');
+      // The redesigned modal has a second, confirm step. The legacy modal has none: confirmEl is null there.
+      var isBoardModal = modal.getAttribute('data-ghca-ui') === 'board';
+      var confirmEl = isBoardModal ? modal.querySelector('[data-ghca-reminder-confirm]') : null;
+      var confirmSendBtn = confirmEl ? confirmEl.querySelector('[data-ghca-confirm-send]') : null;
+      var confirmed = false;
       var templates = [];
       var context = null;
       var reminderOpener = null;
@@ -1600,6 +1950,9 @@
           urgencyBadge.hidden = !raised;
           urgencyBadge.textContent = raised ? (urgencyInput.value === 'urgent' ? 'Urgent' : 'Elevated') : '';
           urgencyBadge.className = 'ghca-acd__reminder-urgency-badge' + (urgencyInput.value === 'urgent' ? ' is-urgent' : '');
+          if (urgencyBadge.hasAttribute('data-ghca-board')) {
+            urgencyBadge.className = 'gh-st gh-mod-badge ' + (urgencyInput.value === 'urgent' ? 'gh-st--overdue' : 'gh-st--duesoon');
+          }
         }
 
         var usesSms = channelInput.value === 'sms' || channelInput.value === 'email_sms';
@@ -1713,7 +2066,45 @@
         updatePreview();
       }
 
+      // Step 2 of the redesigned modal: a plain summary of what is about to be sent, before it is.
+      function selectedText(select) {
+        return select.options[select.selectedIndex] ? select.options[select.selectedIndex].textContent : select.value;
+      }
+      function showConfirm() {
+        var email = channelUsesEmail();
+        var sms = channelUsesSms();
+        var name = nameEl.textContent || 'this employee';
+        var kind = email && sms ? 'email and text' : (sms ? 'text' : 'email');
+        confirmEl.querySelector('[data-ghca-confirm-title]').textContent = 'Send this ' + kind + ' to ' + name + '?';
+        var to = [];
+        if (email) to.push((context && context.masked_email) || 'Email unavailable');
+        if (sms) to.push((context && context.masked_phone) || 'SMS unavailable');
+        confirmEl.querySelector('[data-ghca-confirm-to]').textContent = to.join(' · ');
+        confirmEl.querySelector('[data-ghca-confirm-subject]').textContent = urgencyPrefix(subjectInput.value || '');
+        confirmEl.querySelector('[data-ghca-confirm-subject]').hidden = !email;
+        confirmEl.querySelector('[data-ghca-confirm-subject-dt]').hidden = !email;
+        confirmEl.querySelector('[data-ghca-confirm-urgency]').textContent = selectedText(urgencyInput);
+        confirmEl.querySelector('[data-ghca-confirm-send-label]').textContent = 'Send ' + channelLabel(channelInput.value).toLowerCase().replace('sms', 'SMS');
+        dialog.hidden = true;
+        confirmEl.hidden = false;
+        var back = confirmEl.querySelector('[data-ghca-confirm-back]');
+        if (back) back.focus();
+      }
+      function hideConfirm(focusCompose) {
+        if (!confirmEl) return;
+        confirmed = false;
+        confirmEl.hidden = true;
+        dialog.hidden = false;
+        if (focusCompose) submitBtn.focus();
+      }
+      // Escape and the scrim go back one step first, then close.
+      function stepBackOrClose() {
+        if (confirmEl && !confirmEl.hidden) { hideConfirm(true); return; }
+        closeReminder();
+      }
+
       closeReminder = function() {
+        if (confirmEl) { confirmEl.hidden = true; dialog.hidden = false; }
         modal.hidden = true;
         modal.setAttribute('aria-hidden', 'true');
         document.documentElement.classList.remove('ghca-acd--reminder-open');
@@ -1728,7 +2119,7 @@
         modal.hidden = false;
         modal.setAttribute('aria-hidden', 'false');
         document.documentElement.classList.add('ghca-acd--reminder-open');
-        ghcaAcdOverlay.open(modal, reminderOpener, closeReminder);
+        ghcaAcdOverlay.open(modal, reminderOpener, isBoardModal ? stepBackOrClose : closeReminder);
         loading.textContent = 'Loading reminder options…';
         loading.hidden = false;
         form.hidden = true;
@@ -1773,7 +2164,8 @@
           loading.textContent = 'Network error. Please close the form and try again.';
         });
 
-        if (!reminderRelease) reminderRelease = ghcaFocusTrap(dialog, closeBtn);
+        // The board modal holds two dialogs, one visible at a time, so its trap covers the whole layer.
+        if (!reminderRelease) reminderRelease = ghcaFocusTrap(isBoardModal ? modal : dialog, closeBtn);
       };
 
       templateInput.addEventListener('change', function() { populateTemplate(templateInput.value); });
@@ -1787,6 +2179,15 @@
           updateChannel(true);
         });
       });
+
+      if (confirmEl) {
+        confirmEl.querySelector('[data-ghca-confirm-back]').addEventListener('click', function() { hideConfirm(true); });
+        confirmSendBtn.addEventListener('click', function() {
+          confirmed = true;
+          if (typeof form.requestSubmit === 'function') { form.requestSubmit(); }
+          else { form.dispatchEvent(new Event('submit', { cancelable: true })); }
+        });
+      }
 
       form.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -1804,10 +2205,16 @@
           return;
         }
         if (submitBtn.disabled) return;
+        if (isBoardModal && !confirmed) { showConfirm(); return; }
+        confirmed = false;
 
+        // Legacy: the Send button itself shows the progress. Redesigned: the confirm step's button does.
+        var busyBtn = confirmSendBtn || submitBtn;
+        var busyText = busyBtn.querySelector('[data-ghca-confirm-send-label]') || busyBtn;
         submitBtn.disabled = true;
-        var originalLabel = submitBtn.textContent;
-        submitBtn.textContent = 'Queueing…';
+        busyBtn.disabled = true;
+        var originalLabel = busyText.textContent;
+        busyText.textContent = 'Queueing…';
         var params = new URLSearchParams();
         params.append('action', 'ghca_acd_send_reminder');
         params.append('user_id', userIdInput.value);
@@ -1819,11 +2226,17 @@
         params.append('message', messageInput.value);
         if (channelUsesSms() && smsSafe.checked) params.append('sms_safe_confirmed', '1');
 
+        // A failed send keeps everything typed. The redesigned modal says so in a toast, as the board does.
+        function sendFailed(message) {
+          if (isBoardModal) { hideConfirm(true); ghcaToast(message, true); } else { setError(message); }
+        }
+
         post(params, reminderController ? reminderController.signal : undefined).then(function(json) {
-          submitBtn.textContent = originalLabel;
+          busyText.textContent = originalLabel;
+          busyBtn.disabled = false;
           updateChannel(false);
           if (!json || !json.success) {
-            setError((json && json.data && json.data.message) || 'The reminder could not be queued.');
+            sendFailed((json && json.data && json.data.message) || 'The reminder could not be queued.');
             return;
           }
           ghcaToast((json.data && json.data.message) || 'The reminder was queued.', false);
@@ -1833,9 +2246,10 @@
           if (window.ghcaAcdReloadDrawer) window.ghcaAcdReloadDrawer(employeeId);
         }).catch(function(err) {
           if (err && err.name === 'AbortError') return;
-          submitBtn.textContent = originalLabel;
+          busyText.textContent = originalLabel;
+          busyBtn.disabled = false;
           submitBtn.disabled = false;
-          setError('Network error. Please try again.');
+          sendFailed('Network error. Please try again.');
         });
       });
     }
@@ -2076,11 +2490,11 @@
 
   function initManualEntry() {
     document.addEventListener('submit', function(e) {
-      var form = e.target.closest('.ghca-acd__manual-entry-form');
+      var form = e.target.closest('.ghca-acd__manual-entry-form, [data-ghca-manual-form]');
       if (!form) return;
       e.preventDefault();
       var button = form.querySelector('button[type="submit"]');
-      var status = form.querySelector('.ghca-acd__manual-entry-status');
+      var status = form.querySelector('.ghca-acd__manual-entry-status, [data-ghca-manual-status]');
       if (button) button.disabled = true;
       if (status) status.textContent = 'Uploading…';
       fetch(window.ghcaAcd.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: new FormData(form) })
@@ -2147,6 +2561,77 @@
     });
   }
 
+  // Notices rendered by the server (sync finished, reminder logged) get the same dismiss and timing.
+  document.querySelectorAll('.ghca-ui [data-ghca-toasts]').forEach(function (stack) {
+    stack.querySelectorAll('.gh-toast').forEach(function (toast) { ghcaToastWire(stack, toast); });
+  });
+
+  /*
+   * Redesigned Audit data tab: saves one row's first-service date, worked-alone date and CSV exclusion
+   * through the same action, nonce name and fields as the legacy tab. Dates are checked against the
+   * MM/DD/YYYY shape first, because the server stores anything else as empty.
+   */
+  function initAuditDates() {
+    var mdy = /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/[0-9]{4}$/;
+    function realDate(v) {
+      if (!mdy.test(v)) return false;
+      var p = v.split('/'), d = new Date(+p[2], +p[0] - 1, +p[1]);
+      return d.getFullYear() === +p[2] && d.getMonth() === +p[0] - 1 && d.getDate() === +p[1];
+    }
+    document.addEventListener('click', function (event) {
+      var btn = event.target.closest('.ghca-ui [data-ghca-audit-save]');
+      if (!btn || btn.disabled) return;
+      var row = btn.closest('[data-ghca-audit-row]');
+      var wrap = btn.closest('[data-ghca-audit-nonce]');
+      if (!row || !wrap || !window.ghcaAcd || !window.ghcaAcd.ajaxUrl) return;
+      var status = row.querySelector('[data-ghca-audit-status]');
+      var fields = {};
+      var bad = null;
+      row.querySelectorAll('input[data-ghca-audit-field]').forEach(function (input) {
+        var key = input.getAttribute('data-ghca-audit-field');
+        if (input.type === 'checkbox') { fields[key] = input.checked ? '1' : '0'; return; }
+        var v = input.value.trim();
+        input.value = v;
+        var ok = v === '' || realDate(v);
+        input.setAttribute('aria-invalid', ok ? 'false' : 'true');
+        input.classList.toggle('is-invalid', !ok);
+        if (!ok && !bad) bad = input;
+        fields[key] = v;
+      });
+      function say(text, tone) {
+        if (!status) return;
+        status.textContent = text;
+        status.className = 'gh-small gh-aud-msg' + (tone ? ' gh-aud-msg--' + tone : '');
+      }
+      if (bad) {
+        say('Use MM/DD/YYYY, a real date, or leave it empty. Nothing was saved.', 'error');
+        bad.focus();
+        return;
+      }
+      var label = btn.firstChild;
+      var text = label.nodeValue;
+      btn.disabled = true;
+      btn.setAttribute('aria-busy', 'true');
+      label.nodeValue = 'Saving…';
+      say('', '');
+      var data = new FormData();
+      data.append('action', 'ghca_acd_save_audit_dates');
+      data.append('ghca_nonce', wrap.getAttribute('data-ghca-audit-nonce'));
+      data.append('user_id', row.getAttribute('data-ghca-audit-row'));
+      data.append('first_service', fields.first_service || '');
+      data.append('worked_alone', fields.worked_alone || '');
+      data.append('exclude_user', fields.exclude || '0');
+      fetch(window.ghcaAcd.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: data })
+        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (res && res.success) { say('Saved', 'ok'); }
+          else { say((res && typeof res.data === 'string' && res.data) || 'Could not save. Nothing was changed.', 'error'); }
+        })
+        .catch(function () { say('Could not reach the server. Nothing was saved.', 'error'); })
+        .then(function () { btn.disabled = false; btn.removeAttribute('aria-busy'); label.nodeValue = text; });
+    });
+  }
+
   initTabs();
   initEmployeeDrawer();
   initEditRecordsSubpage();
@@ -2157,5 +2642,6 @@
   initOltlManualReview();
   initManualEntry();
   initManualEvidenceOpen();
+  initAuditDates();
 
 })();

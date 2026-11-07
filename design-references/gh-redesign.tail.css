@@ -1,0 +1,579 @@
+
+/* Plugin adapter: page placement, real overlays, states the boards draw as static frames. */
+:is(.ghca-ui, #ghca-ui-scope) [hidden] { display: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app { display: block; width: 100%; max-width: none; margin: 0; padding: 0; text-align: left; font-style: normal; font-weight: 400; letter-spacing: normal; text-transform: none; word-spacing: normal; }
+:is(.ghca-ui, #ghca-ui-scope).ghca-ui--bleed { position: relative; box-sizing: border-box; width: calc(100vw - var(--ghca-ui-sbw, 0px)) !important; max-width: calc(100vw - var(--ghca-ui-sbw, 0px)) !important; margin-left: calc(50% - 50vw + var(--ghca-ui-sbw, 0px) / 2) !important; margin-right: calc(50% - 50vw + var(--ghca-ui-sbw, 0px) / 2) !important; }
+/* WordPress block layouts and page builders pin children with !important auto margins and content-size max-widths; the bleed wrapper must escape them. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-main { padding-top: 24px; padding-bottom: 48px; display: flex; flex-direction: column; gap: 24px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ov.is-active { display: flex; flex-direction: column; gap: 24px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ov:focus { box-shadow: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-help-row { padding: 18px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-help-row > .gh-stat-ico { width: 44px; height: 44px; background: var(--gh-surface-card); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-help-row > div { flex: 1 1 0%; min-width: 260px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-health-ft a:is(:link, :visited, :hover, :focus, :active), :is(.ghca-ui, #ghca-ui-scope) .gh-health-ft a { color: var(--gh-status-danger-fg); font-weight: 600; text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-scope-note { margin-top: 2px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tabs .gh-tab { font-family: inherit; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-chrome { background: var(--gh-surface-page); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pagehead-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-nav a[aria-current="true"] { color: var(--gh-color-primary); background: var(--gh-surface-brand-subtle); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-main { flex: 1 1 0%; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-acts { display: inline-flex; flex: none; gap: 2px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-link { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--gh-text-link); text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bul-step button:disabled { opacity: .4; cursor: default; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-copy.is-copied { color: var(--gh-status-success-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-main { padding-top: 28px; padding-bottom: 56px; display: flex; flex-direction: column; gap: 20px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ovp-empty { padding: 8px 0 4px; color: var(--gh-text-muted); font-size: 13px; line-height: 18px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-mark.has-img::after { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-mark.has-img { background: var(--gh-surface-card); }
+
+/* Ticker: the track only scrolls once JS has appended the aria-hidden copy. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-ticker:not(.is-animated) .gh-ticker-track { animation: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ticker-item a { cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ticker-msg { flex: 1; min-width: 0; display: flex; align-items: center; padding: 0 16px; font-size: 13px; line-height: 18px; color: var(--gh-text-secondary); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ticker-state { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 12px; color: var(--gh-status-warning-fg); border-left: 1px solid var(--gh-border); white-space: nowrap; }
+
+/* Drawer: the board frames are absolute inside a 1440 artboard; on a real page they are fixed to the viewport. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-layer { position: fixed; inset: 0; z-index: 100000; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-layer .gh-scrim { position: fixed; inset: 0; z-index: 0; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-layer .gh-drawer.gh-bul { position: fixed; z-index: 1; top: 0; right: 0; bottom: 0; height: 100%; width: min(480px, 100%); box-shadow: var(--gh-shadow-3); outline: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bul-sum p { white-space: pre-line; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bul-x, :is(.ghca-ui, #ghca-ui-scope) .gh-bul-step button { padding: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bul-note { margin-bottom: 0; }
+/* The bulletin page's disclaimer keeps the space below it that the ODP-Page board renders (the paragraph's own 1em). */
+:is(.ghca-ui, #ghca-ui-scope) .gh-bp-note { margin-bottom: 1em; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-copy-status { margin-left: 4px; font-size: 12.5px; color: var(--gh-status-success-fg); }
+
+/* Library and full page. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-chiprow { margin-top: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-tools form { display: contents; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bl-read { cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-about strong { font-weight: 700; color: inherit; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-odp-about > .gh-bul-chip { align-self: flex-start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bp-body > p:last-child { margin-bottom: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns a { text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-skip { position: absolute; left: 8px; top: -60px; z-index: 100001; padding: 8px 12px; border-radius: 8px; background: var(--gh-surface-card); color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-skip:focus { top: 8px; }
+body.gh-ui-body { margin: 0; background: #F3EFEA; }
+/* Theme pages that host the redesigned dashboard or the bulletin pages. The plugin adds ghca-ui-page to <body> only
+   there (dashboard: only while the redesign is on). dashboard.css paints body.ghca-acd-page #eceff3 for the legacy
+   dashboard, and themes paint their own body; where theme padding is transparent above and below the content that
+   colour showed as strips. Only the body colour changes: theme spacing, shadows, cards, inputs and buttons do not.
+   A literal, because the --gh-* tokens are defined on .gh-app, inside the page. */
+html body.ghca-ui-page { background-color: #F3EFEA !important; }
+/* Inside a theme the bulletin <main> meets theme rules such as `main { padding: 40px !important; margin: … }`. Pin the board values. */
+:is(.ghca-ui, #ghca-ui-scope) main.gh-odp-main { padding: 28px 32px 56px !important; margin: 0 auto !important; max-width: 1320px !important; width: 100% !important; background: transparent !important; border: 0 !important; box-shadow: none !important; float: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-bp-h, :is(.ghca-ui, #ghca-ui-scope) .gh-bul-h, :is(.ghca-ui, #ghca-ui-scope) .gh-bl-h, :is(.ghca-ui, #ghca-ui-scope) .gh-odp-hd h1 { text-transform: none; font-style: normal; }
+@media (max-width: 720px) {
+  :is(.ghca-ui, #ghca-ui-scope) main.gh-odp-main { padding-left: 16px !important; padding-right: 16px !important; }
+}
+
+/* Legacy tabs keep their existing dashboard.css typography. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-legacy { font-family: var(--ent-font-sans); font-size: 16.1px; line-height: 1.5; color: var(--ent-text); letter-spacing: normal; }
+
+@media (max-width: 720px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-appbar-in { gap: 8px 16px; padding: 10px 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo { flex: 1 1 auto; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-nav { order: 3; flex: 1 1 100%; }
+}
+
+/* Phone layouts from the board's 390 px frames (.gh-phone), applied by viewport width. */
+@media (max-width: 600px) {
+  /* The phone frames sit in a `.gh-app.gh-touch` whose base is 15px, with an inline-sized logo. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-odp { font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-mark { width: 30px; height: 30px; font-size: 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-appbar .gh-logo-name { font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-odp-hd h1 { font-size: 28px; line-height: 34px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-odp-intro { font-size: 15px; line-height: 23px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-odp-tools { flex-direction: column; align-items: stretch; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-odp-tools .gh-input-wrap { max-width: none; flex: none; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-odp .gh-input { min-height: 48px; font-size: 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bl-item { grid-template-columns: 1fr; gap: 4px; padding: 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bl-date strong { display: inline; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bl-date strong::after { content: ", "; font-weight: 400; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bl-read { min-height: 44px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bp-h { font-size: 28px; line-height: 34px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bp-body { font-size: 16.5px; line-height: 28px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bp-src .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-bp-nav .gh-btn { min-height: 48px; flex: 1 1 100%; justify-content: center; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-copy { min-height: 44px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-pager { flex-direction: column; gap: 10px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns a, :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns span { min-width: 44px; height: 44px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-odp-layer .gh-drawer.gh-bul { width: 100%; border-left: 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bul-hd { min-height: 56px; padding: 6px 8px 6px 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bul-bd { padding: 20px 20px 24px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bul-h { font-size: 24px; line-height: 30px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bul-ft { flex-wrap: wrap; gap: 6px; padding: 12px 16px 24px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-bul-ft .gh-btn { min-height: 48px; padding: 0 16px; font-size: var(--gh-text-sm); gap: 8px; }
+}
+
+/* The board's Sync, Export, and Scope are <button>s, so `.gh-app button { font: inherit }` sets their final weight and line height. These are links here. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--native { font: inherit; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--static { cursor: default; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--static:hover { background: var(--gh-surface-card); border-color: var(--gh-border-strong); }
+
+/* Card headers the user asked to separate from the body. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-card-hd--rule + .gh-ovp-bd { padding-top: 14px; }
+
+/* Themes paint link hovers and link children; links whose board rules set no background or child colour keep none. Zero added specificity, so every component rule still wins. */
+:is(.ghca-ui, #ghca-ui-scope) :where(.gh-app a:not(.gh-legacy *)) { background-color: transparent; }
+:is(.ghca-ui, #ghca-ui-scope) :where(.gh-app a:not(.gh-legacy *) :is(strong, b)) { color: inherit; }
+
+/* Agency brand (Branding settings) on quick links and primary buttons, on every preset theme. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:visited, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:focus, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:active { color: var(--gh-agency-ink, var(--gh-text)); text-decoration: none; box-shadow: none !important; background-color: var(--gh-surface-card); border-color: var(--gh-border); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:active { background-color: var(--gh-agency-soft, var(--gh-surface-hover)); border-color: var(--gh-agency-ink, var(--gh-border-strong)); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)) !important; outline-offset: 2px !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink strong, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink .gh-i { color: inherit; text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink strong span { color: inherit; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-qlink > span > span { color: var(--gh-text-muted); text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:visited, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:active, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:visited, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:focus, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:active { background-color: var(--gh-agency, var(--gh-color-primary)); color: var(--gh-agency-on, var(--gh-color-on-primary)); border-color: transparent; text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:active, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-btn--primary:active { background-color: var(--gh-agency-hover, var(--gh-color-primary-hover)); color: var(--gh-agency-on-hover, var(--gh-color-on-primary)); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)) !important; outline-offset: 2px !important; box-shadow: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn--primary .gh-i { color: inherit; }
+
+/* Table kit: Employees and Inactive. Values are the Admin-Employees board's inline styles; no new colours. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-tp.is-active { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tp:focus { box-shadow: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tcard { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-field--search { flex: 2 1 260px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-input, :is(.ghca-ui, #ghca-ui-scope) .gh-select { height: auto; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-check input[type="checkbox"], :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-check input[type="radio"] { -webkit-appearance: auto; appearance: auto; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-check--filter { flex: 0 0 auto; align-items: center; min-height: 40px; padding: 0 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tmount { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tmount.is-loading { opacity: .55; pointer-events: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table .gh-nowrap { white-space: nowrap; }
+/* The board's sort controls are <button>s, which take the browser's letter-spacing, not the header's. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-table th button { letter-spacing: normal; }
+/* The board gives cells only a bottom rule. Say so for the other sides, so a theme's `td { border: ... }` cannot add them. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-table th, :is(.ghca-ui, #ghca-ui-scope) .gh-table td { border-top-width: 0; border-left-width: 0; border-right-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table th[data-ghca-sort="progress_pct"] { min-width: 180px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-prog { display: flex; align-items: center; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-prog .gh-bar { flex: 1 1 auto; min-width: 56px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-prog-n { font-size: 13px; white-space: nowrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-due { font-weight: 600; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-due--danger { color: var(--gh-status-danger-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-due--warning { color: var(--gh-status-warning-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-person > div { min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-person-s { display: block; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-person-s { color: var(--gh-text-muted); text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-person-s:hover { text-decoration: underline; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-person-chip { margin-top: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-ctl .gh-pager-per { width: 84px; min-height: 36px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns button { cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns button:disabled { opacity: .45; cursor: default; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pager-gap { align-self: center; padding: 0 2px; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-cards { display: none; flex-direction: column; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard.is-risk { box-shadow: inset 4px 0 0 var(--gh-status-danger-solid); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-top { display: flex; align-items: center; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-id { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-act { display: flex; gap: 8px; }
+/* The board has no reset, so the browser's 1em margin on the card's <dl> is part of its rendered spacing; follow the render. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard .gh-kv { margin: 13px 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-act .gh-btn { flex: 1; }
+@media (max-width: 719px) {
+  /* The phone frames set a 15px base. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tp { font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tbl { display: none; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-cards { display: flex; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tcard { padding: 12px 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tcard .gh-filters .gh-field { flex: 1 1 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mcard-top { flex-wrap: wrap; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mcard-id { flex: 1 1 140px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tmount .gh-pager { flex-direction: column; align-items: stretch; }
+  /* gh-app.css raises tabs to 44px on phones; the accepted phone overview board keeps the board's 42px. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tabs .gh-tab { min-height: 42px; }
+}
+
+/* Themes set text-transform on headings, labels and table headers; the board sets none, so say so. Heading typography is also guarded by the build. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-h1, :is(.ghca-ui, #ghca-ui-scope) .gh-h2, :is(.ghca-ui, #ghca-ui-scope) .gh-h3, :is(.ghca-ui, #ghca-ui-scope) .gh-h4 { text-transform: none; font-style: normal; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-label, :is(.ghca-ui, #ghca-ui-scope) .gh-check, :is(.ghca-ui, #ghca-ui-scope) .gh-table th, :is(.ghca-ui, #ghca-ui-scope) .gh-fchip, :is(.ghca-ui, #ghca-ui-scope) .gh-st { text-transform: none; }
+
+/* Toasts sit above theme headers and sticky bars. */
+:is(.ghca-ui, #ghca-ui-scope) .app-toasts { z-index: 100000; }
+
+/* Employee drawer. The board frames are absolute inside a 1440 artboard; on a real page the layer is fixed to the viewport.
+   Legacy modals (edit 100001 up to certificate 100006) open above it. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer { position: fixed; inset: 0; z-index: 100000; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-scrim { position: fixed; inset: 0; z-index: 0; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer { position: fixed; z-index: 1; top: 0; right: 0; bottom: 0; height: 100%; width: min(600px, 100%); outline: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-body { display: contents; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drawer-x { position: absolute; top: 20px; right: 24px; z-index: 2; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-top { display: flex; align-items: flex-start; gap: 14px; padding-right: 48px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-id { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-name { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-meta { margin-top: 2px; font-size: 13px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-tabs { border-bottom: 0; margin-top: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-panel { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-frag { min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum { display: flex; align-items: center; gap: 18px; padding: 18px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum .gh-ring { --sz: 84px; --th: 9px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum .gh-ring-v { font-size: 22px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum-t { display: flex; flex-direction: column; gap: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum-meta { font-size: 13px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-due { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-due.gh-due--danger { color: var(--gh-status-danger-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-due.gh-due--warning { color: var(--gh-status-warning-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn { align-items: center; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn-act { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold { overflow: hidden; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold-hd { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px 16px; background: var(--gh-surface-sunken); border-bottom: 1px solid var(--gh-border); font-weight: 700; color: var(--gh-text); cursor: pointer; list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold-hd::-webkit-details-marker { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold-hd { font-family: inherit; font-size: var(--gh-text-sm); line-height: var(--gh-lh-sm); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold:not([open]) .gh-fold-hd { border-bottom: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold:not([open]) .gh-fold-hd .gh-i { transform: rotate(180deg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold-t { display: inline-flex; align-items: center; gap: 8px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold-empty { margin: 0; padding: 14px 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--gh-border); color: var(--gh-text); text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-fold .gh-dr-row:last-child { border-bottom: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-main { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-t { font-weight: 600; line-height: 20px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-dr-row { color: var(--gh-text); text-decoration: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-dr-row:hover { background: var(--gh-surface-hover); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-row > .gh-i { color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-admin { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-note { margin: 12px 0 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dl > div.gh-dl-warn { background: var(--gh-status-warning-bg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dl > div.gh-dl-warn dd { color: var(--gh-status-warning-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-more { position: relative; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-more > summary { list-style: none; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-more > summary::-webkit-details-marker { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-menu { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 5; min-width: 260px; }
+/* Menu links use the agency's brand ink (darkened by agency_brand_style() to 4.5:1 on white and on the hover tint), not a
+   fixed blue; menu buttons keep the text colour. Hover and keyboard focus use the agency tint and ring on both. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i:link, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i:visited { color: var(--gh-agency-ink, var(--gh-text-link)); text-decoration: none; }
+/* !important: the link reset above (:where(.gh-app a) background transparent) carries the build's !important guard. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-menu-i:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-menu-i:focus-visible { background-color: var(--gh-agency-soft, var(--gh-surface-hover)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app a.gh-menu-i:focus-visible { color: var(--gh-agency-ink, var(--gh-text-link)); text-decoration: underline; text-underline-offset: 3px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-menu-i:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)) !important; outline-offset: -2px !important; box-shadow: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-menu-i { font: inherit; font-weight: 500; }
+
+/* Phone: the drawer is a full-screen sheet (M-Admin-Sheet). */
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer { width: 100%; border-left: 0; font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drawer-x { top: 8px; left: 8px; right: auto; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer-hd { padding: 56px 16px 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drh-top { padding-right: 0; gap: 12px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer-bd { padding: 16px; gap: 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drh-tabs { flex-wrap: nowrap; margin: 6px -8px 0; padding: 0 8px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer-ft { padding: 12px 16px 20px; gap: 10px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer-ft .gh-btn { min-height: 52px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer-ft > .gh-btn--primary { flex: 1; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-menu { min-width: min(280px, calc(100vw - 32px)); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum { padding: 16px; gap: 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum .gh-ring { --sz: 64px; --th: 7px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-sum .gh-ring-v { font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drawer--emp .gh-tab { font-size: 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-t { font-size: 14.5px; font-weight: 700; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-main .gh-small { margin-top: 0; }
+  /* On the sheet board the footer buttons are real <button>s, so they take the sheet's own type. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-dr-layer .gh-drawer-ft .gh-btn.gh-btn--lnk { font: inherit; line-height: 20px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn { flex-wrap: wrap; }
+}
+
+/* The board renders these controls as <a class="gh-btn">, which keeps .gh-btn's own type. The plugin's are <button>s (they open a panel or a dialog),
+   and `.gh-app button { font: inherit }` would drop them to the page's weight, so restore .gh-btn's declaration. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn.gh-btn--lnk { font-weight: 600; font-size: var(--gh-text-sm); line-height: 1; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-btn.gh-btn--lnk.gh-btn--sm { font-size: var(--gh-text-xs); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drh-tabs .gh-tab:not([aria-selected="true"]) { font-weight: 500; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-main .gh-small { margin-top: 2px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dl--14 dd { font-size: 14px; }
+@media (max-width: 719px) {
+  /* Later than the base rules above so the phone values win. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-row-main .gh-small { margin-top: 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn { align-items: flex-start; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-attn-act { flex: 0 0 100%; }
+}
+
+/* Drawer: Documents and Communications. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-files { margin: 0; padding: 16px 20px 18px; list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-empty { padding: 24px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-foot { margin: 0; padding: 0 20px 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-form { display: flex; flex-direction: column; gap: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drop-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drop-input { width: 100%; font: inherit; font-size: 13px; color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-status { margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-status:empty { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-hist { display: flex; flex-direction: column; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-hist .gh-tl { margin-top: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm.is-failed { border-color: var(--gh-status-danger-border); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm-st { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm-t { font-size: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm-sum { font-size: 13px; font-weight: 600; color: var(--gh-text-link); cursor: pointer; list-style: revert; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm-msg { margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--gh-surface-sunken); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-retry { align-self: flex-start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-linkbtn { display: inline; padding: 0; border: 0; background: none; color: var(--gh-text-link); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-file-n { display: block; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-alert.gh-alert--tight { padding: 10px 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-form .gh-textarea { min-height: 72px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm details { font-size: 13px; }
+
+/* Drawer: Edit Records sub-page and packet generator (Drawer-EditRecords). The drawer widens to the board's 920px while it is open. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-layer .gh-drawer.is-subpage { width: min(920px, 100%); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drawer.is-subpage .gh-drh-tabs, :is(.ghca-ui, #ghca-ui-scope) .gh-drawer.is-subpage .gh-drawer-ft { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-subpage { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-sub-bar { display: flex; align-items: center; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-sub-head { display: flex; flex-direction: column; gap: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-sub-grid { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 20px; align-items: start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-sub-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-sub-side { position: sticky; top: 0; display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-edit { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-wide { grid-column: 1 / -1; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-chip { align-self: flex-start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-label--sm { font-size: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-check.gh-dr-verify { padding: 10px 12px; border-radius: 10px; background: var(--gh-status-warning-bg); color: var(--gh-status-warning-fg); font-weight: 600; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-courses { display: flex; flex-direction: column; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-course { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--gh-border); border-radius: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-course-hd { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-course-grid { display: grid; grid-template-columns: 1fr 190px 120px; gap: 12px; align-items: end; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-editfoot { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 16px; border: 1px solid var(--gh-border-strong); border-radius: var(--gh-radius-md); background: var(--gh-surface-card); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk { border-color: var(--gh-primary-200); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-hd { background: var(--gh-surface-brand-subtle); border-radius: calc(var(--gh-radius-lg) - 1px) calc(var(--gh-radius-lg) - 1px) 0 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-hd > .gh-i { color: var(--gh-primary-800); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-period { display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-period legend { padding: 0; margin-bottom: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-run { display: flex; flex-direction: column; gap: 8px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-live { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 10px; background: var(--gh-surface-sunken); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-live[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-metric { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-pct { font-size: 13px; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-pct strong { font-size: 22px; font-weight: 700; color: var(--gh-text); font-variant-numeric: tabular-nums; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-steps { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-step { display: flex; gap: 10px; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-step > div { display: flex; flex-direction: column; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-step strong { font-weight: 600; color: var(--gh-text-secondary); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-dot { flex: none; width: 10px; height: 10px; margin-top: 5px; border: 2px solid var(--gh-border-strong); border-radius: 50%; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-step[data-state="active"] .gh-pk-dot { border-color: var(--gh-color-primary); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-step[data-state="active"] strong { color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-step[data-state="done"] .gh-pk-dot { border-color: var(--gh-status-success-solid); background: var(--gh-status-success-solid); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-step[data-state="error"] .gh-pk-dot { border-color: var(--gh-status-danger-solid); background: var(--gh-status-danger-solid); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-step[data-state="error"] strong { color: var(--gh-status-danger-fg); }
+
+/* Agency-delivered training: the body is server markup shared with the wp-admin profile screen, so it is styled here, not rebuilt. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-agency [data-ghca-agency-body] { display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 20px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-agency [data-ghca-agency-body] p { margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-agency [data-ghca-agency-body] label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-agency [data-ghca-agency-body] input[type="date"], :is(.ghca-ui, #ghca-ui-scope) .gh-dr-agency [data-ghca-agency-body] select { -webkit-appearance: auto; appearance: auto; min-height: 38px; padding: 0 10px; border: 1px solid var(--gh-border-input); border-radius: var(--gh-radius-sm); background: var(--gh-surface-card); color: var(--gh-text); font: inherit; font-weight: 400; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-agency [data-ghca-agency-body] input[type="checkbox"] { -webkit-appearance: auto; appearance: auto; width: 18px; height: 18px; accent-color: var(--gh-color-primary); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-agency [data-ghca-agency-body] summary { cursor: pointer; font-weight: 600; color: var(--gh-text-link); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-agency .ghca-acd__edit-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--gh-radius-sm); background: var(--gh-color-primary); color: var(--gh-color-on-primary); font: inherit; font-weight: 600; font-size: var(--gh-text-sm); cursor: pointer; }
+
+@media (max-width: 900px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-sub-grid { grid-template-columns: minmax(0, 1fr); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-sub-side { position: static; }
+}
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-grid2 { grid-template-columns: minmax(0, 1fr); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-course-grid { grid-template-columns: minmax(0, 1fr); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-editfoot { padding: 12px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-editfoot .gh-actions { width: 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-dr-editfoot .gh-actions .gh-btn { flex: 1; min-height: 52px; }
+}
+
+/* ---------- Send reminder modal (Modal-SendReminder). Mounts inside the themed wrapper, above the drawer. ---------- */
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-layer { position: fixed; inset: 0; z-index: 100003; display: grid; place-items: center; padding: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-layer .gh-scrim { position: fixed; inset: 0; z-index: 0; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-layer .gh-modal.gh-mod { position: relative; left: auto; top: auto; transform: none; z-index: 1; width: min(560px, 100%); max-height: calc(100vh - 32px); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-layer .gh-modal.gh-mod--confirm { width: min(440px, 100%); }
+:is(.ghca-ui, #ghca-ui-scope) .app-toasts { z-index: 100010; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-ico { width: 40px; height: 40px; flex: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-hd-t { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-hd-t .gh-p { margin: 0; font-size: 13px; line-height: 20px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-form { display: flex; flex-direction: column; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-form[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-who { display: flex; gap: 12px; align-items: center; padding: 12px; border-radius: 12px; background: var(--gh-surface-sunken); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-who-t { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-count { display: flex; justify-content: space-between; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-badge { margin-left: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-seg { border: 0; margin: 0; padding: 0; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-seg > .gh-label { padding: 0; }
+/* The segmented control, as radios: native keyboard behaviour, board look. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-seg--radio label { position: relative; display: flex; flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-seg--radio input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-seg--radio label > span { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 8px; min-height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; background: transparent; color: var(--gh-text-secondary); font-weight: 600; white-space: nowrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-seg--radio input:checked + span { background: var(--gh-surface-card); color: var(--gh-text); box-shadow: var(--gh-shadow-1); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-seg--radio input:focus-visible + span { box-shadow: var(--gh-focus-ring); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-pv { border: 1px solid var(--gh-border); border-radius: var(--gh-radius-md); background: var(--gh-surface-sunken); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-pv-hd { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; cursor: pointer; list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-pv-hd::-webkit-details-marker { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-pv-hd { font-family: inherit; font-size: var(--gh-text-sm); font-weight: 400; line-height: var(--gh-lh-sm); text-transform: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-pv-hd .gh-linkbtn-t { font-weight: 600; color: var(--gh-text-link); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-pv-bd { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-pv-s { margin: 0; font-weight: 600; min-height: 20px; overflow-wrap: anywhere; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-pv-m { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--gh-text-secondary); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-pv-s:empty::before, :is(.ghca-ui, #ghca-ui-scope) .gh-mod-pv-m:empty::before { content: attr(data-empty); color: var(--gh-text-muted); font-weight: 400; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-ready:empty { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-ft { justify-content: space-between; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod--confirm .gh-modal-bd { padding-top: 24px; gap: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-kv dd { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mod-layer { place-items: end center; padding: 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mod-layer .gh-modal.gh-mod, :is(.ghca-ui, #ghca-ui-scope) .gh-mod-layer .gh-modal.gh-mod--confirm { width: 100%; max-height: 92vh; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-seg--radio label > span { padding: 0 6px; gap: 6px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mod-grid { grid-template-columns: 1fr; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mod-ft { flex-direction: column; align-items: stretch; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mod-ft .gh-actions { width: 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mod-ft .gh-actions .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-mod--confirm .gh-modal-ft .gh-btn { flex: 1; min-height: 52px; }
+}
+
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-seg > .gh-label { display: block; width: 100%; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-form .gh-textarea { min-height: 110px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod-kv { font-size: 14px; margin: 14px 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mod--confirm .gh-modal-bd > .gh-p { font-size: 13px; line-height: 20px; }
+
+/* Slice 4: Overdue, Courses, Certificates. Values are the Admin-Overdue, Admin-Courses and Admin-Certificates boards' inline styles; no new colours. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-sect { display: flex; flex-direction: column; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-sect > .gh-h4 { margin-top: 16px; }
+/* The board lets the overdue table's row menu hang outside the table. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-table-wrap--menu { overflow: visible; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-owed { margin: 0; padding-left: 16px; font-size: 13px; line-height: 20px; list-style: disc; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-owed li { margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-owed-sum { font-size: 13px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-late { color: var(--gh-status-danger-fg); font-size: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-soon { color: var(--gh-status-warning-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-st.gh-st--xs { height: 20px; font-size: 11px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-prog-cell { min-width: 160px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-act { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-more { position: relative; display: inline-block; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-more > summary { list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-more > summary::-webkit-details-marker { display: none; }
+/* The board's row menu items are <button>s at the browser's 400 weight, with the browser's smaller <small>; follow the render. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-menu .gh-menu-i { font-weight: 400; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-menu .gh-menu-i small { font-size: smaller; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; text-align: left; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-empty.gh-empty--ok { padding: 32px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-empty--ok .gh-empty-ico { background: var(--gh-status-success-bg); color: var(--gh-status-success-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table--courses .c-course { min-width: 300px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table--courses .c-rate { min-width: 170px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rate { display: flex; gap: 10px; align-items: center; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rate .gh-bar { flex: 1; min-width: 56px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rate strong { width: 40px; text-align: right; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-cert-flag { display: inline-flex; gap: 6px; align-items: center; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-t { font-weight: 600; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard .gh-rate { width: 100%; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tp .gh-grid--kpi { margin: 4px 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-cert-split { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-cert-list { flex: 999 1 640px; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-cert-recent { flex: 1 1 300px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-cert-form { margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-cert-filters { padding: 14px 20px; border-bottom: 1px solid var(--gh-border); display: flex; flex-direction: column; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tmount--card { gap: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tmount--card > .gh-pager { padding: 12px 20px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tmount--card > .gh-card { border: 0; box-shadow: none; }
+/* Inside the card the table has no frame of its own, as on the board. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-table-wrap--flat { border: 0; border-radius: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-cert-exp { margin-top: 4px; }
+/* The board's sub-tabs are a filter here, so they are toggle buttons (aria-pressed), styled as the selected tab. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-subtab[aria-pressed="true"] { background: var(--gh-surface-card); color: var(--gh-text); box-shadow: var(--gh-shadow-1); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-cert-recent .gh-tl { margin: 0; padding: 0; list-style: none; }
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-cert-filters { padding: 12px 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-cert-filters .gh-filters .gh-field { flex: 1 1 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-cards--pad { padding: 12px 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tmount--card > .gh-pager { padding: 12px 16px; }
+}
+
+/* Tablet (720–1023px): the T-Admin-Employees board is a touch layout (`.gh-touch`): every control at least 44px tall.
+   Minimums only, from the design's --gh-touch token, so nothing larger shrinks. Phones already get these from the app layer. */
+@media (min-width: 720px) and (max-width: 1023px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-input, :is(.ghca-ui, #ghca-ui-scope) .gh-select, :is(.ghca-ui, #ghca-ui-scope) .gh-tab, :is(.ghca-ui, #ghca-ui-scope) .gh-subtab, :is(.ghca-ui, #ghca-ui-scope) .gh-menu-i, :is(.ghca-ui, #ghca-ui-scope) .gh-check { min-height: var(--gh-touch); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-btn--icon { min-width: var(--gh-touch); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-pager-ctl .gh-pager-per { min-height: var(--gh-touch); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns button, :is(.ghca-ui, #ghca-ui-scope) .gh-pager-btns a { min-width: var(--gh-touch); min-height: var(--gh-touch); }
+}
+
+/* Phone Overview (M-Admin-Overview board). The phone frame's base is 15px; the KPI strip is two columns of compact tiles;
+   cards sit outside the desktop .gh-ovp grid, so their headers take the general card rules (14px top, 2px under a plain
+   header, -0.012em titles). The approved divided headers keep their divider. */
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov { font-size: 15px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-kpi--overview { grid-template-columns: 1fr 1fr; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-kpi--overview .gh-stat { padding: 12px 14px 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-kpi--overview .gh-stat-val { font-size: 24px; line-height: 30px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-ovp .gh-card-hd { padding-top: 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-ovp .gh-card-hd--plain { padding-bottom: 2px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-ovp .gh-h3 { letter-spacing: -0.012em; }
+}
+
+/* Native date and time fields (Edit Records dates, course completion dates, packet audit period, outside-certificate
+   date, agency-delivered training dates): accent-color set to the active agency's brand colour instead of the
+   browser's or theme's default. Browsers apply accent-color to the native picker inconsistently: Chromium-based
+   browsers may use it for parts of their popup, while Firefox and Safari draw their own popup and may ignore it.
+   The highlighted segment while typing in Chromium stays the system highlight colour; author CSS cannot change it.
+   Legacy panels inside the redesign (.gh-legacy) keep their existing look. !important against themes that set
+   accent-color globally. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app :is(input[type="date"], input[type="datetime-local"], input[type="month"], input[type="week"], input[type="time"]):not(.gh-legacy *) { accent-color: var(--gh-agency, var(--gh-color-primary)) !important; }
+
+/* Slice 5: Reports, Audit data and External training (Admin-Reports, Admin-AuditData, Admin-ExternalReview).
+   Board layout from inline styles on the boards, expressed as classes; tokens only, no colour literals. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-tp .gh-alert--neutral .gh-alert-t { color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tp .gh-alert .gh-alert-body p { margin: 2px 0 0; }
+
+/* Reports: four destination cards (board: padding 20, gap 10, 40px icon tile, description fills). */
+:is(.ghca-ui, #ghca-ui-scope) ul.gh-rpt { list-style: none; margin: 0; padding: 0; gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rpt-card { padding: 20px; display: flex; flex-direction: column; gap: 10px; margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rpt-card .gh-rpt-ico { width: 40px; height: 40px; background: var(--gh-agency-soft, var(--gh-surface-brand-subtle)) !important; color: var(--gh-agency-ink, var(--gh-primary-800)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rpt-card .gh-rpt-desc { flex: 1; margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-rpt-card .gh-btn { align-self: flex-start; }
+
+/* Audit data: the dates table. Inputs keep the stored MM/DD/YYYY text format. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-table-wrap.gh-aud, :is(.ghca-ui, #ghca-ui-scope) .gh-table-wrap.gh-ext-tbl { position: relative; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-person { min-width: 170px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-date { width: 132px; min-width: 0; font-variant-numeric: tabular-nums; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-date.is-invalid { border-color: var(--gh-status-danger-border); box-shadow: 0 0 0 3px var(--gh-status-danger-bg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-aud-pk, :is(.ghca-ui, #ghca-ui-scope) .gh-aud-save { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-aud-msg:empty { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-aud-msg--ok { color: var(--gh-status-success-fg); font-weight: 600; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-aud-msg--error { color: var(--gh-status-danger-fg); font-weight: 600; max-width: 220px; }
+:is(.ghca-ui, #ghca-ui-scope) #ghca-aud-format { margin: 0; }
+
+/* External training: one card per pending submission (board: 180px evidence column, 20/24 body, 14 gap). */
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-hd { display: flex; flex-direction: column; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-hd .gh-subtabs { align-self: flex-start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-card { display: flex; flex-wrap: wrap; overflow: hidden; padding: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-file { flex: 0 0 180px; background: var(--gh-surface-sunken); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 20px; border-right: 1px solid var(--gh-border); text-align: center; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-doc { width: 72px; height: 92px; display: grid; place-items: center; background: var(--gh-surface-card); border: 1px solid var(--gh-border-strong); border-radius: 6px; box-shadow: var(--gh-shadow-1); color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-doc--none { color: var(--gh-status-danger-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-fname { overflow-wrap: anywhere; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-fbtns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-bad { color: var(--gh-status-danger-fg); font-weight: 600; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-bd { flex: 1 1 520px; min-width: 0; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-bd > p { margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-form { display: flex; flex-direction: column; gap: 12px; margin: 0; padding-top: 14px; border-top: 1px solid var(--gh-border); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-form .gh-err[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-checks { display: flex; gap: 8px 20px; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-act { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-sub { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-sub .gh-count { font-family: var(--gh-font-body); line-height: 20px; letter-spacing: normal; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-bd .gh-alert { padding: 10px 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-manage { position: relative; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-manage > summary { list-style: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-manage > summary::-webkit-details-marker { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-manage-bd { display: flex; flex-direction: column; gap: 14px; padding: 14px 0 4px; min-width: 260px; text-align: left; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-mform { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ext-mform .gh-field { width: 100%; }
+
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ext-file { flex: 1 1 100%; border-right: 0; border-bottom: 1px solid var(--gh-border); flex-direction: row; flex-wrap: wrap; justify-content: flex-start; text-align: left; padding: 14px 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ext-doc { width: 44px; height: 56px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ext-bd { padding: 16px; flex-basis: 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ext-act .gh-btn { flex: 1 1 100%; }
+  /* The pager's per-page select, 36px on phones before; the tablet rule already sets it to the touch size. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-pager-ctl .gh-pager-per { min-height: var(--gh-touch); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ext-fbtns .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-ext-manage > summary.gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-ext-mform .gh-btn { min-height: var(--gh-touch); }
+  /* Audit dates and approved training: rows become stacked cards, each cell labelled. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit, :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit tbody, :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit tr, :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit td { display: block; width: 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-aud.gh-table-wrap { border: 0; background: transparent; box-shadow: none; overflow: visible; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit tr { background: var(--gh-surface-card); border: 1px solid var(--gh-border); border-radius: var(--gh-radius-lg); margin-bottom: 12px; padding: 6px 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit td { border: 0; padding: 8px 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit td[data-label]:not([data-label=""])::before { content: attr(data-label); display: block; font-size: 12px; font-weight: 600; color: var(--gh-text-muted); margin-bottom: 4px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-date { width: 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-save .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-table--audit .gh-aud-pk .gh-btn { flex: 1 1 auto; min-height: var(--gh-touch); }
+}

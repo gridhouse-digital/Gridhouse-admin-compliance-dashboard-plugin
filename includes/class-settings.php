@@ -8,6 +8,8 @@ require_once __DIR__ . '/class-agency-training.php';
 final class GHCA_ACD_Settings {
   const OPTION_AGENCY_PROFILE = 'ghca_acd_agency_profile';
   const OPTION_AT_RISK_DAYS = 'ghca_acd_at_risk_days';
+  const OPTION_UI_REDESIGN = 'ghca_acd_ui_redesign';
+  const OPTION_UI_THEME    = 'ghca_acd_ui_theme';
   const OPTION_CACHE_TTL    = 'ghca_acd_cache_ttl';
   const OPTION_PERM_EDIT_RECORDS = 'ghca_acd_permission_edit_records';
   const OPTION_PERM_MANAGE_ANNOUNCEMENTS = 'ghca_acd_permission_manage_announcements';
@@ -240,6 +242,28 @@ final class GHCA_ACD_Settings {
           return max( 7, min( 120, $value ) );
         },
         'default'           => 30,
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
+      self::OPTION_UI_REDESIGN,
+      array(
+        'type'              => 'integer',
+        'sanitize_callback' => array( __CLASS__, 'sanitize_ui_redesign' ),
+        'default'           => 0,
+        'show_in_rest'      => false,
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
+      self::OPTION_UI_THEME,
+      array(
+        'type'              => 'string',
+        'sanitize_callback' => array( __CLASS__, 'sanitize_ui_theme' ),
+        'default'           => 'gridhouse',
+        'show_in_rest'      => false,
       )
     );
 
@@ -581,6 +605,36 @@ final class GHCA_ACD_Settings {
 
   public static function get_at_risk_days(): int {
     return (int) get_option( self::OPTION_AT_RISK_DAYS, 30 );
+  }
+
+  public static function sanitize_ui_redesign( $value ): int {
+    return in_array( $value, array( 1, '1' ), true ) ? 1 : 0;
+  }
+
+  /** @return array<string,string> */
+  public static function ui_theme_choices(): array {
+    return array(
+      'gridhouse' => __( 'Gridhouse (uses the brand colors saved above)', 'ghca-acd' ),
+      'akansoh'   => __( 'Akansoh green and gold', 'ghca-acd' ),
+      'purple'    => __( 'Purple', 'ghca-acd' ),
+    );
+  }
+
+  public static function sanitize_ui_theme( $value ): string {
+    $value = is_string( $value ) ? $value : '';
+    return array_key_exists( $value, self::ui_theme_choices() ) ? $value : 'gridhouse';
+  }
+
+  public static function ui_theme(): string {
+    return self::sanitize_ui_theme( get_option( self::OPTION_UI_THEME, 'gridhouse' ) );
+  }
+
+  public static function ui_redesign_enabled(): bool {
+    $enabled = 1 === self::sanitize_ui_redesign( get_option( self::OPTION_UI_REDESIGN, 0 ) );
+    if ( function_exists( 'apply_filters' ) ) {
+      $enabled = (bool) apply_filters( 'ghca_acd_ui_redesign_enabled', $enabled );
+    }
+    return $enabled;
   }
 
   /** Onboarding context only; these descriptions never select regulatory rules. */
@@ -984,6 +1038,28 @@ final class GHCA_ACD_Settings {
           <tr>
             <th scope="row"><label for="ghca_acd_at_risk_days"><?php esc_html_e( 'At-risk window (days)', 'ghca-acd' ); ?></label></th>
             <td><input type="number" min="7" max="120" id="ghca_acd_at_risk_days" name="<?php echo esc_attr( self::OPTION_AT_RISK_DAYS ); ?>" value="<?php echo esc_attr( (string) $at_risk ); ?>" class="small-text" /></td>
+          </tr>
+          <tr>
+            <th scope="row"><?php esc_html_e( 'Redesigned overview', 'ghca-acd' ); ?></th>
+            <td>
+              <input type="hidden" name="<?php echo esc_attr( self::OPTION_UI_REDESIGN ); ?>" value="0" />
+              <label for="ghca_acd_ui_redesign">
+                <input type="checkbox" id="ghca_acd_ui_redesign" name="<?php echo esc_attr( self::OPTION_UI_REDESIGN ); ?>" value="1" <?php checked( 1, self::sanitize_ui_redesign( get_option( self::OPTION_UI_REDESIGN, 0 ) ) ); ?> />
+                <?php esc_html_e( 'Use the redesigned compliance overview', 'ghca-acd' ); ?>
+              </label>
+              <p class="description"><?php esc_html_e( 'Off by default. Uncheck and save to restore the previous dashboard. This does not change training math, records, or permissions. ODP bulletin pages stay available either way. Agencies do not publish bulletins here.', 'ghca-acd' ); ?></p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><label for="ghca_acd_ui_theme"><?php esc_html_e( 'Redesign color theme', 'ghca-acd' ); ?></label></th>
+            <td>
+              <select id="ghca_acd_ui_theme" name="<?php echo esc_attr( self::OPTION_UI_THEME ); ?>">
+                <?php foreach ( self::ui_theme_choices() as $slug => $label ) : ?>
+                  <option value="<?php echo esc_attr( $slug ); ?>" <?php selected( self::ui_theme(), $slug ); ?>><?php echo esc_html( $label ); ?></option>
+                <?php endforeach; ?>
+              </select>
+              <p class="description"><?php esc_html_e( 'Applies to the redesigned overview and the ODP bulletin pages only. Older tabs keep their existing styling.', 'ghca-acd' ); ?></p>
+            </td>
           </tr>
           <tr>
             <th scope="row"><label for="ghca_acd_cache_ttl"><?php esc_html_e( 'Aggregate cache TTL (seconds)', 'ghca-acd' ); ?></label></th>
