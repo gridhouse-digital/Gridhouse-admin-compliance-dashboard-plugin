@@ -245,10 +245,10 @@ check( str_contains( $h, 'data-ghca-reminder-retry="322"' ) && 1 === substr_coun
 check( str_contains( $h, '>SMS reminder</h4>' ), 'an SMS without a subject is called SMS reminder' );
 check( str_contains( $h, 'Hi Jordan,<br />' ) && str_contains( $h, '&lt;b&gt;Fatal Five&lt;/b&gt;' ) && ! str_contains( $h, '<b>Fatal Five</b>' ), 'the message keeps its line breaks and is escaped' );
 check( str_contains( $h, 'Urgency: High' ) && str_contains( $h, 'Urgency: Normal' ), 'urgency' );
-check( str_contains( $h, '4 communications - 3 shown' ) && str_contains( $h, 'data-ghca-history-open data-user-id="42"' ), 'the full history opens through the existing hook' );
+check( str_contains( $h, 'Showing latest 2 · ' ) && str_contains( $h, 'data-ghca-history-open data-user-id="42"' ), 'the full history opens through the existing hook (board footer: "Showing latest N", N = messages shown)' );
 check( str_contains( $h, 'data-ghca-reminder="42"' ) && str_contains( $h, 'New reminder' ), 'New reminder' );
 $h = board( $ctx + array( 'history' => array(), 'hist_total' => 0 ) );
-check( str_contains( $h, 'No reminders have been recorded for this employee.' ) && str_contains( $h, 'No communications yet' ) && ! str_contains( $h, 'data-ghca-history-open' ), 'an empty history' );
+check( str_contains( $h, 'No reminders have been recorded for this employee.' ) && str_contains( $h, 'All <span class="gh-count">0</span>' ) && ! str_contains( $h, 'data-ghca-history-open' ), 'an empty history' );
 $h = board( $ctx + array( 'history' => $hist, 'can_remind' => false ) );
 check( ! str_contains( $h, 'data-ghca-reminder-retry' ) && ! str_contains( $h, 'New reminder' ), 'no retry and no New reminder without the capability' );
 $h = board( array( 'jotform' => true ) );

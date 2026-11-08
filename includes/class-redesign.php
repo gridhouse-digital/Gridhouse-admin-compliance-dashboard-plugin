@@ -313,10 +313,14 @@ final class GHCA_ACD_Redesign {
 		if ( ! empty( $model['employee_drawer'] ) ) {
 			$html           .= GHCA_ACD_Redesign_Drawer::shell_html();
 			$html           .= GHCA_ACD_Redesign_Reminder::modal_html();
+			$html           .= GHCA_ACD_Redesign_Reminder::history_modal_html();
 			$html           .= class_exists( 'GHCA_ACD_Redesign_Bulk' ) ? GHCA_ACD_Redesign_Bulk::modal_html() : '';
 			self::$rendered = true;
 		}
 		$html .= self::toasts_html( (array) ( $model['flash'] ?? array() ) );
+		// Packet-ready notices that are not inside an open Edit Records card. Filled by the packet script; kept until
+		// the packet is downloaded, expires or is replaced, so dismissing a notice never loses its link.
+		$html .= '<div class="gh-pkr-tray" data-ghca-packet-tray></div>';
 		return $html . '</div></div>';
 	}
 

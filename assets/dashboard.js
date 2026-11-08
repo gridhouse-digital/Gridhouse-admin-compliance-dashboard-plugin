@@ -1668,6 +1668,125 @@
     }
   }
 
+  /*
+   * Packet-ready notice (redesign; Drawer-EditRecords board). Shows only what the merge actually returned: page
+   * count, items flagged for evidence review and the link's expiry. The download is an explicit link to the existing
+   * private, authorized endpoint; it is fetched in the background and saved only if the answer is a real PDF, so an
+   * expired or refused link is reported here instead of navigating away. The server deletes the packet after one
+   * download, after its TTL, or when the same person starts another packet; the notice says which.
+   */
+  var ghcaPacketNotices = [];
+  var ghcaPacketWatch = null;
+  // A notice shown inside the Edit Records card moves to the page tray when that card stops being visible (the
+  // drawer closes, Administration goes back, or the drawer switches employee), so the link is never lost with it.
+  function ghcaPacketRehome() {
+    var tray = document.querySelector('.ghca-ui [data-ghca-packet-tray]');
+    if (!tray) return;
+    ghcaPacketNotices.forEach(function (n) {
+      if (n.el.parentNode === tray) return;
+      if (!n.el.isConnected || n.el.offsetParent === null || n.el.closest('[hidden]')) {
+        n.el.classList.add('is-compact');
+        tray.appendChild(n.el);
+      }
+    });
+  }
+  function ghcaPacketWatchSlots() {
+    if (ghcaPacketWatch || typeof MutationObserver === 'undefined') return;
+    ghcaPacketWatch = new MutationObserver(ghcaPacketRehome);
+    ghcaPacketWatch.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-hidden', 'class'] });
+  }
+  function ghcaPacketLabel(tracker) {
+    return tracker === 'orientation' ? 'Orientation packet' : (tracker === 'oltl_training' ? 'OLTL training packet' : 'Annual packet');
+  }
+  function ghcaPacketSetState(n, state, text) {
+    n.state = state;
+    n.el.classList.remove('gh-toast--success', 'gh-toast--error', 'gh-toast--neutral');
+    n.el.classList.add(state === 'ready' ? 'gh-toast--success' : (state === 'done' ? 'gh-toast--neutral' : 'gh-toast--error'));
+    var link = n.el.querySelector('[data-ghca-packet-download]');
+    if (link && state !== 'ready') { link.remove(); }
+    var msg = n.el.querySelector('[data-ghca-packet-msg]');
+    msg.textContent = text || '';
+    msg.hidden = !text;
+    if (state !== 'ready') { n.el.setAttribute('role', state === 'done' ? 'status' : 'alert'); }
+    if (n.timer) { clearTimeout(n.timer); n.timer = null; }
+  }
+  function ghcaPacketReplaced() {
+    ghcaPacketNotices.forEach(function (n) {
+      if (n.state === 'ready') { ghcaPacketSetState(n, 'replaced', 'Replaced by the packet you started next. Only one packet is kept at a time; generate this one again to download it.'); }
+    });
+  }
+  function ghcaPacketReady(data, tracker, opener) {
+    var label = ghcaPacketLabel(data.tracker || tracker);
+    var slot = opener.closest('.gh-pk') && opener.closest('.gh-pk').querySelector('[data-ghca-packet-slot]');
+    var host = slot || document.querySelector('.ghca-ui [data-ghca-packet-tray]');
+    if (!host) { return; }
+    var el = document.createElement('div');
+    el.className = 'gh-toast gh-toast--success gh-pkr';
+    el.setAttribute('role', 'status');
+    el.setAttribute('data-ghca-packet-notice', data.tracker || tracker);
+    var details = [];
+    if (typeof data.pages === 'number' && data.pages > 0) { details.push(data.pages + (data.pages === 1 ? ' page' : ' pages')); }
+    if (typeof data.flagged === 'number') { details.push(data.flagged > 0 ? data.flagged + (data.flagged === 1 ? ' item' : ' items') + ' flagged for evidence review' : 'nothing flagged for evidence review'); }
+    var expires = typeof data.expires === 'number' && data.expires > 0 ? data.expires * 1000 : 0;
+    el.innerHTML = '<span class="gh-i i-check-circle" aria-hidden="true"></span><div class="gh-pkr-body"><div class="gh-toast-t"></div><p class="gh-pkr-p"><span data-ghca-packet-details></span><a href="#" data-ghca-packet-download></a><span data-ghca-packet-exp></span></p><p class="gh-small gh-pkr-msg" data-ghca-packet-msg hidden></p></div><button type="button" class="gh-toast-x" data-ghca-packet-dismiss aria-label="Dismiss notice (the download link stays available)"><span class="gh-i gh-i--sm i-x" aria-hidden="true"></span></button>';
+    el.querySelector('.gh-toast-t').textContent = label + ' ready';
+    el.querySelector('[data-ghca-packet-details]').textContent = details.length ? details.join(' · ') + '. ' : '';
+    var link = el.querySelector('[data-ghca-packet-download]');
+    link.href = data.download_url;
+    link.textContent = 'Download PDF';
+    link.setAttribute('aria-label', 'Download ' + label + ' (PDF)');
+    el.querySelector('[data-ghca-packet-exp]').textContent = expires ? ' · link expires ' + new Date(expires).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+    host.appendChild(el);
+    var n = { el: el, state: 'ready', url: data.download_url, expires: expires, timer: null };
+    ghcaPacketNotices.push(n);
+    if (slot) { ghcaPacketWatchSlots(); }
+    // Time-out collapses the notice to its title and link; it never removes the link.
+    n.timer = window.setTimeout(function () { if (n.state === 'ready') { el.classList.add('is-compact'); } }, 12000);
+    if (expires) {
+      window.setTimeout(function () { if (n.state === 'ready') { ghcaPacketSetState(n, 'expired', 'This download link has expired and the private copy was deleted. Generate the packet again.'); } }, Math.max(0, expires - Date.now()));
+    }
+    el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-ghca-packet-dismiss]')) {
+        if (n.state === 'ready') { el.classList.add('is-compact'); var a = el.querySelector('[data-ghca-packet-download]'); if (a) a.focus(); }
+        else { el.remove(); ghcaPacketNotices = ghcaPacketNotices.filter(function (x) { return x !== n; }); }
+        return;
+      }
+      var a = e.target.closest('[data-ghca-packet-download]');
+      if (!a) return;
+      e.preventDefault();
+      if (n.state !== 'ready' || a.getAttribute('aria-busy') === 'true') return;
+      if (n.expires && Date.now() >= n.expires) { ghcaPacketSetState(n, 'expired', 'This download link has expired and the private copy was deleted. Generate the packet again.'); return; }
+      a.setAttribute('aria-busy', 'true');
+      a.textContent = 'Downloading…';
+      fetch(n.url, { credentials: 'same-origin' }).then(function (res) {
+        var type = res.headers.get('Content-Type') || '';
+        var disp = res.headers.get('Content-Disposition') || '';
+        return res.arrayBuffer().then(function (buf) { return { res: res, type: type, disp: disp, buf: buf }; });
+      }).then(function (r) {
+        var bytes = new Uint8Array(r.buf);
+        if (r.res.ok && ghcaCertificateResponseIsPdf(r.type, bytes.slice(0, 5))) {
+          var m = /filename="?([^";]+)"?/i.exec(r.disp);
+          var url = URL.createObjectURL(new Blob([r.buf], { type: 'application/pdf' }));
+          var save = document.createElement('a');
+          save.href = url; save.download = m ? m[1] : 'compliance-packet.pdf';
+          document.body.appendChild(save); save.click(); save.remove();
+          window.setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+          ghcaPacketSetState(n, 'done', 'Downloaded. The private copy on the server has been deleted; generate the packet again for another copy.');
+          return;
+        }
+        var text = '';
+        try { var j = JSON.parse(new TextDecoder().decode(bytes)); text = j && j.data && j.data.message; } catch (err) { text = ''; }
+        ghcaPacketSetState(n, 'expired', (text || 'The packet could not be downloaded.') + ' Nothing was saved. Generate the packet again.');
+      }).catch(function () {
+        a.removeAttribute('aria-busy');
+        a.textContent = 'Download PDF';
+        var msg = el.querySelector('[data-ghca-packet-msg]');
+        msg.textContent = 'Could not reach the server. Nothing was saved; the link is still available.';
+        msg.hidden = false;
+      });
+    });
+  }
+
   function initPdfPacket() {
     var modal = document.getElementById('ghca-acd-pdf-modal');
     if (!modal) return;
@@ -1746,10 +1865,19 @@
       if (!packetRelease) packetRelease = ghcaFocusTrap(packetDialog, modal.querySelector('[data-ghca-pdf-cancel]'));
     }
 
+    // While a packet is building, every packet button says so and refuses another start.
+    function setRunning(on) {
+      running = on;
+      document.querySelectorAll('[data-ghca-pdf-packet]').forEach(function (b) {
+        if (on) { b.setAttribute('aria-disabled', 'true'); b.classList.add('is-busy'); }
+        else { b.removeAttribute('aria-disabled'); b.classList.remove('is-busy'); }
+      });
+    }
+
     function closeModal() {
       modal.hidden = true;
       modal.setAttribute('aria-hidden', 'true');
-      running = false;
+      setRunning(false);
       activeRunToken = 0;
       ghcaAcdOverlay.close(modal);
       if (packetRelease) { packetRelease(); packetRelease = null; }
@@ -1759,7 +1887,7 @@
     function failState(msg) {
       bar.classList.add('is-error');
       setProgress(100, msg || t('pdfError', 'Packet generation failed. No packet was created. Please try again.'));
-      running = false;
+      setRunning(false);
     }
 
     function cancelJob(jobId) {
@@ -1809,7 +1937,8 @@
       }
       var runToken = ++runGeneration;
       activeRunToken = runToken;
-      running = true;
+      setRunning(true);
+      if (opener.closest('.ghca-ui')) { ghcaPacketReplaced(); }
       openModal(opener);
       setProgress(3, t('pdfPreparing', 'Preparing packet…'));
 
@@ -1844,7 +1973,14 @@
           mp.append('job_id', jobId);
           post(mp).then(function(mj) {
             if (!isCurrentRun(runToken)) return;
-            if (mj && mj.success && mj.data && mj.data.download_url) {
+            if (mj && mj.success && mj.data && mj.data.download_url && opener.closest('.ghca-ui')) {
+              // Redesign: no automatic download. The drawer stays open and a ready notice offers the PDF.
+              setProgress(100, t('pdfReady', 'Packet ready.'));
+              activeJobId = '';
+              setRunning(false);
+              closeModal();
+              ghcaPacketReady(mj.data, tracker, opener);
+            } else if (mj && mj.success && mj.data && mj.data.download_url) {
               setProgress(100, t('pdfDone', 'Done! Starting download…'));
               window.location.assign(mj.data.download_url);
               activeJobId = '';
@@ -2293,12 +2429,77 @@
       });
     }
 
+    // Drawer Communications tab (redesign): All / Email / SMS show the latest three of that channel, from the
+    // existing history endpoint with the same permission and scope checks.
+    var drawerHistoryController = null;
+    document.addEventListener('click', function (e) {
+      var tab = e.target.closest('.ghca-ui [data-ghca-history-channel]');
+      if (tab) {
+        var wrap = tab.closest('[data-ghca-history-user]');
+        var list = wrap && wrap.querySelector('[data-ghca-history-list]');
+        var status = wrap && wrap.querySelector('[data-ghca-history-drawer-status]');
+        // A pressed tab reloads only after a failed load (so the person can retry).
+        if (!wrap || !list || (tab.getAttribute('aria-pressed') === 'true' && !list.hasAttribute('data-ghca-history-error'))) return;
+        wrap.querySelectorAll('[data-ghca-history-channel]').forEach(function (b) { b.setAttribute('aria-pressed', b === tab ? 'true' : 'false'); });
+        if (drawerHistoryController) drawerHistoryController.abort();
+        drawerHistoryController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        list.setAttribute('aria-busy', 'true');
+        var p = new URLSearchParams();
+        p.append('action', 'ghca_acd_get_communication_history');
+        p.append('user_id', wrap.getAttribute('data-ghca-history-user'));
+        p.append('ghca_ui', 'board');
+        p.append('view', 'drawer');
+        p.append('channel', tab.getAttribute('data-ghca-history-channel') || '');
+        p.append('nonce', window.ghcaAcd.nonce);
+        fetch(window.ghcaAcd.ajaxUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: p.toString(), signal: drawerHistoryController ? drawerHistoryController.signal : undefined })
+          .then(ghcaReadJson)
+          .then(function (json) {
+            list.removeAttribute('aria-busy');
+            if (json && json.success && json.data && typeof json.data.html === 'string') {
+              list.removeAttribute('data-ghca-history-error');
+              list.innerHTML = json.data.html;
+              if (status) status.textContent = tab.textContent.trim().replace(/\s+\d+$/, '') + ': ' + (json.data.total || 0) + (Number(json.data.total) === 1 ? ' message' : ' messages');
+            } else {
+              list.setAttribute('data-ghca-history-error', '');
+              list.innerHTML = '<p class="gh-small gh-due--danger" role="alert"></p>';
+              list.firstChild.textContent = ((json && json.data && json.data.message) || 'Messages could not be loaded.') + ' Select the tab again to retry.';
+            }
+          })
+          .catch(function (err) {
+            if (err && err.name === 'AbortError') return;
+            list.removeAttribute('aria-busy');
+            list.setAttribute('data-ghca-history-error', '');
+            list.innerHTML = '<p class="gh-small gh-due--danger" role="alert"></p>';
+            list.firstChild.textContent = err && err.ghcaSession ? GHCA_SESSION_MSG : 'Network error. Select the tab again to retry.';
+          });
+        return;
+      }
+      var toggle = e.target.closest('.ghca-ui [data-ghca-ch-toggle]');
+      if (toggle) {
+        var msg = document.getElementById(toggle.getAttribute('aria-controls'));
+        var open = toggle.getAttribute('aria-expanded') !== 'true';
+        if (msg) msg.hidden = !open;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        var lab = toggle.querySelector('span');
+        if (lab) lab.textContent = toggle.getAttribute(open ? 'data-hide' : 'data-show');
+        toggle.classList.toggle('is-open', open);
+      }
+    });
+    // "Hide message" / "Show message" on the drawer timeline follows the native details state.
+    document.addEventListener('toggle', function (e) {
+      var d = e.target;
+      if (!d || !d.matches || !d.matches('.ghca-ui details[data-ghca-msg-toggle]')) return;
+      var sum = d.querySelector('summary');
+      if (sum) sum.textContent = sum.getAttribute(d.open ? 'data-hide' : 'data-show');
+    }, true);
+
     var historyState = { userId: '', page: 1, pages: 1, opener: null, release: null, controller: null };
     var closeHistory = function() {};
     var loadHistory = function() {};
 
     if (historyModal) {
-      var historyDialog = historyModal.querySelector('.ghca-acd__history-modal-dialog');
+      var historyDialog = historyModal.querySelector('[data-ghca-history-dialog], .ghca-acd__history-modal-dialog');
+      var historyIsBoard = historyModal.getAttribute('data-ghca-ui') === 'board';
       var historyClose = historyModal.querySelector('[data-ghca-history-close]');
       var historyEmployee = historyModal.querySelector('[data-ghca-history-employee]');
       var historyFilters = historyModal.querySelector('[data-ghca-history-filters]');
@@ -2326,6 +2527,7 @@
         params.append('action', 'ghca_acd_get_communication_history');
         params.append('user_id', historyState.userId);
         params.append('page', String(page || 1));
+        if (historyIsBoard) { params.append('ghca_ui', 'board'); }
         appendHistoryFilters(params);
 
         post(params, historyState.controller ? historyState.controller.signal : undefined).then(function(json) {

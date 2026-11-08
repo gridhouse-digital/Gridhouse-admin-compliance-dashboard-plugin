@@ -209,3 +209,9 @@ Report the tested page, action, expected result, actual result and a redacted sc
 
 `tests/integration-bulk-recovery.php` runs the scheduling lock, the recovery transition and `recover_delivery()` in separate processes against one database. It needs a disposable WordPress site with the plugin active, `mysqli` and `pcntl`, and refuses to run unless `wp-config.php` defines `GHCA_DISPOSABLE_TEST_SITE` and the database name starts with `ghca_test`. Copy the plugin into that site's `wp-content/plugins/` and run `php wp-content/plugins/<plugin folder>/tests/integration-bulk-recovery.php`. It creates and then deletes synthetic users' messaging rows; it never runs cron or sends mail. Never point it at staging or live.
 
+
+## Packet-ready result against a real database
+
+`tests/integration-packet-ready.php` builds real Annual and Orientation packets through the plugin's own AJAX handlers for a synthetic employee and compares the merge result (pages, flagged items, expiry, packet type) with the stored PDF and its job. It also checks private storage, authorization, single use, expiry and replacement. Same requirements as above, plus `pcntl` and TCPDF at `wp-content/plugins/sfwd-lms/includes/lib/tcpdf/tcpdf.php` (LearnDash's path; the test stubs LearnDash's course functions). Run `php wp-content/plugins/<plugin folder>/tests/integration-packet-ready.php`. Nothing is sent and no training record is changed. Never point it at staging or live.
+
+`tests/browser-slice7.cjs` covers the slice 7 browser behaviour (row reminders, Communications and history, packet header, packet-ready notice) on synthetic pages with canned answers: `node tests/browser-slice7.cjs [screenshot-dir]`.

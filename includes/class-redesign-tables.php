@@ -13,6 +13,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class GHCA_ACD_Redesign_Tables {
 	/** Whether the AJAX table refresh should answer with board markup. The server decides; the client only asks. */
+	/** The single-recipient reminder composer is on the page for exactly these viewers (GHCA_ACD_Redesign_Reminder). */
+	private static function can_remind(): bool {
+		return class_exists( 'GHCA_ACD_Redesign_Reminder' ) && GHCA_ACD_Redesign_Reminder::available();
+	}
+
 	/** Row selection (slice 6) on the active Employees table; GHCA_ACD_Redesign_Bulk decides who may select. */
 	private static function selectable(): bool {
 		return class_exists( 'GHCA_ACD_Redesign_Bulk' ) && GHCA_ACD_Redesign_Bulk::can_select();
@@ -233,7 +238,12 @@ final class GHCA_ACD_Redesign_Tables {
 		$h .= '<td class="gh-num gh-secondary gh-nowrap">' . esc_html( (string) $row['last_activity_label'] ) . '</td>';
 		$h .= '<td><span class="gh-st gh-st--' . esc_attr( $tone ) . '">' . esc_html( (string) $row['status_label'] ) . '</span></td>';
 		// A link, as on the board: it goes to the user report without scripts and opens the drawer with them.
-		$h .= '<td class="c-act"><a class="gh-btn gh-btn--secondary gh-btn--sm" href="' . esc_url( $report ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'View %s', 'ghca-acd' ), $name ) ) . '">' . esc_html__( 'View', 'ghca-acd' ) . '</a></td>';
+		$h .= '<td class="c-act"><div class="gh-row-acts"><a class="gh-btn gh-btn--secondary gh-btn--sm" href="' . esc_url( $report ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'View %s', 'ghca-acd' ), $name ) ) . '">' . esc_html__( 'View', 'ghca-acd' ) . '</a>';
+		// Board: a paper-plane per row that opens the existing single-recipient reminder composer (review step included).
+		if ( ! $inactive && self::can_remind() ) {
+			$h .= '<button type="button" class="gh-btn gh-btn--ghost gh-btn--sm gh-btn--icon gh-row-remind" data-ghca-reminder="' . esc_attr( (string) $id ) . '" data-ghca-reminder-name="' . esc_attr( $name ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'Send reminder to %s', 'ghca-acd' ), $name ) ) . '">' . self::icon( 'send' ) . '</button>';
+		}
+		$h .= '</div></td>';
 		return $h . '</tr>';
 	}
 
@@ -260,7 +270,11 @@ final class GHCA_ACD_Redesign_Tables {
 		$h .= '<dl class="gh-kv"><dt>' . esc_html__( 'Next due', 'ghca-acd' ) . '</dt><dd>' . esc_html( (string) $row['due_date_label'] ) . ( $note ? ' · ' . esc_html( $note['text'] ) : '' ) . '</dd>';
 		// The board's card shows two details. Certificate status stays in the table and in the drawer.
 		$h .= '<dt>' . esc_html__( 'Last activity', 'ghca-acd' ) . '</dt><dd>' . esc_html( (string) $row['last_activity_label'] ) . '</dd></dl>';
-		$h .= '<div class="gh-mcard-act"><a class="gh-btn gh-btn--secondary" href="' . esc_url( GHCA_ACD_Data_Provider::get_user_report_url( $id ) ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'View %s', 'ghca-acd' ), $name ) ) . '">' . esc_html__( 'View', 'ghca-acd' ) . '</a></div>';
+		$h .= '<div class="gh-mcard-act"><a class="gh-btn gh-btn--secondary" href="' . esc_url( GHCA_ACD_Data_Provider::get_user_report_url( $id ) ) . '" data-ghca-employee-drawer="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'View %s', 'ghca-acd' ), $name ) ) . '">' . esc_html__( 'View', 'ghca-acd' ) . '</a>';
+		if ( ! $inactive && self::can_remind() ) {
+			$h .= '<button type="button" class="gh-btn gh-btn--secondary" data-ghca-reminder="' . esc_attr( (string) $id ) . '" data-ghca-reminder-name="' . esc_attr( $name ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: employee name */ __( 'Send reminder to %s', 'ghca-acd' ), $name ) ) . '">' . self::icon( 'send' ) . esc_html__( 'Remind', 'ghca-acd' ) . '</button>';
+		}
+		$h .= '</div>';
 		return $h . '</article>';
 	}
 

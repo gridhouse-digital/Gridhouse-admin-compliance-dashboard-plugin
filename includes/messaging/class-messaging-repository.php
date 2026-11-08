@@ -572,7 +572,7 @@ final class GHCA_ACD_Messaging_Repository {
 		$id_query  = $wpdb->prepare( $id_sql, $id_args );
 
 		$rows = $wpdb->get_results(
-			'SELECT c.id AS communication_id, c.actor_user_id, c.source, c.urgency, c.subject, c.message, c.requested_channels, c.state AS communication_state,
+			'SELECT c.id AS communication_id, c.actor_user_id, c.source, c.template_id, c.urgency, c.subject, c.message, c.requested_channels, c.state AS communication_state,
 				        c.created_at, d.id AS delivery_id, d.channel, d.masked_destination, d.provider, d.provider_ref, d.state AS delivery_state,
 				        d.attempt_count, d.last_error_code, d.last_error_summary, d.accepted_at, d.delivered_at, d.failed_at
 				 FROM ' . GHCA_ACD_Messaging_Schema::communications_table() . ' c

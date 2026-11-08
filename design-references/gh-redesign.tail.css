@@ -648,3 +648,102 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-bulk-sp { display: none; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-bulkbar .gh-btn:not(.gh-btn--icon) { flex: 1 1 auto; }
 }
+
+
+/* Slice 7: Communications (Drawer-Communications and Modal-CommHistory boards, canvas 1794092638-1fc0).
+   Copied from the board CSS v2.4.1 block (.gh-ch-*, i-copy), scoped; then adapter rules. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-note { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 18px; color: var(--gh-text-muted); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-note .gh-i { width: 14px; height: 14px; margin-top: 2px; flex: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-filters { display: grid; grid-template-columns: minmax(0, 1fr) 168px 168px; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-dates { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-dates .gh-field { width: 168px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--gh-text-muted); padding-top: 4px; border-top: 1px solid var(--gh-border); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-item { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 14px; padding: 16px 18px; background: var(--gh-surface-card); border: 1px solid var(--gh-border); border-radius: var(--gh-radius-md); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-item.is-failed { border-left: 3px solid var(--gh-status-danger-solid); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-ico { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--gh-surface-sunken); color: var(--gh-text-secondary); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-ico--danger { background: var(--gh-status-danger-bg); color: var(--gh-status-danger-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-t { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15px; line-height: 21px; font-weight: 600; color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-meta { font-size: 13px; line-height: 18px; color: var(--gh-text-secondary); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-meta + .gh-ch-meta { color: var(--gh-text-muted); font-size: 12.5px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-acts { display: flex; align-items: center; gap: 12px; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--gh-border); flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-ch-acts .gh-link { font-size: 13.5px; font-weight: 600; color: var(--gh-color-primary); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-msg { margin: 8px 0 0; padding: 12px 14px; border-radius: 8px; background: var(--gh-surface-sunken); font-size: 13.5px; line-height: 21px; color: var(--gh-text-secondary); white-space: pre-line; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-urgent { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--gh-status-danger-fg); background: var(--gh-status-danger-bg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-err { font-size: 13px; line-height: 19px; color: var(--gh-status-danger-fg); }
+:is(.ghca-ui, #ghca-ui-scope) .i-copy {--i:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='black'><path d='M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z'/></svg>")}
+:is(.ghca-ui, #ghca-ui-scope) .gh-modal-bd > * { flex-shrink: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-layer .gh-ch-modal { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 64px); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-modal .gh-modal-hd { align-items: flex-start; gap: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-hd-ico { width: 40px; height: 40px; flex: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-hd-t { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-hd-t p { margin: 2px 0 0; font-size: 13px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-modal .gh-modal-bd { gap: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-kpi { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-kpi[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-kpi .gh-stat-val { font-size: 24px; line-height: 30px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-form { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-urgent--imp { color: var(--gh-status-warning-fg) !important; background: var(--gh-status-warning-bg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-ch-acts .gh-ch-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; font-size: 13.5px; font-weight: 600; color: var(--gh-agency-ink, var(--gh-text-link)) !important; background: none !important; border: 0; padding: 0; cursor: pointer; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-toggle.is-open .gh-i { transform: rotate(180deg); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-msg[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-ft { justify-content: space-between; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-pager { padding: 0; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ch-pager[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-hist-bar { flex-wrap: wrap; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-hist-bar .gh-subtab[aria-pressed="true"] { background: var(--gh-surface-card) !important; color: var(--gh-text) !important; box-shadow: var(--gh-shadow-1); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-hist [data-ghca-history-list][aria-busy="true"] { opacity: .55; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-foot { text-align: center; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-comm.is-failed { border-color: var(--gh-status-danger-border); }
+@media (max-width: 1023px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-ch-acts .gh-ch-toggle, :is(.ghca-ui, #ghca-ui-scope) .gh-ch-acts .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-ch-pager .gh-pager-btns button, :is(.ghca-ui, #ghca-ui-scope) .gh-dr-hist-bar .gh-subtab { min-height: var(--gh-touch); }
+}
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ch-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ch-filters { grid-template-columns: 1fr; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ch-dates .gh-field { width: calc(50% - 5px); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ch-item { grid-template-columns: 32px minmax(0, 1fr); padding: 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ch-side { grid-column: 2; align-items: flex-start; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ch-ico { width: 32px; height: 32px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ch-layer .gh-ch-modal { width: 100%; max-height: 100vh; border-radius: 0; }
+}
+/* Employees row actions: View plus the board's paper-plane reminder button. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-row-acts { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-row-remind { color: var(--gh-agency-ink, var(--gh-text-link)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mcard-act { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Slice 7: packet generator header in the active agency's main colour (requested; the Drawer-EditRecords board shows
+   the brand tint). Header only, with contrasting text and icon; the card body is unchanged. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk .gh-pk-hd { background: var(--gh-agency, var(--gh-color-primary)) !important; color: var(--gh-agency-on, var(--gh-color-on-primary)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk .gh-pk-hd .gh-h4, :is(.ghca-ui, #ghca-ui-scope) .gh-pk .gh-pk-hd > .gh-i, :is(.ghca-ui, #ghca-ui-scope) .gh-pk .gh-pk-hd .gh-i { color: var(--gh-agency-on, var(--gh-color-on-primary)) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk .gh-pk-hd .gh-eyebrow, :is(.ghca-ui, #ghca-ui-scope) .gh-pk .gh-pk-hd .gh-small, :is(.ghca-ui, #ghca-ui-scope) .gh-pk .gh-pk-hd .gh-muted { color: var(--gh-agency-on, var(--gh-color-on-primary)) !important; opacity: 1; }
+/* Text left, archive icon top-right (board), never wrapping under the copy. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk .gh-pk-hd { display: flex; flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; gap: var(--gh-space-3, 12px); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk .gh-pk-hd > div { flex: 1 1 auto; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk .gh-pk-hd > .gh-i { flex: 0 0 auto; margin-top: 2px; }
+:is(.ghca-ui, #ghca-ui-scope) [data-ghca-pdf-packet].is-busy { opacity: .6; cursor: progress; }
+
+/* Packet-ready notice (board toast component). Persistent: dismissing or timing out collapses it to its title and
+   link; it goes only when downloaded, expired or replaced and then dismissed. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr-tray { position: fixed; right: 16px; bottom: 16px; z-index: 100002; display: flex; flex-direction: column; gap: 10px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr-tray > * { pointer-events: auto; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-ready { display: flex; flex-direction: column; gap: 10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pk-ready:empty { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr { width: 100%; align-items: flex-start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr-body { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr-p { margin: 2px 0 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr [data-ghca-packet-details]:not(:empty) { display: block; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr [data-ghca-packet-exp] { white-space: nowrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr-msg { margin: 6px 0 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr-msg[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr.is-compact [data-ghca-packet-details], :is(.ghca-ui, #ghca-ui-scope) .gh-pkr.is-compact [data-ghca-packet-exp] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-pkr a[data-ghca-packet-download] { font-weight: 700; text-decoration: underline !important; color: inherit !important; display: inline-flex; align-items: center; min-height: 32px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr.gh-toast--neutral { background: var(--gh-surface-card); color: var(--gh-text); border: 1px solid var(--gh-border); }
+@media (max-width: 1023px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-pkr a[data-ghca-packet-download], :is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-toast-x { min-height: var(--gh-touch); min-width: var(--gh-touch); }
+}
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-pkr-tray { left: 12px; right: 12px; width: auto; bottom: 12px; }
+}

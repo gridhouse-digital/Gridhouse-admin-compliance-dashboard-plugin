@@ -31,6 +31,30 @@ if ( 'edit' === $mode ) {
 	exit( 0 );
 }
 
+if ( 'history' === $mode ) {
+	// The communication-history answers for board requests. The real GHCA_ACD_Messaging_UI::ajax_history needs
+	// WordPress; its two board branches only call these drawer functions, which are the plugin's own, so they are
+	// called the same way here over the synthetic, filtered rows.
+	ghca_env_reset( array_merge( array( 'base' => 'https://preview.test' ), json_decode( $argv[3] ?? '{}', true ) ?: array() ) );
+	$p = json_decode( $argv[2] ?? '{}', true ) ?: array();
+	$f = array_intersect_key( $p, array_flip( array( 'channel', 'status', 'search' ) ) );
+	if ( 'drawer' === ( $p['view'] ?? '' ) ) {
+		$d = GHCA_ACD_Redesign_Drawer::history_data( (int) $p['user_id'], (string) ( $p['channel'] ?? '' ) );
+		echo json_encode( array( 'success' => true, 'data' => array( 'html' => GHCA_ACD_Redesign_Drawer::history_timeline_html( $d ), 'total' => $d['total'] ) ) );
+		exit( 0 );
+	}
+	$per   = (int) ( $p['per_page'] ?? 20 );
+	$total = GHCA_ACD_Messaging_Repository::history_count( 42, array_filter( $f ) );
+	$pages = max( 1, (int) ceil( $total / $per ) );
+	$page  = min( max( 1, (int) ( $p['page'] ?? 1 ) ), $pages );
+	$rows  = GHCA_ACD_Messaging_Repository::history_for_employee( 42, $page, $per, array_filter( $f ) );
+	$html  = '<ol class="gh-ch-list">';
+	foreach ( GHCA_ACD_Redesign_Drawer::group_history_rows( $rows ) as $item ) { $html .= GHCA_ACD_Redesign_Drawer::history_modal_item_html( $item ); }
+	$html .= '</ol>';
+	echo json_encode( array( 'success' => true, 'data' => array( 'html' => $rows ? $html : '<div class="gh-empty gh-ch-empty"><strong class="gh-h4">No communications match.</strong></div>', 'total' => $total, 'page' => $page, 'pages' => $pages, 'employeeName' => 'Jordan Ellis', 'stats' => GHCA_ACD_Messaging_Repository::history_stats( 42 ) ) ) );
+	exit( 0 );
+}
+
 if ( 'ajax' === $mode ) {
 	ghca_env_reset( array_merge( array( 'base' => 'https://preview.test' ), json_decode( $argv[3] ?? '{}', true ) ?: array() ) );
 	$r = ghca_env_drawer( json_decode( $argv[2] ?? '{}', true ) ?: array() );

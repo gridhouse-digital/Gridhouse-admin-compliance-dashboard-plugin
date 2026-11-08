@@ -393,6 +393,10 @@ final class GHCA_Audit_PDF {
 			}
 		}
 
+		// Facts about the finished packet, for the ready notice: its real page count and the items its cover lists
+		// under "Evidence review required". Nothing here is estimated.
+		$page_count = (int) $pdf->getNumPages();
+		$flagged    = count( (array) ( $context['audit_data']['evidence_issues'] ?? array() ) );
 		try {
 			$pdf->Output( GHCA_Audit_PDF_Jobs::packet_path( $job['job_id'] ), 'F' );
 			if ( ! GHCA_Audit_PDF_Jobs::secure_file( GHCA_Audit_PDF_Jobs::packet_path( $job['job_id'] ) ) ) {
@@ -421,6 +425,12 @@ final class GHCA_Audit_PDF {
 				admin_url( 'admin-ajax.php' )
 			),
 			'total'        => $total,
+			'pages'        => $page_count,
+			'flagged'      => $flagged,
+			'tracker'      => (string) $job['tracker'],
+			// The job (and so this link) lives until its manifest expires: created + TTL, or until it is downloaded
+			// once, or until the same user starts another packet. Unix seconds; absent if the manifest has no time.
+			'expires'      => ! empty( $job['created'] ) ? (int) $job['created'] + GHCA_Audit_PDF_Jobs::TTL : null,
 		) );
 	}
 

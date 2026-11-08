@@ -94,4 +94,43 @@ final class GHCA_ACD_Redesign_Reminder {
 
 		return $h . '</div>';
 	}
+
+	/**
+	 * Full communication history (Modal-CommHistory board, canvas 1794092638-1fc0). Same id, field names and data
+	 * hooks as the legacy modal, so the existing script, endpoint, filters, paging, Use again and Retry work as
+	 * before. Totals are the ledger's own (email, SMS, failed); the board's "Logged" tile, logged calls and the
+	 * Logged channel/status are not built: the plugin has no logged-contact records.
+	 */
+	public static function history_modal_html(): string {
+		if ( ! class_exists( 'GHCA_ACD_Roles' ) || ! GHCA_ACD_Roles::user_can_view_communication_history() ) {
+			return '';
+		}
+		$h  = '<div class="gh-mod-layer gh-ch-layer" id="ghca-acd-history-modal" data-ghca-ui="board" hidden aria-hidden="true"><div class="gh-scrim" data-ghca-history-close></div>';
+		$h .= '<div class="gh-modal gh-ch-modal" role="dialog" aria-modal="true" aria-labelledby="ghca-ch-title" data-ghca-history-dialog>';
+		$h .= '<div class="gh-modal-hd"><span class="gh-stat-ico gh-ch-hd-ico" aria-hidden="true">' . self::icon( 'mail' ) . '</span><div class="gh-ch-hd-t"><h2 class="gh-h3" id="ghca-ch-title">' . esc_html__( 'Communication history', 'ghca-acd' ) . '</h2><p class="gh-p gh-secondary gh-small"><span data-ghca-history-employee></span> · ' . esc_html__( 'every reminder and message sent from the dashboard', 'ghca-acd' ) . '</p></div>';
+		$h .= '<button type="button" class="gh-btn gh-btn--ghost gh-btn--icon" data-ghca-history-close aria-label="' . esc_attr__( 'Close communication history', 'ghca-acd' ) . '">' . self::icon( 'x' ) . '</button></div>';
+		$h .= '<div class="gh-modal-bd">';
+		$h .= '<section class="gh-grid gh-grid--kpi gh-ch-kpi" aria-label="' . esc_attr__( 'Totals', 'ghca-acd' ) . '" data-ghca-history-stats hidden>';
+		foreach ( array( 'total' => __( 'All messages', 'ghca-acd' ), 'email' => __( 'Email', 'ghca-acd' ), 'sms' => __( 'SMS', 'ghca-acd' ), 'failed' => __( 'Failed', 'ghca-acd' ) ) as $key => $label ) {
+			$h .= '<div class="gh-stat' . ( 'failed' === $key ? ' gh-stat--danger' : '' ) . '"><span class="gh-stat-top">' . esc_html( $label ) . '</span><span class="gh-stat-val" data-ghca-history-stat="' . esc_attr( $key ) . '">0</span></div>';
+		}
+		$h .= '</section>';
+		$h .= '<form role="search" class="gh-ch-form" data-ghca-history-filters><div class="gh-ch-filters">';
+		$h .= '<div class="gh-input-wrap">' . self::icon( 'search' ) . '<label class="gh-sr" for="ghca-ch-q">' . esc_html__( 'Search subject or message', 'ghca-acd' ) . '</label><input id="ghca-ch-q" class="gh-input" type="search" name="search" maxlength="100" placeholder="' . esc_attr__( 'Search subject or message', 'ghca-acd' ) . '" /></div>';
+		$h .= '<label class="gh-sr" for="ghca-ch-c">' . esc_html__( 'Channel', 'ghca-acd' ) . '</label><select id="ghca-ch-c" class="gh-select" name="channel"><option value="">' . esc_html__( 'All channels', 'ghca-acd' ) . '</option><option value="email">' . esc_html__( 'Email', 'ghca-acd' ) . '</option><option value="sms">' . esc_html__( 'SMS', 'ghca-acd' ) . '</option></select>';
+		$h .= '<label class="gh-sr" for="ghca-ch-s">' . esc_html__( 'Status', 'ghca-acd' ) . '</label><select id="ghca-ch-s" class="gh-select" name="status"><option value="">' . esc_html__( 'All statuses', 'ghca-acd' ) . '</option>';
+		foreach ( array( 'queued' => __( 'Queued', 'ghca-acd' ), 'processing' => __( 'Sending', 'ghca-acd' ), 'accepted' => __( 'Accepted', 'ghca-acd' ), 'sent' => __( 'Sent', 'ghca-acd' ), 'delivered' => __( 'Delivered', 'ghca-acd' ), 'undelivered' => __( 'Undelivered', 'ghca-acd' ), 'failed' => __( 'Not sent (failed)', 'ghca-acd' ), 'suppressed' => __( 'Suppressed', 'ghca-acd' ) ) as $value => $label ) {
+			$h .= '<option value="' . esc_attr( $value ) . '">' . esc_html( $label ) . '</option>';
+		}
+		$h .= '</select></div><div class="gh-ch-dates">';
+		$h .= '<div class="gh-field"><label class="gh-label" for="ghca-ch-f">' . esc_html__( 'From', 'ghca-acd' ) . '</label><input id="ghca-ch-f" class="gh-input" type="date" name="date_from" /></div>';
+		$h .= '<div class="gh-field"><label class="gh-label" for="ghca-ch-to">' . esc_html__( 'To', 'ghca-acd' ) . '</label><input id="ghca-ch-to" class="gh-input" type="date" name="date_to" /></div>';
+		$h .= '<button type="submit" class="gh-btn gh-btn--secondary gh-btn--sm">' . esc_html__( 'Apply', 'ghca-acd' ) . '</button><button type="reset" class="gh-btn gh-btn--ghost gh-btn--sm" data-ghca-history-reset>' . esc_html__( 'Clear filters', 'ghca-acd' ) . '</button></div></form>';
+		$h .= '<div class="gh-ch-bar" data-ghca-history-status><span role="status" data-ghca-history-count></span><span>' . esc_html__( 'Newest first', 'ghca-acd' ) . '</span></div>';
+		$h .= '<div data-ghca-history-results aria-live="polite"></div>';
+		$h .= '<p class="gh-ch-note">' . self::icon( 'info' ) . esc_html__( '“Accepted by email transport” means WordPress handed the email to the mail server. It is not proof the employee received or opened it.', 'ghca-acd' ) . '</p></div>';
+		$h .= '<div class="gh-modal-ft gh-ch-ft"><div class="gh-pager gh-ch-pager" data-ghca-history-pagination hidden><span data-ghca-history-page-label></span><div class="gh-pager-btns"><button type="button" data-ghca-history-page="previous" aria-label="' . esc_attr__( 'Previous page', 'ghca-acd' ) . '">' . self::icon( 'chev-left', 'sm' ) . '</button><button type="button" data-ghca-history-page="next" aria-label="' . esc_attr__( 'Next page', 'ghca-acd' ) . '">' . self::icon( 'chev-right', 'sm' ) . '</button></div></div>';
+		$h .= '<button type="button" class="gh-btn gh-btn--secondary" data-ghca-history-close>' . esc_html__( 'Close', 'ghca-acd' ) . '</button></div></div></div>';
+		return $h;
+	}
 }

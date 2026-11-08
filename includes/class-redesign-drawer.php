@@ -262,15 +262,51 @@ final class GHCA_ACD_Redesign_Drawer {
 	 *
 	 * @return array<string,mixed>
 	 */
-	public static function history_data( int $user_id ): array {
-		$rows  = (array) GHCA_ACD_Messaging_Repository::history_for_employee( $user_id, 1, 3 );
-		$total = (int) GHCA_ACD_Messaging_Repository::history_count( $user_id );
+	/**
+	 * Latest messages for the drawer's Communications tab. $channel narrows to email or sms with the existing
+	 * history filter; anything else is all channels.
+	 */
+	public static function history_data( int $user_id, string $channel = '', int $limit = 3 ): array {
+		$filters = in_array( $channel, array( 'email', 'sms' ), true ) ? array( 'channel' => $channel ) : array();
+		$rows    = (array) GHCA_ACD_Messaging_Repository::history_for_employee( $user_id, 1, max( 1, min( 20, $limit ) ), $filters );
+		return array(
+			'user_id'    => $user_id,
+			'channel'    => isset( $filters['channel'] ) ? $filters['channel'] : '',
+			'total'      => (int) GHCA_ACD_Messaging_Repository::history_count( $user_id, $filters ),
+			'all_total'  => (int) GHCA_ACD_Messaging_Repository::history_count( $user_id ),
+			'items'      => self::group_history_rows( $rows ),
+			'can_remind' => (bool) GHCA_ACD_Roles::user_can_send_reminders(),
+		);
+	}
+
+	/** Template names by id for this request (the message may name a template that was later deactivated). */
+	private static $template_names = array();
+
+	private static function template_name( int $id ): string {
+		if ( $id <= 0 ) {
+			return '';
+		}
+		if ( ! array_key_exists( $id, self::$template_names ) ) {
+			$t = GHCA_ACD_Messaging_Repository::get_template( $id, false );
+			self::$template_names[ $id ] = $t ? (string) $t['name'] : '';
+		}
+		return self::$template_names[ $id ];
+	}
+
+	/**
+	 * History rows (one per delivery) grouped into messages, for the drawer and the full-history modal.
+	 *
+	 * @param array<int,array<string,mixed>> $rows
+	 * @return array<int,array<string,mixed>>
+	 */
+	public static function group_history_rows( array $rows ): array {
 		$group = array();
 		foreach ( $rows as $row ) {
 			$id = (int) $row['communication_id'];
 			if ( ! isset( $group[ $id ] ) ) {
 				$actor      = get_userdata( (int) $row['actor_user_id'] );
 				$created_ts = strtotime( (string) $row['created_at'] . ' UTC' );
+				$template = self::template_name( (int) ( $row['template_id'] ?? 0 ) );
 				$group[ $id ] = array(
 					'id'         => $id,
 					'actor'      => $actor ? (string) $actor->display_name : __( 'Former administrator', 'ghca-acd' ),
@@ -279,21 +315,24 @@ final class GHCA_ACD_Redesign_Drawer {
 					'created'    => $created_ts ? wp_date( 'M j, Y g:i a', $created_ts ) : (string) $row['created_at'],
 					'subject'    => '' !== trim( (string) $row['subject'] ) ? (string) $row['subject'] : __( 'SMS reminder', 'ghca-acd' ),
 					'message'    => (string) $row['message'],
+					'template'   => $template,
+					'reusable'   => 'employee_drawer' === (string) ( $row['source'] ?? '' ) && GHCA_ACD_Roles::user_can_send_reminders(),
 					'deliveries' => array(),
 				);
 			}
 			$state   = sanitize_key( (string) $row['delivery_state'] );
 			$channel = sanitize_key( (string) $row['channel'] );
 			$group[ $id ]['deliveries'][] = array(
-				'id'      => (int) $row['delivery_id'],
-				'channel' => $channel,
-				'state'   => $state,
-				'label'   => GHCA_ACD_Messaging_UI::delivery_label( $state, $channel ),
-				'error'   => 'failed' === $state ? (string) ( $row['last_error_summary'] ?? '' ) : '',
-				'retry'   => self::can_retry( $row, $state, $channel ),
+				'id'          => (int) $row['delivery_id'],
+				'channel'     => $channel,
+				'state'       => $state,
+				'destination' => (string) ( $row['masked_destination'] ?? '' ),
+				'label'       => GHCA_ACD_Messaging_UI::delivery_label( $state, $channel ),
+				'error'       => 'failed' === $state ? (string) ( $row['last_error_summary'] ?? '' ) : '',
+				'retry'       => self::can_retry( $row, $state, $channel ),
 			);
 		}
-		return array( 'user_id' => $user_id, 'total' => $total, 'items' => array_values( $group ), 'can_remind' => (bool) GHCA_ACD_Roles::user_can_send_reminders() );
+		return array_values( $group );
 	}
 
 	/**
@@ -396,33 +435,53 @@ final class GHCA_ACD_Redesign_Drawer {
 		return $h . '</div><div class="gh-card-ft"><button type="submit" class="gh-btn gh-btn--primary">' . esc_html__( 'Save for review', 'ghca-acd' ) . '</button></div></form></section>';
 	}
 
-	/** @param array<string,mixed> $m */
+	/**
+	 * Communications tab (Drawer-Communications board, canvas 1794092638-1fc0): channel sub-tabs, the latest three
+	 * messages as a timeline, and a link to the full history. The board's "Logged" sub-tab and logged calls are not
+	 * built: the plugin records sent messages only, and has no logged-contact records.
+	 *
+	 * @param array<string,mixed> $m
+	 */
 	private static function communications_html( array $m ): string {
 		$d = $m['history_data'] ?? null;
 		if ( ! is_array( $d ) ) {
 			return '<div class="gh-card"><div class="gh-empty gh-dr-empty"><span class="gh-empty-ico">' . self::icon( 'mail', 'xl' ) . '</span><strong>' . esc_html__( 'Communication history is not available.', 'ghca-acd' ) . '</strong></div></div>';
 		}
-		$id    = (int) $d['user_id'];
-		$total = (int) $d['total'];
-		$h     = '<div class="gh-dr-hist" data-ghca-history-user="' . esc_attr( (string) $id ) . '"><div class="gh-toolbar"><span class="gh-small gh-muted">' . esc_html( $total > 0 ? sprintf( /* translators: %d: number of communications */ _n( '%d communication', '%d communications', $total, 'ghca-acd' ), $total ) : __( 'No communications yet', 'ghca-acd' ) ) . '</span>';
+		$id = (int) $d['user_id'];
+		$h  = '<div class="gh-dr-hist" data-ghca-history-user="' . esc_attr( (string) $id ) . '"><div class="gh-toolbar gh-dr-hist-bar">';
+		$h .= '<div class="gh-subtabs" role="group" aria-label="' . esc_attr__( 'Show messages by channel', 'ghca-acd' ) . '">';
+		foreach ( array( '' => __( 'All', 'ghca-acd' ), 'email' => __( 'Email', 'ghca-acd' ), 'sms' => __( 'SMS', 'ghca-acd' ) ) as $key => $label ) {
+			$h .= '<button type="button" class="gh-subtab" data-ghca-history-channel="' . esc_attr( $key ) . '" aria-pressed="' . ( '' === $key ? 'true' : 'false' ) . '">' . esc_html( $label );
+			if ( '' === $key ) {
+				$h .= ' <span class="gh-count">' . esc_html( (string) (int) $d['all_total'] ) . '</span>';
+			}
+			$h .= '</button>';
+		}
+		$h .= '</div>';
 		if ( $d['can_remind'] ) {
 			$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm gh-btn--lnk" data-ghca-reminder="' . esc_attr( (string) $id ) . '" data-ghca-reminder-name="' . esc_attr( (string) $m['employee_name'] ) . '">' . self::icon( 'plus', 'sm' ) . esc_html__( 'New reminder', 'ghca-acd' ) . '</button>';
 		}
-		$h .= '</div><div data-ghca-history-list>';
+		$h .= '</div><p class="gh-sr" role="status" aria-live="polite" data-ghca-history-drawer-status></p>';
+		$h .= '<div data-ghca-history-list>' . self::history_timeline_html( $d ) . '</div></div>';
+		return $h;
+	}
+
+	/** The drawer timeline and its footer, for the first render and for the channel sub-tabs. @param array<string,mixed> $d */
+	public static function history_timeline_html( array $d ): string {
+		$id    = (int) $d['user_id'];
+		$total = (int) $d['total'];
 		if ( empty( $d['items'] ) ) {
-			$h .= '<div class="gh-card"><div class="gh-empty gh-dr-empty"><span class="gh-empty-ico">' . self::icon( 'mail', 'xl' ) . '</span><strong>' . esc_html__( 'No reminders have been recorded for this employee.', 'ghca-acd' ) . '</strong></div></div>';
-		} else {
-			$h .= '<ol class="gh-tl">';
-			foreach ( $d['items'] as $item ) {
-				$h .= self::history_item_html( (array) $item );
-			}
-			$h .= '</ol>';
+			$text = 'email' === $d['channel'] ? __( 'No emails have been recorded for this employee.', 'ghca-acd' ) : ( 'sms' === $d['channel'] ? __( 'No SMS messages have been recorded for this employee.', 'ghca-acd' ) : __( 'No reminders have been recorded for this employee.', 'ghca-acd' ) );
+			return '<div class="gh-card"><div class="gh-empty gh-dr-empty"><span class="gh-empty-ico">' . self::icon( 'mail', 'xl' ) . '</span><strong>' . esc_html( $text ) . '</strong></div></div>';
 		}
-		$h .= '</div>';
-		if ( $total > 0 ) {
-			$h .= '<p class="gh-small gh-muted gh-dr-foot">' . esc_html( sprintf( /* translators: 1: total communications, 2: number shown */ __( '%1$d communications - %2$d shown', 'ghca-acd' ), $total, min( 3, $total ) ) ) . ' · <button type="button" class="gh-linkbtn" data-ghca-history-open data-user-id="' . esc_attr( (string) $id ) . '">' . esc_html__( 'View all communication history', 'ghca-acd' ) . '</button></p>';
+		$h = '<ol class="gh-tl">';
+		foreach ( $d['items'] as $item ) {
+			$h .= self::history_item_html( (array) $item );
 		}
-		return $h . '</div>';
+		$h .= '</ol>';
+		/* translators: %d: number of messages shown */
+		$h .= '<p class="gh-small gh-muted gh-dr-foot">' . esc_html( sprintf( __( 'Showing latest %d', 'ghca-acd' ), min( count( $d['items'] ), $total ) ) ) . ' · <button type="button" class="gh-linkbtn" data-ghca-history-open data-user-id="' . esc_attr( (string) $id ) . '">' . esc_html__( 'View all communication history', 'ghca-acd' ) . '</button></p>';
+		return $h;
 	}
 
 	/** @param array<string,mixed> $item */
@@ -437,11 +496,10 @@ final class GHCA_ACD_Redesign_Drawer {
 		$h    = '<li><span class="gh-tl-dot ' . ( $failed ? 'gh-tl-dot--danger' : 'gh-tl-dot--brand' ) . '">' . self::icon( 'sms' === $lead ? 'sms' : 'mail', 'sm' ) . '</span><div class="gh-card gh-dr-comm' . ( $failed ? ' is-failed' : '' ) . '">';
 		$h   .= '<div class="gh-dr-comm-top"><span class="gh-small gh-muted"><strong>' . esc_html( implode( ' + ', array_values( $channels ) ) ) . '</strong> · <time' . ( $item['created_ts'] ? ' datetime="' . esc_attr( gmdate( 'c', (int) $item['created_ts'] ) ) . '"' : '' ) . '>' . esc_html( (string) $item['created'] ) . '</time> · ' . esc_html( sprintf( /* translators: %s: name of the administrator who sent it */ __( 'by %s', 'ghca-acd' ), (string) $item['actor'] ) ) . '</span><span class="gh-dr-comm-st">';
 		foreach ( $item['deliveries'] as $delivery ) {
-			$tone = in_array( $delivery['state'], array( 'failed', 'undelivered', 'suppressed' ), true ) ? 'failed' : ( in_array( $delivery['state'], array( 'queued', 'processing' ), true ) ? 'progress' : 'sent' );
-			$h   .= '<span class="gh-st gh-st--' . esc_attr( $tone ) . '">' . esc_html( (string) $delivery['label'] ) . '</span>';
+			$h .= '<span class="gh-st gh-st--' . esc_attr( self::delivery_tone( (string) $delivery['state'] ) ) . '">' . esc_html( (string) $delivery['label'] ) . '</span>';
 		}
 		$h .= '</span></div><h4 class="gh-h4 gh-dr-comm-t">' . esc_html( (string) $item['subject'] ) . '</h4>';
-		$h .= '<details open><summary class="gh-dr-comm-sum">' . esc_html__( 'Message', 'ghca-acd' ) . '</summary><p class="gh-p gh-secondary gh-dr-comm-msg">' . nl2br( esc_html( (string) $item['message'] ) ) . '</p></details>';
+		$h .= '<details open data-ghca-msg-toggle><summary class="gh-dr-comm-sum" data-show="' . esc_attr__( 'Show message', 'ghca-acd' ) . '" data-hide="' . esc_attr__( 'Hide message', 'ghca-acd' ) . '">' . esc_html__( 'Hide message', 'ghca-acd' ) . '</summary><p class="gh-p gh-secondary gh-dr-comm-msg">' . nl2br( esc_html( (string) $item['message'] ) ) . '</p></details>';
 		foreach ( $item['deliveries'] as $delivery ) {
 			if ( '' !== (string) $delivery['error'] ) {
 				$h .= '<span class="gh-small gh-due--danger">' . esc_html( (string) $delivery['error'] ) . '</span>';
@@ -450,7 +508,58 @@ final class GHCA_ACD_Redesign_Drawer {
 				$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm gh-dr-retry" data-ghca-reminder-retry="' . esc_attr( (string) $delivery['id'] ) . '">' . esc_html( sprintf( /* translators: %s: EMAIL or SMS */ __( 'Retry %s', 'ghca-acd' ), strtoupper( (string) $delivery['channel'] ) ) ) . '</button>';
 			}
 		}
-		return $h . '<span class="gh-small gh-muted">' . esc_html( sprintf( /* translators: %s: urgency level */ __( 'Urgency: %s', 'ghca-acd' ), ucfirst( (string) $item['urgency'] ) ) ) . '</span></div></li>';
+		$meta = sprintf( /* translators: %s: urgency level */ __( 'Urgency: %s', 'ghca-acd' ), ucfirst( (string) $item['urgency'] ) );
+		if ( '' !== (string) ( $item['template'] ?? '' ) ) {
+			/* translators: %s: template name */
+			$meta .= ' · ' . sprintf( __( 'Template: %s', 'ghca-acd' ), (string) $item['template'] );
+		}
+		return $h . '<span class="gh-small gh-muted">' . esc_html( $meta ) . '</span></div></li>';
+	}
+
+	private static function delivery_tone( string $state ): string {
+		return in_array( $state, array( 'failed', 'undelivered', 'suppressed' ), true ) ? 'failed' : ( in_array( $state, array( 'queued', 'processing' ), true ) ? 'progress' : 'sent' );
+	}
+
+	/**
+	 * One message in the full-history modal (Modal-CommHistory board). The actions are the existing ones: Use again
+	 * (data-ghca-history-reuse, the existing draft endpoint) and Retry for an eligible failed delivery
+	 * (data-ghca-reminder-retry). The board's "Open Administration" for a missing phone number is not built.
+	 *
+	 * @param array<string,mixed> $item
+	 */
+	public static function history_modal_item_html( array $item ): string {
+		$failed = false;
+		foreach ( $item['deliveries'] as $delivery ) {
+			$failed = $failed || in_array( $delivery['state'], array( 'failed', 'undelivered' ), true );
+		}
+		$lead = (string) ( $item['deliveries'][0]['channel'] ?? 'email' );
+		$mid  = 'gh-ch-m-' . (int) $item['id'];
+		$h    = '<li class="gh-ch-item' . ( $failed ? ' is-failed' : '' ) . '"><span class="gh-ch-ico' . ( $failed ? ' gh-ch-ico--danger' : '' ) . '">' . self::icon( 'sms' === $lead ? 'sms' : 'mail' ) . '</span><div class="gh-ch-main">';
+		$h   .= '<div class="gh-ch-t">' . esc_html( (string) $item['subject'] ) . ( 'urgent' === $item['urgency'] ? '<span class="gh-ch-urgent">' . esc_html__( 'Urgent', 'ghca-acd' ) . '</span>' : ( 'important' === $item['urgency'] ? '<span class="gh-ch-urgent gh-ch-urgent--imp">' . esc_html__( 'Important', 'ghca-acd' ) . '</span>' : '' ) ) . '</div>';
+		foreach ( $item['deliveries'] as $delivery ) {
+			$h .= '<span class="gh-ch-meta">' . esc_html( ( 'sms' === $delivery['channel'] ? 'SMS' : __( 'Email', 'ghca-acd' ) ) . ( '' !== $delivery['destination'] ? ' · ' . $delivery['destination'] : '' ) ) . '</span>';
+		}
+		$h .= '<span class="gh-ch-meta">' . esc_html( (string) $item['created'] . ' · ' . sprintf( /* translators: %s: sender */ __( 'by %s', 'ghca-acd' ), (string) $item['actor'] ) ) . ( '' !== (string) $item['template'] ? esc_html( ' · ' . sprintf( /* translators: %s: template name */ __( 'Template: %s', 'ghca-acd' ), (string) $item['template'] ) ) : '' ) . '</span>';
+		foreach ( $item['deliveries'] as $delivery ) {
+			if ( '' !== (string) $delivery['error'] ) {
+				$h .= '<p class="gh-ch-err">' . esc_html( (string) $delivery['error'] ) . '</p>';
+			}
+		}
+		$h .= '<p class="gh-ch-msg" id="' . esc_attr( $mid ) . '" hidden>' . esc_html( (string) $item['message'] ) . '</p>';
+		$h .= '<div class="gh-ch-acts"><button type="button" class="gh-linkbtn gh-ch-toggle" aria-expanded="false" aria-controls="' . esc_attr( $mid ) . '" data-ghca-ch-toggle data-show="' . esc_attr__( 'View full message', 'ghca-acd' ) . '" data-hide="' . esc_attr__( 'Hide message', 'ghca-acd' ) . '"><span>' . esc_html__( 'View full message', 'ghca-acd' ) . '</span>' . self::icon( 'chev-down', 'sm' ) . '</button>';
+		if ( $item['reusable'] ) {
+			$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-history-reuse="' . esc_attr( (string) $item['id'] ) . '">' . self::icon( 'copy', 'sm' ) . esc_html__( 'Use again', 'ghca-acd' ) . '</button>';
+		}
+		foreach ( $item['deliveries'] as $delivery ) {
+			if ( $delivery['retry'] ) {
+				$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-reminder-retry="' . esc_attr( (string) $delivery['id'] ) . '">' . self::icon( 'refresh', 'sm' ) . esc_html( sprintf( /* translators: %s: EMAIL or SMS */ __( 'Retry %s', 'ghca-acd' ), strtoupper( (string) $delivery['channel'] ) ) ) . '</button>';
+			}
+		}
+		$h .= '</div></div><div class="gh-ch-side">';
+		foreach ( $item['deliveries'] as $delivery ) {
+			$h .= '<span class="gh-st gh-st--' . esc_attr( self::delivery_tone( (string) $delivery['state'] ) ) . '">' . esc_html( (string) $delivery['label'] ) . '</span>';
+		}
+		return $h . '</div></li>';
 	}
 
 	/**

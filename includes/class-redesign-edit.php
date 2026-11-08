@@ -132,6 +132,9 @@ final class GHCA_ACD_Redesign_Edit {
 		}
 		$h .= '</div>';
 
+		// Packet-ready notice for packets started from this card (Drawer-EditRecords board, below the generator).
+		$h .= '<div class="gh-pk-ready" data-ghca-packet-slot></div>';
+
 		// Mirrors the live job; idle until a packet run starts. The script sets each step's data-state.
 		$h .= '<div class="gh-pk-live" data-ghca-packet-mirror data-ghca-board hidden><div class="gh-pk-metric"><span class="gh-label">' . esc_html__( 'Compilation status', 'ghca-acd' ) . '</span><span class="gh-pk-pct"><strong data-ghca-packet-pct>0</strong>%</span></div>';
 		$h .= '<div class="gh-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="' . esc_attr__( 'Packet compilation progress', 'ghca-acd' ) . '" data-ghca-packet-track><span data-ghca-packet-bar></span></div><p class="gh-small gh-muted" data-ghca-packet-label aria-live="polite"></p><ol class="gh-pk-steps">';

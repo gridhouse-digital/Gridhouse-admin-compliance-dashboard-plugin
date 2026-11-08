@@ -182,8 +182,28 @@ final class GHCA_ACD_Messaging_Schema {
 }
 final class GHCA_ACD_Messaging_Repository {
 	const MAX_DELIVERY_ATTEMPTS = 3;
-	public static function history_count( int $u ): int { return $GLOBALS['ghca_env']['hist_total'] ?? 4; }
-	public static function history_for_employee( int $u, int $page, int $per ): array { return $GLOBALS['ghca_env']['history'] ?? array(); }
+	/** Synthetic rows filtered like the real repository: by channel, status and search, then paged by message. */
+	public static function history_rows( array $f = array() ): array {
+		$rows = $GLOBALS['ghca_env']['history'] ?? array();
+		if ( ! empty( $f['channel'] ) ) { $rows = array_values( array_filter( $rows, static function ( $r ) use ( $f ) { return $r['channel'] === $f['channel']; } ) ); }
+		if ( ! empty( $f['status'] ) ) { $rows = array_values( array_filter( $rows, static function ( $r ) use ( $f ) { return $r['delivery_state'] === $f['status']; } ) ); }
+		if ( ! empty( $f['search'] ) ) { $rows = array_values( array_filter( $rows, static function ( $r ) use ( $f ) { return false !== stripos( $r['subject'] . ' ' . $r['message'], $f['search'] ); } ) ); }
+		return $rows;
+	}
+	public static function history_count( int $u, array $f = array() ): int {
+		if ( isset( $GLOBALS['ghca_env']['hist_total'] ) && empty( $f ) ) { return (int) $GLOBALS['ghca_env']['hist_total']; }
+		return count( array_unique( array_column( self::history_rows( $f ), 'communication_id' ) ) );
+	}
+	public static function history_for_employee( int $u, int $page, int $per, array $f = array() ): array {
+		$rows = self::history_rows( $f );
+		$ids  = array_slice( array_values( array_unique( array_column( $rows, 'communication_id' ) ) ), ( max( 1, $page ) - 1 ) * $per, $per );
+		return array_values( array_filter( $rows, static function ( $r ) use ( $ids ) { return in_array( $r['communication_id'], $ids, true ); } ) );
+	}
+	public static function history_stats( int $u ): array {
+		$rows = $GLOBALS['ghca_env']['history'] ?? array();
+		return array( 'total' => count( array_unique( array_column( $rows, 'communication_id' ) ) ), 'email' => count( array_filter( $rows, static function ( $r ) { return 'email' === $r['channel']; } ) ), 'sms' => count( array_filter( $rows, static function ( $r ) { return 'sms' === $r['channel']; } ) ), 'failed' => count( array_filter( $rows, static function ( $r ) { return 'failed' === $r['delivery_state']; } ) ) );
+	}
+	public static function get_template( int $id, bool $active = true ) { return 7 === $id ? array( 'id' => 7, 'name' => 'Course due soon' ) : null; }
 }
 final class GHCA_ACD_Message_Template_Renderer {
 	public static function normalize_urgency( string $u ): string { return 'high' === $u ? 'high' : 'normal'; }
