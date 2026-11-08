@@ -6,7 +6,8 @@ One place for what each staging site runs. Update it whenever a build is install
 
 | Build | Status | Date | Notes |
 | --- | --- | --- | --- |
-| `1.7.3-rc.8-1cde2ca` | Prepared, not installed | | Drawer header, Employees table, packet notice visibility, inline report, Manage users, announcements. `docs/dashboard-redesign-phase2-slice8.md`. |
+| `1.7.3-rc.8-dea0da8` | Prepared, not installed | | Slice 8 with the announcement group-scope check on edit and delete, and a corrected BUILD.txt. `docs/dashboard-redesign-phase2-slice8.md`. |
+| `1.7.3-rc.8-1cde2ca` | Prepared, not installed | | Slice 8 first build. Superseded by `dea0da8`; its BUILD.txt understated testing and gave the wrong staging history. Do not install. |
 | `1.7.3-rc.8-94b612d` | **Installed** | November 7, 8:50 PM (Toronto) | Slice 7, cumulative (Slices 1–7). Replaced `826d342`. Installed by the site owner; the assistant did not install it. Its staging checks are reported by the site owner, not by the assistant. `docs/dashboard-redesign-phase2-slice7.md`. |
 | `1.7.3-rc.8-51d8679` | Previously installed and checked; superseded on staging (the build `94b612d` replaced was `826d342`) | November 7 | Slices 1–4 with the bulletin, background and design corrections. `docs/dashboard-redesign-phase2-slice4.md`. |
 | `1.7.3-rc.8-d93f640` | Previously installed; replaced by `51d8679` | before November 7 | First Slices 1–4 build. |

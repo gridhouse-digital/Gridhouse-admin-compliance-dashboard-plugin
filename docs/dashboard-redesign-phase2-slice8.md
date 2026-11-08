@@ -180,7 +180,30 @@ The site is prepared by `tests/real-site/setup.php`. Its LearnDash stand-ins (`t
 
 ## Package
 
-Recorded after the corrected build (see below).
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-dea0da8.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `dea0da8` (full id in `BUILD.txt`) |
+| Size | 708,636 bytes |
+| SHA-256 | `ddcb4716413c8072ce9da5a7e8bebc12eb99abe4a2c3fafd0c5da9b5bf46a153` |
+| Manifest | `BUILD.txt`, inside the archive and alongside it: all 143 runtime files with their SHA-256 |
+| Supersedes | `1cde2ca` (prepared, never installed). Its BUILD.txt wrongly said "Synthetic only… not verified with real WordPress" and gave the wrong staging history. |
+
+**BUILD.txt:** it now states what was actually verified, and the correct staging history: `94b612d` was installed on November 7 at 8:50 PM Toronto time, replacing `826d342`.
+
+**Verification:**
+- `unzip -t` reports no errors.
+- Every packaged file matches the commit byte for byte, and its hash is in the manifest.
+- `php -l` passes on every PHP file.
+- No tests or test stubs are in the package.
+- The extracted package was installed on the disposable site, where it passed:
+  - `integration-slice8` (36 checks);
+  - `integration-packet-ready` (29 checks);
+  - `integration-bulk-recovery` (29 checks);
+  - `browser-real-site` under Twenty Twenty-Four and under Twenty Twenty-Two (67 checks each).
+- `browser-slice8` (182 checks) and `browser-slice7` (150 checks) pass at this commit.
+
+**Not installed on staging.**
 
 ## Rollback
 
