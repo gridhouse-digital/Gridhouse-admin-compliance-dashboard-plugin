@@ -122,6 +122,24 @@ When the merge finished, the redesigned drawer navigated to the download URL, so
 - **Not checked on staging:** none of this has been installed on Akansoh staging. Staging still runs `51d8679`.
 - **Untested in other browsers:** the browser checks ran in Chromium only. Safari and Firefox download handling for the blob save was not tested.
 
+## Package
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-94b612d.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `94b612dc6de874ce1fbb20f23f21beeea5eecfec` |
+| Size | 688,842 bytes |
+| SHA-256 | `67f5cfc81615cc0b48c9302a90c287fa7401b7913249f10dc786450d6b27a8d1` |
+| Manifest | `BUILD.txt` inside the archive and alongside it: 142 files with SHA-256 |
+
+**Verification:**
+- `unzip -t` reports no errors.
+- Every packaged file matches the commit byte for byte, and its hash is in the manifest.
+- `php -l` passes on every PHP file.
+- The extracted package was installed on the disposable `ghca_test` site, where `integration-packet-ready` (29) and `integration-bulk-recovery` (29) pass.
+
+**Not installed on staging.**
+
 ## Rollback
 
 Install the previous build. No schema or option changes were made in this slice. The merge response only gained fields.
