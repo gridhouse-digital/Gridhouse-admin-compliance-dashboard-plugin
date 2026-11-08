@@ -196,11 +196,12 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 
 | | |
 | --- | --- |
-| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-a67c01d.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
-| Commit | `a67c01db737943f86f5c4df3d8758ddc25b9fc53` |
-| Size | 730,422 bytes |
-| SHA-256 | `d3cf59386a110e6532fe2c1b6b6768b76900b91a293fa84840e49c37061026fa` |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-84e9985.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `84e9985d61e8a3b611c26cac59fb6d6c1c35cfd1` |
+| Size | 735,052 bytes |
+| SHA-256 | `fdcbb3f24743b0ae677c7bdd1d02a2d1e231984c2f7de5a66e6ee458cc074600` |
 | Manifest | `BUILD.txt`, inside the archive and alongside it: all 145 runtime files with their SHA-256 |
+| Supersedes | `a67c01d` (prepared, never installed; 730,422 bytes, SHA-256 `d3cf5938…026fa`). Do not install it. |
 | Previous staging | `dea0da8`, installed by the site owner on November 7, 2026 at approximately 10:48 PM Toronto time, replacing `94b612d` |
 
 **Verification:**
@@ -209,10 +210,11 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 - `php -l` passes on every PHP file.
 - No tests or test stubs are in the package.
 - The extracted package was installed on the disposable site, where it passed:
-  - `integration-slice9` (32 checks) and `integration-slice8` (36 checks);
+  - `integration-slice9` (66 checks) and `integration-slice8` (36 checks);
   - `integration-packet-ready` (29), `integration-bulk-recovery` (29) and the other integration suites;
-  - `browser-real-site9` (20 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
-- `browser-slice9` (104), `browser-slice8` (182) and `browser-slice7` (150) pass at this commit.
+  - `browser-real-site9` (23 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
+- At this commit, all synthetic browser suites pass, including `browser-slice9` (104), `browser-slice8` (182) and `browser-slice7` (150). All 82 unit test files pass.
+- `GHCA_ACD_Redesign_Certs::deactivate()` (removes all ZIPs on plugin deactivation) has no test of its own.
 
 **Not installed on staging.**
 
