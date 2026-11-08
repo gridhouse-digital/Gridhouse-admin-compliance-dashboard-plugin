@@ -277,10 +277,13 @@ check( 1 === preg_match( '#Completed · 30 days.*?<span class="gh-stat-val">4</s
 check( false === stripos( $html, 'Pending issuance' ), 'no "Pending issuance" tile: it is the same number as Missing' );
 check( false !== strpos( $html, '1 completed course has no certificate link' ) && false !== strpos( $html, 'data-ghca-set-value="missing" data-ghca-set-form="ghca-filters-certificates"' ), 'missing alert jumps to the Missing list' );
 check( strpos( $html, 'gh-alert--danger' ) < strpos( $html, 'id="ghca-cert-list"' ), 'missing renders above the list' );
-check( false === stripos( $html, 'ZIP' ) && false === strpos( $html, 'type="checkbox"' ), 'no ZIP download or row selection: neither exists' );
-check( false === strpos( $html, 'Outside (approved)' ) && false === strpos( $html, '>Source<' ), 'no Source filter or column: outside certificates are not in this list' );
+// Slice 9: issued rows can be selected (table and cards) for a ZIP; the bar is present but hidden until used.
+check( 10 === substr_count( $html, 'data-ghca-cert-select value=' ) && 1 === substr_count( $html, 'data-ghca-cert-select-page' ) && false !== strpos( $html, 'data-ghca-cert-bar hidden' ) && false !== strpos( $html, 'data-ghca-cert-zip>' ), 'issued rows are selectable for a ZIP; select-all for the page; the selection bar starts hidden' );
+check( false === strpos( $html, 'data-ghca-select value=' ), 'certificate checkboxes do not use the Employees selection hook' );
+check( false !== strpos( $html, '>Source</th>' ) && 10 <= substr_count( $html, 'LearnDash' ) && false === strpos( $html, 'Outside (approved)' ), 'Source column from real data: LearnDash only (outside certificates are not in this list; no invented sources)' );
 check( false === strpos( $html, 'example.test/certificates/' ), 'certificate links never reach the page' );
-check( 10 === substr_count( $html, 'data-ghca-cert-pdf="https://example.test/wp-admin/admin-ajax.php?action=ghca_acd_certificate_download&amp;user_id=' ), 'every issued row (table and card) downloads through the existing endpoint' );
+check( 10 === substr_count( $html, 'data-ghca-cert-pdf="https://example.test/wp-admin/admin-ajax.php?action=ghca_acd_certificate_download&amp;user_id=' ), 'every issued row (table and card) still has a separate Download through the existing endpoint' );
+check( 10 === substr_count( $html, 'data-ghca-cv-state="issued"' ) && 10 === substr_count( $html, 'data-ghca-cv-url="https://example.test/wp-admin/admin-ajax.php?action=ghca_acd_certificate_download&amp;user_id=' ), 'the PDF action opens the viewer, which loads through the same authorized endpoint' );
 check( 0 === substr_count( $html, 'quiz_id' ), 'ids only, never a quiz id' );
 check( 4 === substr_count( $html, 'data-ghca-set-field="ghca_cert_view"' ) && false !== strpos( $html, 'aria-pressed="true">Issued <span class="gh-count">5</span>' ), 'three view toggles, Issued pressed' );
 check( 1 === preg_match( '#Recent completions.*?Priya Nair.*?2 days ago#s', $html ), 'recent completions' );
@@ -374,6 +377,7 @@ check( -7 === GHCA_ACD_Redesign_Lists::days_from_today( strtotime( '2026-10-25 0
 // ---- 7. The redesigned dashboard's tab is named "Overdue & at risk" (label only; id, panel, badge and tone unchanged).
 require_once __DIR__ . '/../includes/odp/class-odp-contract.php';
 require_once __DIR__ . '/../includes/odp/class-odp-ui.php';
+require_once __DIR__ . '/../includes/class-course-title.php';
 require_once __DIR__ . '/../includes/class-redesign.php';
 reset_env();
 $tabs_m = new ReflectionMethod( 'GHCA_ACD_Redesign', 'tabs' );

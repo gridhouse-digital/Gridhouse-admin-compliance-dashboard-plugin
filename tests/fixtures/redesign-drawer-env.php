@@ -246,6 +246,7 @@ final class GHCA_ACD_Data_Provider {
 		}
 		return $GLOBALS['ghca_env']['employee'] ?? array();
 	}
+	public static function get_admin_dashboard_url(): string { return ( $GLOBALS['ghca_env']['base'] ?? 'https://example.test' ) . '/drawer.html'; }
 	public static function get_page_url( string $slug, string $fallback ): string { return ( $GLOBALS['ghca_env']['base'] ?? 'https://example.test' ) . $fallback; }
 	public static function get_employee_user_ids(): array { return array_keys( $GLOBALS['ghca_env']['people'] ?? array( 42 => 1 ) ); }
 	public static function get_active_employee_user_ids(): array { return array_values( array_filter( self::get_employee_user_ids(), static function ( $id ) { return empty( $GLOBALS['ghca_env']['people'][ $id ][4] ); } ) ); }
@@ -262,6 +263,7 @@ final class GHCA_ACD_Data_Provider {
 
 require_once __DIR__ . '/../../includes/odp/class-odp-contract.php';
 require_once __DIR__ . '/../../includes/odp/class-odp-ui.php';
+require_once __DIR__ . '/../../includes/class-course-title.php';
 require_once __DIR__ . '/../../includes/class-redesign.php';
 require_once __DIR__ . '/../../includes/class-redesign-tables.php';
 require_once __DIR__ . '/../../includes/class-redesign-drawer.php';

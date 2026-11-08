@@ -11,6 +11,7 @@
  * approvals; GHCA_PREVIEW_AUDIT=empty shows no employees.
  */
 require __DIR__ . '/fixtures/redesign-admin-env.php';
+require_once __DIR__ . '/../includes/class-course-title.php';
 require __DIR__ . '/../includes/class-redesign.php';
 
 $perms = array_filter( explode( ',', (string) ( getenv( 'GHCA_PREVIEW_PERMS' ) ?: 'remind,docs,comms,admin,review' ) ) );

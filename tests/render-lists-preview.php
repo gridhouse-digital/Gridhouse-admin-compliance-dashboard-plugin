@@ -12,6 +12,7 @@
 require __DIR__ . '/fixtures/redesign-lists-env.php';
 require __DIR__ . '/../includes/odp/class-odp-contract.php';
 require __DIR__ . '/../includes/odp/class-odp-ui.php';
+require_once __DIR__ . '/../includes/class-course-title.php';
 require __DIR__ . '/../includes/class-redesign.php';
 
 $perms = array_filter( explode( ',', (string) ( getenv( 'GHCA_PREVIEW_PERMS' ) ?: 'remind,docs,comms,admin' ) ) );

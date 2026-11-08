@@ -249,3 +249,25 @@ The synthetic browser checks run without a site:
 ```bash
 node tests/browser-slice8.cjs [screenshot-dir]
 ```
+
+## Slice 9 checks
+
+Synthetic browser checks (no site needed): the certificate viewer, certificate selection and ZIP messages, the course listbox, the report picker and Title Case.
+
+```bash
+node tests/browser-slice9.cjs [screenshot-dir]
+```
+
+Headless Chromium has no PDF viewer, so this suite simulates the viewer's "ready" display; real inline PDF display must be checked by hand in a desktop browser.
+
+On the disposable real site (prepared as for Slice 8), with the plugin copied into it:
+
+```bash
+php wp-content/plugins/<plugin folder>/tests/integration-slice9.php
+```
+
+```bash
+GHCA_REAL_SITE=http://127.0.0.1:8099 GHCA_REAL_THEME="Twenty Twenty-Four" node tests/browser-real-site9.cjs [screenshot-dir]
+```
+
+`integration-slice9.php` needs the PHP `zip` extension. It builds real archives in the private folder from synthetic PDFs, and checks per-item authorization with a real `group_leader`, single use, owner binding, expiry and sweep. Nothing is sent and no training record is changed. Never point either at staging or live.

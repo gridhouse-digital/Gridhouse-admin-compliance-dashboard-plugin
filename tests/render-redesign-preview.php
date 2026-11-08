@@ -14,6 +14,7 @@ function esc_attr( $text ) { return htmlspecialchars( (string) $text, ENT_QUOTES
 function esc_url( $url, $protocols = null ) { return htmlspecialchars( (string) $url, ENT_QUOTES, 'UTF-8' ); }
 require __DIR__ . '/../includes/odp/class-odp-contract.php';
 require __DIR__ . '/../includes/odp/class-odp-ui.php';
+require_once __DIR__ . '/../includes/class-course-title.php';
 require __DIR__ . '/../includes/class-redesign.php';
 
 $out = $argv[1] ?? '/tmp/ghca-preview';

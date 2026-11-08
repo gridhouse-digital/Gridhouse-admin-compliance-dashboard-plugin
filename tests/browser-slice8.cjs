@@ -205,7 +205,7 @@ async function noticeContrast(page, sel, label) {
     ok(tag + ': overview shows the employee, role and group, a masked email, progress, courses completed, due date and last activity from the record');
     assert.equal(await page.locator('[data-ghca-report-body] .gh-alert').count(), 0); ok(tag + ': no onboarding alert for an employee who is not a new hire');
     assert.equal(await page.locator('.gh-urpt-table tbody tr').count(), 5); ok(tag + ': required-course table lists all five courses');
-    assert.equal(await page.locator('.gh-urpt-table [data-ghca-cert-trigger]').count(), 2); ok(tag + ': certificate buttons only where a certificate exists');
+    assert.equal(await page.locator('.gh-urpt-table [data-ghca-cv-open]').count(), 2); ok(tag + ': certificate buttons only where a certificate exists (slice 9: they open the certificate viewer)');
     assert.equal(await page.locator('.gh-urpt-table a[href*="/course/"]').count(), 5); ok(tag + ': every course has View course');
     const acts = await page.$$eval('.gh-urpt-acts > *', (a) => a.map((x) => x.textContent.trim()));
     assert.deepEqual(acts, ['Email reminder', 'Log reminder', 'Contact employee', 'Certificates (2)', 'CRM contact (opens in a new tab)', 'User profile']); ok(tag + ': actions in the board order, each the existing action (' + acts.length + ')');

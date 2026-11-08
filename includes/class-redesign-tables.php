@@ -10,6 +10,7 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+require_once __DIR__ . '/class-course-title.php';
 
 final class GHCA_ACD_Redesign_Tables {
 	/** Whether the AJAX table refresh should answer with board markup. The server decides; the client only asks. */
@@ -143,7 +144,7 @@ final class GHCA_ACD_Redesign_Tables {
 			$chips[] = array( 'label' => sprintf( /* translators: %s: group name */ __( 'Group: %s', 'ghca-acd' ), $name ), 'clear' => $f['group'], 'remove' => __( 'Remove group filter', 'ghca-acd' ) );
 		}
 		if ( '' !== (string) $filters['course'] ) {
-			$courses = GHCA_ACD_Data_Provider::get_course_options( $account_status );
+			$courses = self::course_options( $account_status );
 			$name    = (string) ( $courses[ (int) $filters['course'] ] ?? $filters['course'] );
 			$chips[] = array( 'label' => sprintf( /* translators: %s: course title */ __( 'Course: %s', 'ghca-acd' ), $name ), 'clear' => $f['course'], 'remove' => __( 'Remove course filter', 'ghca-acd' ) );
 		}
@@ -188,6 +189,11 @@ final class GHCA_ACD_Redesign_Tables {
 		}
 		/* translators: 1: first row number, 2: last row number, 3: total rows */
 		return sprintf( __( 'Showing %1$d–%2$d of %3$d', 'ghca-acd' ), $meta['from'], $meta['to'], $meta['total'] );
+	}
+
+	/** Course filter options with readable titles (slice 9; ids and stored titles unchanged). @return array<int|string,string> */
+	public static function course_options( string $account_status = 'active' ): array {
+		return array_map( array( 'GHCA_ACD_Course_Title', 'format' ), array_map( 'strval', (array) GHCA_ACD_Data_Provider::get_course_options( $account_status ) ) );
 	}
 
 	public static function sort_th( string $key, string $label, string $orderby, string $order, string $help = '' ): string {
@@ -457,7 +463,8 @@ final class GHCA_ACD_Redesign_Tables {
 		$h .= '<input type="hidden" name="' . esc_attr( $f['order'] ) . '" value="' . esc_attr( (string) ( $filters['order'] ?? 'asc' ) ) . '" />';
 		$h .= '<div class="gh-field gh-field--search"><label class="gh-label" for="' . esc_attr( $form_id ) . '-q">' . esc_html__( 'Search', 'ghca-acd' ) . '</label><div class="gh-input-wrap">' . self::icon( 'search' ) . '<input id="' . esc_attr( $form_id ) . '-q" class="gh-input" type="search" name="' . esc_attr( $f['search'] ) . '" value="' . esc_attr( (string) $filters['search'] ) . '" placeholder="' . esc_attr__( 'Name, email or group', 'ghca-acd' ) . '" autocomplete="off" /></div></div>';
 		$h .= self::select_field( $form_id . '-g', __( 'Group', 'ghca-acd' ), $f['group'], (string) $filters['group'], GHCA_ACD_Data_Provider::get_group_options(), __( 'All groups', 'ghca-acd' ) );
-		$h .= self::select_field( $form_id . '-c', __( 'Course', 'ghca-acd' ), $f['course'], (string) $filters['course'], GHCA_ACD_Data_Provider::get_course_options( $account_status ), __( 'All courses', 'ghca-acd' ) );
+		// Slice 9: course menus are enhanced into a searchable listbox that wraps long titles (data-ghca-course-select).
+		$h .= str_replace( '<select ', '<select data-ghca-course-select ', self::select_field( $form_id . '-c', __( 'Course', 'ghca-acd' ), $f['course'], (string) $filters['course'], self::course_options( $account_status ), __( 'All courses', 'ghca-acd' ) ) );
 		$h .= self::select_field( $form_id . '-s', __( 'Status', 'ghca-acd' ), $f['status'], (string) $filters['status'], GHCA_ACD_Data_Provider::get_status_options(), __( 'All statuses', 'ghca-acd' ) );
 		$h .= '<label class="gh-check gh-check--filter"><input type="checkbox" name="' . esc_attr( $f['overdue'] ) . '" value="1"' . checked( ! empty( $filters['overdue_only'] ), true, false ) . ' /> ' . esc_html__( 'Overdue only', 'ghca-acd' ) . '</label>';
 		// No submit button: the search box is the only field that blocks implicit submission, so Enter submits, and every other control applies on change.

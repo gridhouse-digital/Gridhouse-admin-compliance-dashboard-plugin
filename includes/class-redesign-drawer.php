@@ -10,6 +10,8 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+require_once __DIR__ . '/class-course-title.php';
+require_once __DIR__ . '/class-redesign-certs.php';
 
 final class GHCA_ACD_Redesign_Drawer {
 	private static function icon( string $name, string $size = '' ): string {
@@ -194,7 +196,8 @@ final class GHCA_ACD_Redesign_Drawer {
 			if ( $completed ) {
 				$act = '';
 				if ( ! empty( $course['certificate_url'] ) ) {
-					$act = '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-cert-trigger data-ghca-cert-url="' . esc_attr( (string) $course['certificate_url'] ) . '" data-ghca-cert-download-url="' . esc_url( GHCA_ACD_Certificate_Download::download_url( (int) $m['user_id'], (int) ( $course['id'] ?? 0 ) ) ) . '" data-ghca-cert-title="' . esc_attr( (string) $row['display_title'] ) . '">' . self::icon( 'download', 'sm' ) . esc_html__( 'Certificate', 'ghca-acd' ) . '</button>';
+					// Slice 9: opens the certificate viewer (preview through the authorized endpoint; Download inside).
+					$act = '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm"' . self::cert_view_attrs( $m, $row ) . ' aria-label="' . esc_attr( sprintf( /* translators: %s: course title */ __( 'View certificate, %s', 'ghca-acd' ), (string) $row['display_title'] ) ) . '">' . self::icon( 'eye', 'sm' ) . esc_html__( 'Certificate', 'ghca-acd' ) . '</button>';
 				} else {
 					$act = '<span class="gh-small gh-muted">' . esc_html__( 'No certificate', 'ghca-acd' ) . '</span>';
 				}
@@ -208,6 +211,28 @@ final class GHCA_ACD_Redesign_Drawer {
 			}
 		}
 		return $h . '</details>';
+	}
+
+	/**
+	 * Viewer trigger for one completed course (slice 9). Display values only; the PDF is re-authorized on fetch.
+	 *
+	 * @param array<string,mixed> $m
+	 * @param array<string,mixed> $row
+	 */
+	public static function cert_view_attrs( array $m, array $row ): string {
+		$course = (array) $row['course'];
+		$title  = (string) $row['display_title'];
+		$name   = (string) $m['employee_name'];
+		return GHCA_ACD_Redesign_Certs::trigger_attrs( (int) $m['user_id'], (int) ( $course['id'] ?? 0 ), array(
+			'state'     => 'issued',
+			'title'     => $title,
+			'employee'  => $name,
+			'group'     => (string) $m['group_label'],
+			'completed' => ! empty( $course['completed_ts'] ) ? wp_date( 'M j, Y', (int) $course['completed_ts'] ) : '',
+			'expires'   => ! empty( $course['expiration_label'] ) ? (string) $course['expiration_label'] : __( 'No renewal set', 'ghca-acd' ),
+			'source'    => 'LearnDash',
+			'file'      => GHCA_ACD_Redesign_Certs::slug( $name ) . '_' . GHCA_ACD_Redesign_Certs::slug( $title ) . '.pdf',
+		) );
 	}
 
 	/**
@@ -419,9 +444,9 @@ final class GHCA_ACD_Redesign_Drawer {
 		$f  = 'ghca-manual-' . $id;
 		$h .= '<form data-ghca-manual-form enctype="multipart/form-data"><div class="gh-card-bd gh-dr-form">';
 		$h .= '<input type="hidden" name="action" value="ghca_acd_jotform_manual_upload" /><input type="hidden" name="nonce" value="' . esc_attr( (string) $d['nonce'] ) . '" /><input type="hidden" name="employee_id" value="' . $id . '" /><input type="hidden" name="ghca_ui" value="board" />';
-		$h .= '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $f ) . '-lesson">' . esc_html__( 'Counts toward', 'ghca-acd' ) . ' <span class="gh-req">*</span></label><select id="' . esc_attr( $f ) . '-lesson" class="gh-select" required name="catalog_id"><option value="">' . esc_html__( 'Select lesson', 'ghca-acd' ) . '</option>';
+		$h .= '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $f ) . '-lesson">' . esc_html__( 'Counts toward', 'ghca-acd' ) . ' <span class="gh-req">*</span></label><select id="' . esc_attr( $f ) . '-lesson" class="gh-select" required name="catalog_id" data-ghca-course-select data-ghca-course-search="' . esc_attr__( 'Filter lessons', 'ghca-acd' ) . '"><option value="">' . esc_html__( 'Select lesson', 'ghca-acd' ) . '</option>';
 		foreach ( $d['catalog'] as $item ) {
-			$h .= '<option value="' . (int) $item['id'] . '">' . esc_html( $item['title'] . ' (' . $item['credit_hours'] . ' hrs)' ) . '</option>';
+			$h .= '<option value="' . (int) $item['id'] . '">' . esc_html( GHCA_ACD_Course_Title::format( (string) $item['title'] ) . ' (' . $item['credit_hours'] . ' hrs)' ) . '</option>';
 		}
 		$h .= '</select></div>';
 		$h .= '<div class="gh-field"><label class="gh-label" for="' . esc_attr( $f ) . '-date">' . esc_html__( 'Completion date', 'ghca-acd' ) . ' <span class="gh-req">*</span></label><input id="' . esc_attr( $f ) . '-date" class="gh-input" required type="date" name="completion_date" /></div>';

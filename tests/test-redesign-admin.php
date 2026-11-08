@@ -129,7 +129,12 @@ $rp = GHCA_ACD_Redesign_Admin::render_reports();
 $lr = GHCA_ACD_Shortcodes::render_reports();
 preg_match_all( '/href="([^"]+)"/', $rp, $bh );
 preg_match_all( '/href="([^"]+)"/', $lr, $lh );
-check( $bh[1] === $lh[1] && 4 === count( $bh[1] ), 'the same four destinations, same URLs, same order as the legacy Reports tab' );
+// Slice 9: Certificate records opens the dashboard's own Certificates tab instead of /cert-download/; the other
+// three destinations are the legacy tab's, in the same order.
+$legacy_cert = array_values( array_filter( $lh[1], static function ( $u ) { return false !== strpos( $u, 'cert-download' ); } ) );
+$expected    = array_map( static function ( $u ) { return false !== strpos( $u, 'cert-download' ) ? GHCA_ACD_Data_Provider::get_admin_dashboard_url() . '#ghca-tab-certificates' : $u; }, $lh[1] );
+check( 4 === count( $bh[1] ) && 1 === count( $legacy_cert ) && $bh[1] === $expected, 'the same four destinations in the same order; Certificate records now opens the dashboard Certificates tab (not /cert-download/)' . ( $bh[1] === $expected ? '' : ' ' . json_encode( array( $bh[1], $expected ) ) ) );
+check( false === strpos( $rp, 'cert-download' ) && false !== strpos( $rp, 'data-ghca-tab-jump="ghca-tab-certificates" data-ghca-cert-user=""' ), 'View certificates is a general entry: it jumps to the tab and clears any employee filter' );
 check( str_contains( $rp, '6 employees in your view' ) && str_contains( $rp, '5 issued · 1 missing' ) && str_contains( $rp, '6 active · 0 inactive' ), 'meta lines are aggregate counts the dashboard already shows' );
 check( ! preg_match( '/Last run|expire|Avg quiz|Tin Can|xAPI/', $rp ), 'no invented report types or metrics' );
 check( 4 === substr_count( $rp, '<span class="gh-sr">: ' ), 'each button names its report for screen readers' );

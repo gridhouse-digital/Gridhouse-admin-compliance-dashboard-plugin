@@ -91,6 +91,35 @@ final class GHCA_ACD_Certificate_Download {
 			return self::error( 403 );
 		}
 
+		$fetched = self::fetch_pdf( $user_id, $course_id );
+		if ( 200 !== $fetched['status'] ) {
+			return self::error( $fetched['status'] );
+		}
+		$body  = $fetched['body'];
+		$title = get_the_title( $course_id );
+		return array(
+			'status'  => 200,
+			'headers' => array(
+				'Content-Type'           => 'application/pdf',
+				'Content-Disposition'    => 'attachment; filename="' . self::safe_filename( (string) $title ) . '"',
+				'Content-Length'         => (string) strlen( $body ),
+				'X-Content-Type-Options' => 'nosniff',
+			),
+			'body'    => $body,
+		);
+	}
+
+	/**
+	 * The certificate PDF for one employee and course, or an error status. The CALLER must already have checked the
+	 * request (nonce, dashboard and document permissions, can_view_user). Used by the single download above and by
+	 * the certificate ZIP (slice 9), so both fetch exactly the same way.
+	 *
+	 * @return array{status:int,body:string}
+	 */
+	public static function fetch_pdf( int $user_id, int $course_id ): array {
+		if ( $user_id <= 0 || $course_id <= 0 ) {
+			return array( 'status' => 400, 'body' => '' );
+		}
 		// Native LearnDash certificates go through the broker for roles LearnDash would refuse.
 		// A stored certificate PDF (e.g. Uncanny Toolkit) is not rendered by LearnDash, so it keeps
 		// the validated same-origin direct fetch, exactly like the packet builder.
@@ -100,7 +129,7 @@ final class GHCA_ACD_Certificate_Download {
 		} else {
 			$link = self::course_link( $user_id, $course_id );
 			if ( '' === $link ) {
-				return self::error( 404 );
+				return array( 'status' => 404, 'body' => '' );
 			}
 			$response = wp_safe_remote_get(
 				$link,
@@ -114,25 +143,14 @@ final class GHCA_ACD_Certificate_Download {
 			);
 		}
 		if ( is_wp_error( $response ) ) {
-			return self::error( 502 );
+			return array( 'status' => 502, 'body' => '' );
 		}
 
 		$body = (string) wp_remote_retrieve_body( $response );
 		if ( ! self::is_pdf_response( (int) wp_remote_retrieve_response_code( $response ), (string) wp_remote_retrieve_header( $response, 'content-type' ), $body ) ) {
-			return self::error( 404 );
+			return array( 'status' => 404, 'body' => '' );
 		}
-
-		$title = get_the_title( $course_id );
-		return array(
-			'status'  => 200,
-			'headers' => array(
-				'Content-Type'           => 'application/pdf',
-				'Content-Disposition'    => 'attachment; filename="' . self::safe_filename( (string) $title ) . '"',
-				'Content-Length'         => (string) strlen( $body ),
-				'X-Content-Type-Options' => 'nosniff',
-			),
-			'body'    => $body,
-		);
+		return array( 'status' => 200, 'body' => $body );
 	}
 
 	/** True only for a 200 application/pdf response whose body starts with %PDF- and fits the size cap. */

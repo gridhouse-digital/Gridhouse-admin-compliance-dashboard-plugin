@@ -104,6 +104,7 @@ require __DIR__ . '/../includes/odp/class-odp-contract.php';
 require __DIR__ . '/../includes/odp/class-odp-feed.php';
 require __DIR__ . '/../includes/odp/class-odp-access.php';
 require __DIR__ . '/../includes/odp/class-odp-ui.php';
+require_once __DIR__ . '/../includes/class-course-title.php';
 require __DIR__ . '/../includes/class-redesign.php';
 require __DIR__ . '/../includes/odp/class-odp-bulletins.php';
 

@@ -171,7 +171,9 @@ const settle = (page) => page.waitForFunction(() => !document.querySelector('.gh
       stops.push(d);
       await page.keyboard.press('Tab');
     }
-    assert.deepEqual(stops.slice(0, 5).map((s) => s.id || s.tag), ['ghca-filters-employees-q', 'ghca-filters-employees-g', 'ghca-filters-employees-c', 'ghca-filters-employees-s', 'INPUT']); ok('keyboard: search, group, course, status, overdue in reading order');
+    // Slice 9: the course filter is the enhanced listbox button (the native select is kept for the form, out of the tab order).
+    const ids = stops.slice(0, 5).map((s) => s.id || s.tag);
+    assert.deepEqual([ids[0], ids[1], /^ghca-cbx-\d+-btn$/.test(ids[2]) ? 'course-button' : ids[2], ids[3], ids[4]], ['ghca-filters-employees-q', 'ghca-filters-employees-g', 'course-button', 'ghca-filters-employees-s', 'INPUT']); ok('keyboard: search, group, course (listbox button), status, overdue in reading order');
     assert.ok(stops.some((s) => s.sort === 'name') && stops.some((s) => s.sort === 'status_slug'), 'sortable headers are tab stops'); ok('keyboard: sortable headers are reachable');
     assert.ok(stops.every((s) => !s.hidden), 'no invisible tab stops'); ok('keyboard: no invisible tab stop');
     assert.ok(stops.every((s) => s.ring), 'every stop shows a focus ring: ' + JSON.stringify(stops.filter((s) => !s.ring))); ok('keyboard: every stop shows a focus ring');
@@ -267,7 +269,7 @@ const settle = (page) => page.waitForFunction(() => !document.querySelector('.gh
     assert.equal(await page.locator('#ghca-tab-employees .gh-mcard').count(), 10); ok('phone: ten employee cards');
     const m = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, win: window.innerWidth }));
     assert.ok(m.doc <= m.win + 1, 'no sideways page scroll at 390'); ok('phone: no sideways page scroll');
-    const tap = await page.evaluate(() => Array.from(document.querySelectorAll('#ghca-tab-employees .gh-mcard .gh-btn, #ghca-tab-employees .gh-filters .gh-select, #ghca-tab-employees .gh-filters .gh-input')).map((e) => e.getBoundingClientRect().height));
+    const tap = await page.evaluate(() => Array.from(document.querySelectorAll('#ghca-tab-employees .gh-mcard .gh-btn, #ghca-tab-employees .gh-filters .gh-select:not(.gh-cbx-native), #ghca-tab-employees .gh-filters .gh-input:not(.gh-cbx-q)')).map((e) => e.getBoundingClientRect().height));
     assert.ok(tap.every((h) => h >= 43.5), 'touch targets are at least 44px: ' + tap.join(',')); ok('phone: controls are at least 44px tall');
     await page.selectOption('#ghca-filters-employees-s', 'overdue');
     await settle(page);

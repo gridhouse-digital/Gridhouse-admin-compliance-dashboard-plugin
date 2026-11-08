@@ -204,14 +204,14 @@ const metrics = (page) => page.evaluate(() => {
     await page.mouse.click(1150, 62); // on the header text: inside the drawer, outside the menu
     assert.equal(await page.locator('.gh-dr-menu').isVisible(), false); ok('a click outside closes the menu');
 
-    // Certificate: the legacy modal opens above the drawer.
-    await page.locator('[data-ghca-cert-trigger]').first().click();
-    await page.waitForSelector('#ghca-acd-cert-modal:not([hidden])');
-    const top = await page.evaluate(() => { const m = document.querySelector('.ghca-acd__cert-modal-dialog').getBoundingClientRect(); const el = document.elementFromPoint(m.left + m.width / 2, m.top + 40); return !!(el && el.closest('#ghca-acd-cert-modal')); });
-    assert.equal(top, true); ok('the certificate modal opens above the drawer');
+    // Certificate (slice 9): the board certificate viewer opens above the drawer.
+    await page.locator('#ghca-acd-employee-drawer [data-ghca-cv-open]').first().click();
+    await page.waitForSelector('#ghca-acd-cert-viewer:not([hidden])');
+    const top = await page.evaluate(() => { const m = document.querySelector('[data-ghca-cv-dialog]').getBoundingClientRect(); const el = document.elementFromPoint(m.left + m.width / 2, m.top + 40); return !!(el && el.closest('#ghca-acd-cert-viewer')); });
+    assert.equal(top, true); ok('the certificate viewer opens above the drawer');
     await page.keyboard.press('Escape');
-    await page.waitForSelector('#ghca-acd-cert-modal[hidden]', { state: 'attached' });
-    assert.equal(await page.locator('#ghca-acd-employee-drawer').isVisible(), true); ok('Escape closes the modal and not the drawer under it');
+    await page.waitForSelector('#ghca-acd-cert-viewer[hidden]', { state: 'attached' });
+    assert.equal(await page.locator('#ghca-acd-employee-drawer').isVisible(), true); ok('Escape closes the viewer and not the drawer under it');
 
     // Focus trap and close.
     await page.focus('.gh-drawer-ft .gh-btn--primary');
@@ -441,7 +441,7 @@ const metrics = (page) => page.evaluate(() => {
     await page.click('#ghca-acd-drawer-tab-documents');
     let m = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, win: window.innerWidth, over: Array.from(document.querySelectorAll('[data-ghca-tabpanel="documents"] *')).filter((e) => e.getBoundingClientRect().right > document.querySelector('.gh-drawer--emp').getBoundingClientRect().right + 1).length }));
     assert.ok(m.doc <= m.win + 1); assert.equal(m.over, 0); ok('phone: Documents has no sideways overflow');
-    const inputs = await page.evaluate(() => Array.from(document.querySelectorAll('[data-ghca-manual-form] .gh-select, [data-ghca-manual-form] .gh-input, [data-ghca-manual-form] .gh-btn')).map((e) => Math.round(e.getBoundingClientRect().height)));
+    const inputs = await page.evaluate(() => Array.from(document.querySelectorAll('[data-ghca-manual-form] .gh-select:not(.gh-cbx-native), [data-ghca-manual-form] .gh-input:not(.gh-cbx-q), [data-ghca-manual-form] .gh-btn')).map((e) => Math.round(e.getBoundingClientRect().height)));
     assert.ok(inputs.every((h) => h >= 42), 'form controls: ' + inputs.join(',')); ok('phone: form controls are at least 42px tall');
     await page.click('#ghca-acd-drawer-tab-communications');
     m = await page.evaluate(() => ({ over: Array.from(document.querySelectorAll('[data-ghca-tabpanel="communications"] *')).filter((e) => e.getBoundingClientRect().right > document.querySelector('.gh-drawer--emp').getBoundingClientRect().right + 1).length }));

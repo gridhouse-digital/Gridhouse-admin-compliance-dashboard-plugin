@@ -94,7 +94,9 @@ final class GHCA_ACD_Redesign_Admin {
 				'cta'   => __( 'View certificates', 'ghca-acd' ),
 				'cicon' => 'arrow-right',
 				'btn'   => 'gh-btn--secondary',
-				'url'   => GHCA_ACD_Data_Provider::get_page_url( 'cert-download', '/cert-download/' ),
+				// Slice 9: the dashboard's own Certificates tab, never /cert-download/.
+				'url'   => GHCA_ACD_Data_Provider::get_admin_dashboard_url() . '#ghca-tab-certificates',
+				'jump'  => 'ghca-tab-certificates',
 			),
 			array(
 				'key'   => 'users',
@@ -127,6 +129,8 @@ final class GHCA_ACD_Redesign_Admin {
 			$h .= '<span class="gh-small gh-muted">' . esc_html( $card['meta'] ) . '</span>';
 			// The user report opens inside this tab (slice 8); its link stays as the no-script fallback.
 			$open = $inline && 'user-report' === $card['key'] ? ' data-ghca-report-open' : '';
+			// A general entry point: the certificates list without an employee filter left over from earlier.
+			$open .= ! empty( $card['jump'] ) ? ' data-ghca-tab-jump="' . esc_attr( (string) $card['jump'] ) . '" data-ghca-cert-user=""' : '';
 			$h .= '<a class="gh-btn ' . esc_attr( $card['btn'] ) . '" href="' . esc_url( $card['url'] ) . '"' . $open . '>' . self::icon( $card['cicon'] ) . esc_html( $card['cta'] ) . '<span class="gh-sr">: ' . esc_html( $card['title'] ) . '</span></a></li>';
 		}
 		$h .= '</ul></div>';

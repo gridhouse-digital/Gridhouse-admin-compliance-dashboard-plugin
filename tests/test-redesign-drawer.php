@@ -91,7 +91,9 @@ check( str_contains( $html, '<details class="gh-card gh-fold" open>' ), 'to-do a
 check( str_contains( $html, 'To do <span class="gh-count">3</span>' ) && str_contains( $html, 'Completed <span class="gh-count">2</span>' ), 'list counts match the model' );
 check( str_contains( $html, '5.5 hrs' ) && str_contains( $html, '55% complete' ), 'hours and progress carry through' );
 check( str_contains( $html, 'gh-st gh-st--duesoon">Expiring soon' ), 'an expiring course is a due-soon chip' );
-check( 1 === substr_count( $html, 'data-ghca-cert-trigger data-ghca-cert-url="https://example.test/cert/103"' ) && str_contains( $html, 'data-ghca-cert-download-url="https://example.test/wp-admin/admin-ajax.php?' ), 'completed course with a certificate has the trigger the certificate script binds to' );
+// Slice 9: the completed course's Certificate button opens the board viewer through the authorized endpoint; the
+// LearnDash certificate link itself is no longer put on the page.
+check( 1 === substr_count( $html, 'data-ghca-cv-open data-ghca-cv-user="42" data-ghca-cv-course="103" data-ghca-cv-url="https://example.test/wp-admin/admin-ajax.php?action=ghca_acd_certificate_download' ) && ! str_contains( $html, 'https://example.test/cert/103' ), 'completed course with a certificate opens the viewer (authorized endpoint; no certificate link on the page)' );
 check( str_contains( $html, 'No certificate' ), 'completed course without a certificate says so' );
 check( str_contains( $html, 'href="https://example.test/course/101"' ), 'a course with a URL is a link' );
 check( str_contains( $html, 'data-ghca-edit-records="42"' ) && str_contains( $html, 'data-ghca-mark-reviewed="42"' ) && str_contains( $html, 'data-ghca-review-text' ), 'administration keeps the edit and review hooks' );
@@ -209,7 +211,7 @@ check( str_contains( $h, 'data-ghca-manual-entry="42"' ) && str_contains( $h, 'd
 foreach ( array( 'action" value="ghca_acd_jotform_manual_upload', 'name="nonce" value="', 'name="employee_id" value="42"', 'name="ghca_ui" value="board"', 'required name="catalog_id"', 'required type="date" name="completion_date"', 'required maxlength="1000" name="entry_reason"', 'required type="file" name="certificate_file" accept="application/pdf,image/jpeg,image/png"' ) as $needle ) {
 	check( str_contains( $h, $needle ), "form field: $needle" );
 }
-check( str_contains( $h, '<option value="11">CPR / First Aid (2 hrs)</option>' ) && str_contains( $h, '&lt;b&gt;Lift &amp; transfer&lt;/b&gt; (1.5 hrs)' ), 'catalog lessons, escaped' );
+check( str_contains( $h, '<option value="11">CPR / First Aid (2 hrs)</option>' ) && str_contains( $h, '&lt;b&gt;Lift &amp; Transfer&lt;/b&gt; (1.5 hrs)' ), 'catalog lessons, escaped and shown in Title Case (slice 9)' );
 check( str_contains( $h, 'data-ghca-manual-status aria-live="polite"' ) && str_contains( $h, 'Save for review' ), 'status line and submit' );
 check( str_contains( $h, 'Only then does it count toward annual compliance' ), 'it says the certificate stays pending until approved' );
 check( ! str_contains( $h, 'Expires' ) && ! str_contains( $h, '10 MB' ), 'no field or limit the upload does not have' );

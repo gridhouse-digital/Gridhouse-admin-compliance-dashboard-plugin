@@ -80,6 +80,15 @@ function ghca_lists_seed( array $over = array() ): void {
 		), array() ),
 	);
 	$people = $over['people'] ?? $people;
+	// Slice 9: GHCA_PREVIEW_EXTRA_CERTS=N adds N synthetic people with one issued certificate each, on long
+	// all-capitals course titles, for paging, Title Case and course-menu wrapping checks.
+	$extra = (int) getenv( 'GHCA_PREVIEW_EXTRA_CERTS' );
+	$long  = array( 'PREVENTION, DETECTION & REPORTING OF ABUSE (OAPSA, CPS LAW, APS ACT) FOR DIRECT SUPPORT PROFESSIONALS', 'HIPAA AND THE ODP: WHAT EVERY DSP NEEDS TO KNOW ABOUT PRIVACY, RECORDS AND INCIDENT DOCUMENTATION', 'CPR/FIRST AID AND AED CERTIFICATION' );
+	for ( $i = 0; $i < $extra; $i++ ) {
+		$people[] = array( 300 + $i, 'Synthetic Person ' . ( $i + 1 ), 11 + ( $i % 3 ), 'completed', 'All assigned courses complete', 200, array(
+			$c( 600 + ( $i % 3 ), $long[ $i % 3 ], 'completed', true, true, 3 + $i, 'compliant', 300 ),
+		), array() );
+	}
 
 	$active = array();
 	foreach ( $people as $p ) {

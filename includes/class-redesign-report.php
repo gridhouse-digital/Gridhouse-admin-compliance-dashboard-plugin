@@ -2,6 +2,7 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+require_once __DIR__ . '/class-course-title.php';
 
 /**
  * Inline User training report (Admin-UserReport board), shown inside the redesigned Reports tab instead of sending
@@ -57,7 +58,7 @@ final class GHCA_ACD_Redesign_Report {
 	private static function picker_html( array $people, string $id ): string {
 		$list = $id . '-list';
 		$h    = '<div class="gh-field gh-urpt-pick" data-ghca-report-picker><label class="gh-label gh-sr" for="' . esc_attr( $id ) . '">' . esc_html__( 'Employee', 'ghca-acd' ) . '</label>';
-		$h   .= '<div class="gh-input-wrap">' . self::icon( 'search' ) . '<input id="' . esc_attr( $id ) . '" class="gh-input" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="' . esc_attr( $list ) . '" autocomplete="off" placeholder="' . esc_attr__( 'Search employees', 'ghca-acd' ) . '" data-ghca-report-input />' . self::icon( 'chev-down' ) . '</div>';
+		$h   .= '<div class="gh-input-wrap">' . self::icon( 'search' ) . '<input id="' . esc_attr( $id ) . '" class="gh-input" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="' . esc_attr( $list ) . '" autocomplete="off" placeholder="' . esc_attr__( 'Search employees', 'ghca-acd' ) . '" data-ghca-report-input />' . str_replace( 'class="gh-i ', 'class="gh-i gh-i--end ', self::icon( 'chev-down' ) ) . '</div>';
 		$h   .= '<ul class="gh-menu gh-urpt-list" role="listbox" id="' . esc_attr( $list ) . '" aria-label="' . esc_attr__( 'Employees', 'ghca-acd' ) . '" hidden data-ghca-report-list>';
 		foreach ( $people as $i => $p ) {
 			$label = '' !== $p['group'] ? $p['name'] . ' — ' . $p['group'] : $p['name'];
@@ -183,7 +184,8 @@ final class GHCA_ACD_Redesign_Report {
 		if ( '' !== $email ) {
 			$h .= '<a class="gh-btn gh-btn--secondary" href="' . esc_url( 'mailto:' . $email ) . '">' . self::icon( 'phone' ) . esc_html__( 'Contact employee', 'ghca-acd' ) . '</a>';
 		}
-		$h .= '<a class="gh-btn gh-btn--secondary" href="' . esc_url( GHCA_ACD_Data_Provider::get_page_url( 'cert-download', '/cert-download/' ) ) . '">' . self::icon( 'award' ) . esc_html( sprintf( /* translators: %d: certificates */ __( 'Certificates (%d)', 'ghca-acd' ), (int) $m['cert_count'] ) ) . '</a>';
+		// This employee's certificates on the dashboard's Certificates tab (slice 9), with the employee filter set.
+		$h .= '<a class="gh-btn gh-btn--secondary" href="' . esc_url( add_query_arg( 'ghca_cert_user', $user_id, GHCA_ACD_Data_Provider::get_admin_dashboard_url() ) . '#ghca-tab-certificates' ) . '" data-ghca-tab-jump="ghca-tab-certificates" data-ghca-cert-user="' . esc_attr( (string) $user_id ) . '">' . self::icon( 'award' ) . esc_html( sprintf( /* translators: %d: certificates */ __( 'Certificates (%d)', 'ghca-acd' ), (int) $m['cert_count'] ) ) . '</a>';
 		$crm = class_exists( 'GHCA_ACD_FluentCRM' ) && '' !== $email ? GHCA_ACD_FluentCRM::get_contact_admin_url( $email ) : '';
 		if ( '' !== $crm ) {
 			$h .= '<a class="gh-btn gh-btn--ghost" href="' . esc_url( $crm ) . '" target="_blank" rel="noopener">' . self::icon( 'external' ) . esc_html__( 'CRM contact', 'ghca-acd' ) . '<span class="gh-sr"> ' . esc_html__( '(opens in a new tab)', 'ghca-acd' ) . '</span></a>';
@@ -228,7 +230,8 @@ final class GHCA_ACD_Redesign_Report {
 				$h .= '<a class="gh-btn gh-btn--ghost gh-btn--sm" href="' . esc_url( (string) $course['url'] ) . '">' . esc_html__( 'View course', 'ghca-acd' ) . '<span class="gh-sr">: ' . esc_html( (string) $row['display_title'] ) . '</span></a>';
 			}
 			if ( ! empty( $course['certificate_url'] ) ) {
-				$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-cert-trigger data-ghca-cert-url="' . esc_attr( (string) $course['certificate_url'] ) . '" data-ghca-cert-download-url="' . esc_url( GHCA_ACD_Certificate_Download::download_url( $user_id, (int) ( $course['id'] ?? 0 ) ) ) . '" data-ghca-cert-title="' . esc_attr( (string) $row['display_title'] ) . '">' . self::icon( 'download', 'sm' ) . esc_html__( 'Certificate', 'ghca-acd' ) . '<span class="gh-sr">: ' . esc_html( (string) $row['display_title'] ) . '</span></button>';
+				// Slice 9: the certificate viewer, as on the Certificates tab.
+				$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm"' . GHCA_ACD_Redesign_Drawer::cert_view_attrs( $m, $row ) . '>' . self::icon( 'eye', 'sm' ) . esc_html__( 'Certificate', 'ghca-acd' ) . '<span class="gh-sr">: ' . esc_html( (string) $row['display_title'] ) . '</span></button>';
 			}
 			$h .= '</div></td></tr>';
 		}

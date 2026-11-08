@@ -331,6 +331,8 @@ final class GHCA_ACD_Redesign {
 				self::$announce_board = true;
 			}
 		}
+		// Slice 9: the certificate viewer (Modal-CertViewer), used by the Certificates tab, the drawer and the report.
+		$html .= class_exists( 'GHCA_ACD_Redesign_Certs' ) ? GHCA_ACD_Redesign_Certs::viewer_html() : '';
 		$html .= self::toasts_html( (array) ( $model['flash'] ?? array() ) );
 		// Packet-ready notices that are not inside an open Edit Records card. Filled by the packet script; kept until
 		// the packet is downloaded, expires or is replaced, so dismissing a notice never loses its link.
@@ -516,10 +518,10 @@ final class GHCA_ACD_Redesign {
 			array( __( 'Missing', 'ghca-acd' ), __( '· completed, no certificate link', 'ghca-acd' ), $missing, $missing > 0 ? 'is-danger' : 'is-zero' ),
 		);
 		$html = '<div class="gh-card" aria-labelledby="gh-certs-h"><div class="gh-card-hd gh-card-hd--plain"><h2 class="gh-h3" id="gh-certs-h">' . esc_html__( 'Certificates & records', 'ghca-acd' ) . '</h2>';
-		$html .= '<a class="gh-btn gh-btn--ghost gh-btn--sm" href="#ghca-tab-certificates" data-ghca-tab-jump="ghca-tab-certificates">' . esc_html__( 'View all', 'ghca-acd' ) . self::icon( 'arrow-right', 'sm' ) . '</a></div>';
+		$html .= '<a class="gh-btn gh-btn--ghost gh-btn--sm" href="#ghca-tab-certificates" data-ghca-tab-jump="ghca-tab-certificates" data-ghca-cert-user="">' . esc_html__( 'View all', 'ghca-acd' ) . self::icon( 'arrow-right', 'sm' ) . '</a></div>';
 		$html .= '<div class="gh-ovp-bd"><ul class="gh-certl">';
 		foreach ( $rows as $row ) {
-			$html .= '<li><a href="#ghca-tab-certificates" data-ghca-tab-jump="ghca-tab-certificates"' . ( '' !== $row[3] ? ' class="' . esc_attr( $row[3] ) . '"' : '' ) . '>' . esc_html( $row[0] ) . '<small>' . esc_html( $row[1] ) . '</small><strong>' . esc_html( (string) $row[2] ) . '</strong></a></li>';
+			$html .= '<li><a href="#ghca-tab-certificates" data-ghca-tab-jump="ghca-tab-certificates" data-ghca-cert-user=""' . ( '' !== $row[3] ? ' class="' . esc_attr( $row[3] ) . '"' : '' ) . '>' . esc_html( $row[0] ) . '<small>' . esc_html( $row[1] ) . '</small><strong>' . esc_html( (string) $row[2] ) . '</strong></a></li>';
 		}
 		return $html . '</ul></div></div>';
 	}

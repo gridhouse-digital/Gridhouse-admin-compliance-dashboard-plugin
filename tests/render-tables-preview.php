@@ -13,6 +13,7 @@
 require __DIR__ . '/fixtures/redesign-tables-env.php';
 require __DIR__ . '/../includes/odp/class-odp-contract.php';
 require __DIR__ . '/../includes/odp/class-odp-ui.php';
+require_once __DIR__ . '/../includes/class-course-title.php';
 require __DIR__ . '/../includes/class-redesign.php';
 $bulk = '1' === getenv( 'GHCA_PREVIEW_BULK' );
 if ( $bulk ) {

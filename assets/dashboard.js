@@ -150,7 +150,7 @@
     },
     // The redesigned Certificates tab (slice 4). There is no legacy version of this table.
     certificates: {
-      fields: ['ghca_cert_view', 'ghca_cert_course', 'ghca_cert_search', 'ghca_cert_when', 'ghca_cert_per', 'ghca_cert_orderby', 'ghca_cert_order'],
+      fields: ['ghca_cert_view', 'ghca_cert_user', 'ghca_cert_course', 'ghca_cert_search', 'ghca_cert_when', 'ghca_cert_per', 'ghca_cert_orderby', 'ghca_cert_order'],
       checkboxFields: [],
       pageField: 'ghca_cert_page',
       orderbyField: 'ghca_cert_orderby',
@@ -486,13 +486,16 @@
     // Clearing one filter (a chip's x) or all of them. Per page, sort and the page field are not filters.
     function clearFilters(name) {
       var controls = Array.prototype.slice.call(form.elements).filter(function (el) {
-        if (el.type === 'hidden' || el.type === 'submit' || el.type === 'button' || el.hasAttribute('data-ghca-per-page')) { return false; }
+        // A hidden filter (the Certificates employee filter) is cleared only when marked clearable.
+        if ((el.type === 'hidden' && !el.hasAttribute('data-ghca-clearable')) || el.type === 'submit' || el.type === 'button' || el.hasAttribute('data-ghca-per-page')) { return false; }
         // Sort and the Certificates view are not filters, so clearing filters leaves them as they are.
         if (el.hasAttribute('data-ghca-sort-select') || el.hasAttribute('data-ghca-not-filter')) { return false; }
         return name === 'all' || el.name === name;
       });
       controls.forEach(function (el) {
         if (el.type === 'checkbox') { el.checked = false; } else { el.value = ''; }
+        // Enhanced course menus show the cleared value too.
+        if (el.tagName === 'SELECT') { el.dispatchEvent(new Event('ghca:sync')); }
       });
       refresh(true);
       var first = form.querySelector('input[type="search"]');
@@ -771,12 +774,30 @@
     activateTab(hash);
   }
 
+  /*
+   * Certificates tab entry points (slice 9). An employee-specific link sets that employee's filter; every other way
+   * in (Reports, Overview, KPI) shows the full authorized list, so an earlier employee filter is not left behind.
+   * The list refreshes through the existing filter form; the server checks the employee again.
+   */
+  function ghcaCertScope(jump) {
+    var form = document.querySelector('.ghca-ui form[data-ghca-table="certificates"]');
+    var field = form && form.querySelector('[data-ghca-cert-user-field]');
+    if (!field) return;
+    var want = jump.getAttribute('data-ghca-cert-user') || '';
+    if (field.value === want) return;
+    field.value = want;
+    var page = form.querySelector('[data-ghca-page-input]');
+    if (page) page.value = '1';
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+  }
+
   function initTabs() {
     document.addEventListener('click', function(e) {
       var jump = e.target.closest('[data-ghca-tab-jump]');
       if (jump) {
         e.preventDefault();
         var jumpTarget = jump.getAttribute('data-ghca-tab-jump');
+        if (jumpTarget === 'ghca-tab-certificates') { ghcaCertScope(jump); }
         activateTab(jumpTarget);
         if (window.history && window.history.replaceState) {
           window.history.replaceState(null, '', '#' + jumpTarget);
@@ -1416,6 +1437,505 @@
   function ghcaRetargetDrawerFocus(release) {
     var target = ghcaDrawerRestoreTarget();
     if (target && release && typeof release.setRestoreTarget === 'function') release.setRestoreTarget(target);
+  }
+
+  /*
+   * Course menus (slice 9). A native <select> popup cannot wrap long course titles and grows past its control, so
+   * select[data-ghca-course-select] is enhanced into a button plus a searchable listbox that fits the viewport and
+   * wraps option text. The original <select> stays in the form and keeps the value, name, required rule and change
+   * events, so filtering, saving and validation are unchanged. Keyboard: Enter/Space/Arrow Down open; type to
+   * filter; Arrow keys, Home and End move; Enter selects; Escape closes; focus returns to the button.
+   */
+  var ghcaCbxSeq = 0;
+  function ghcaEnhanceCourseSelect(sel) {
+    if (sel.hasAttribute('data-ghca-cbx-done')) return;
+    sel.setAttribute('data-ghca-cbx-done', '');
+    var id = 'ghca-cbx-' + (++ghcaCbxSeq);
+    var label = sel.id ? document.querySelector('label[for="' + sel.id + '"]') : null;
+    var wrap = document.createElement('div');
+    wrap.className = 'gh-cbx';
+    wrap.innerHTML = '<button type="button" class="gh-select gh-cbx-btn" aria-haspopup="listbox" aria-expanded="false"><span class="gh-cbx-val"></span></button>' +
+      '<div class="gh-cbx-pop" hidden><div class="gh-input-wrap"><span class="gh-i i-search" aria-hidden="true"></span><input class="gh-input gh-cbx-q" type="text" role="combobox" aria-autocomplete="list" aria-expanded="true" autocomplete="off"></div>' +
+      '<ul class="gh-cbx-list" role="listbox"></ul><p class="gh-small gh-muted gh-cbx-none" hidden>No matches.</p></div>' +
+      '<p class="gh-err gh-cbx-err" hidden></p>';
+    var btn = wrap.querySelector('.gh-cbx-btn');
+    var val = wrap.querySelector('.gh-cbx-val');
+    var pop = wrap.querySelector('.gh-cbx-pop');
+    var q = wrap.querySelector('.gh-cbx-q');
+    var list = wrap.querySelector('.gh-cbx-list');
+    var none = wrap.querySelector('.gh-cbx-none');
+    var err = wrap.querySelector('.gh-cbx-err');
+    btn.id = id + '-btn';
+    list.id = id + '-list';
+    q.setAttribute('aria-controls', list.id);
+    // Not part of the surrounding form: a second text field would stop Enter from submitting the filter form, and
+    // the filter text is not a value to send.
+    q.setAttribute('form', 'ghca-cbx-no-form');
+    q.setAttribute('aria-label', sel.getAttribute('data-ghca-course-search') || 'Filter courses');
+    q.placeholder = sel.getAttribute('data-ghca-course-search') || 'Filter courses';
+    if (label) {
+      if (!label.id) label.id = id + '-label';
+      label.htmlFor = btn.id;
+      btn.setAttribute('aria-labelledby', label.id + ' ' + btn.id);
+      list.setAttribute('aria-labelledby', label.id);
+    } else {
+      list.setAttribute('aria-label', sel.getAttribute('aria-label') || 'Courses');
+    }
+    if (sel.required) { btn.setAttribute('aria-required', 'true'); }
+    Array.prototype.forEach.call(sel.options, function (o, i) {
+      var li = document.createElement('li');
+      li.id = id + '-o' + i;
+      li.setAttribute('role', 'option');
+      li.setAttribute('data-value', o.value);
+      li.textContent = o.textContent;
+      if (o.disabled) li.setAttribute('aria-disabled', 'true');
+      list.appendChild(li);
+    });
+    // The native control stays in the form (value, name, required) but is taken out of view and tab order.
+    sel.classList.add('gh-cbx-native');
+    sel.tabIndex = -1;
+    sel.setAttribute('aria-hidden', 'true');
+    sel.parentNode.insertBefore(wrap, sel.nextSibling);
+    var active = -1;
+    function options() { return Array.prototype.slice.call(list.children).filter(function (li) { return !li.hidden && li.getAttribute('aria-disabled') !== 'true'; }); }
+    function sync() {
+      var o = sel.options[sel.selectedIndex];
+      val.textContent = o ? o.textContent : '';
+      Array.prototype.forEach.call(list.children, function (li) { li.setAttribute('aria-selected', li.getAttribute('data-value') === sel.value ? 'true' : 'false'); });
+    }
+    function setActive(i) {
+      var opts = options();
+      Array.prototype.forEach.call(list.children, function (li) { li.classList.remove('is-active'); });
+      active = opts.length ? Math.max(0, Math.min(i, opts.length - 1)) : -1;
+      if (active >= 0) {
+        opts[active].classList.add('is-active');
+        q.setAttribute('aria-activedescendant', opts[active].id);
+        if (opts[active].scrollIntoView) opts[active].scrollIntoView({ block: 'nearest' });
+      } else { q.removeAttribute('aria-activedescendant'); }
+    }
+    function place() {
+      // Fit the viewport: at least the control's width, at most 480px or the space available.
+      var r = btn.getBoundingClientRect();
+      var vw = document.documentElement.clientWidth;
+      var width = Math.min(Math.max(r.width, 280), 480, vw - 32);
+      pop.style.width = width + 'px';
+      var left = Math.min(0, vw - 16 - (r.left + width));
+      pop.style.left = left + 'px';
+    }
+    function filter() {
+      var t = q.value.trim().toLowerCase();
+      var shown = 0;
+      Array.prototype.forEach.call(list.children, function (li) { var hit = !t || li.textContent.toLowerCase().indexOf(t) !== -1; li.hidden = !hit; if (hit) shown++; });
+      none.hidden = shown > 0;
+      var opts = options();
+      var cur = opts.findIndex(function (li) { return li.getAttribute('data-value') === sel.value; });
+      setActive(cur >= 0 && !t ? cur : 0);
+    }
+    function open() {
+      if (!pop.hidden) return;
+      pop.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+      wrap.classList.add('is-open');
+      q.value = '';
+      place();
+      filter();
+      q.focus();
+    }
+    function close(focusBtn) {
+      if (pop.hidden) return;
+      pop.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+      wrap.classList.remove('is-open');
+      if (focusBtn) btn.focus();
+    }
+    function choose(li) {
+      if (!li || li.getAttribute('aria-disabled') === 'true') return;
+      var changed = sel.value !== li.getAttribute('data-value');
+      sel.value = li.getAttribute('data-value');
+      sync();
+      err.hidden = true;
+      btn.removeAttribute('aria-invalid');
+      close(true);
+      if (changed) sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    btn.addEventListener('click', function () { if (pop.hidden) { open(); } else { close(true); } });
+    btn.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open(); }
+    });
+    q.addEventListener('input', filter);
+    q.addEventListener('keydown', function (e) {
+      var opts = options();
+      if (e.key === 'ArrowDown') { e.preventDefault(); setActive(active + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(active - 1); }
+      else if (e.key === 'Home') { e.preventDefault(); setActive(0); }
+      else if (e.key === 'End') { e.preventDefault(); setActive(opts.length - 1); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (active >= 0) choose(opts[active]); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
+      else if (e.key === 'Tab') { close(false); }
+    });
+    list.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    list.addEventListener('click', function (e) { var li = e.target.closest('[role="option"]'); if (li) choose(li); });
+    document.addEventListener('mousedown', function (e) { if (!wrap.contains(e.target)) close(false); });
+    window.addEventListener('resize', function () { if (!pop.hidden) place(); });
+    // Values set from elsewhere (chips, Clear filters, form reset) are reflected in the button.
+    sel.addEventListener('change', sync);
+    sel.addEventListener('ghca:sync', sync);
+    if (sel.form) { sel.form.addEventListener('reset', function () { window.setTimeout(sync, 0); }); }
+    // A required menu left empty: say so on the visible control instead of the hidden native one.
+    sel.addEventListener('invalid', function (e) {
+      e.preventDefault();
+      err.textContent = 'Choose an option.';
+      err.hidden = false;
+      btn.setAttribute('aria-invalid', 'true');
+      btn.setAttribute('aria-describedby', id + '-err');
+      err.id = id + '-err';
+      btn.focus();
+    });
+    sync();
+  }
+  function initCourseSelects() {
+    var run = function (root) { (root || document).querySelectorAll('.ghca-ui select[data-ghca-course-select]').forEach(ghcaEnhanceCourseSelect); };
+    run(document);
+    if (typeof MutationObserver !== 'undefined') {
+      new MutationObserver(function (records) {
+        records.forEach(function (r) { r.addedNodes.forEach(function (n) { if (n.nodeType === 1 && (n.matches('select[data-ghca-course-select]') || n.querySelector('select[data-ghca-course-select]'))) { run(n.parentNode || document); } }); });
+      }).observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  /*
+   * Certificate viewer (slice 9; Modal-CertViewer and Modal-CertViewer-States boards). The PDF is fetched from the
+   * existing authorized endpoint into memory and shown from a same-page blob URL in the browser's own PDF viewer:
+   * no certificate link, public URL or third-party viewer. If the browser cannot show PDFs inline the viewer says
+   * so and offers the explicit Download; it never downloads on its own. Download saves the bytes already fetched.
+   */
+  function initCertViewer() {
+    var layer = document.querySelector('.ghca-ui [data-ghca-cv]');
+    if (!layer) return;
+    var dialog = layer.querySelector('[data-ghca-cv-dialog]');
+    var frame = layer.querySelector('[data-ghca-cv-frame]');
+    var bar = layer.querySelector('[data-ghca-cv-bar]');
+    var titleEl = layer.querySelector('[data-ghca-cv-heading]');
+    var subEl = layer.querySelector('[data-ghca-cv-sub]');
+    var dl = layer.querySelector('[data-ghca-cv-dl]');
+    var chip = layer.querySelector('[data-ghca-cv-chip]');
+    var msg = layer.querySelector('[data-ghca-cv-msg]');
+    var pagesEl = layer.querySelector('[data-ghca-cv-pages]');
+    var zoomEl = layer.querySelector('[data-ghca-cv-zoomval]');
+    var st = { trigger: null, url: '', blob: null, objectUrl: '', file: 'certificate.pdf', page: 1, pages: 1, zoom: 100, fit: false, request: 0, release: null, user: '' };
+
+    function show(state) {
+      layer.querySelectorAll('[data-ghca-cv-pane]').forEach(function (el) { el.hidden = el.getAttribute('data-ghca-cv-pane') !== state; });
+      layer.setAttribute('data-ghca-cv-current', state);
+      var ready = state === 'ready';
+      // Preview controls work only on a shown PDF; Download needs fetched bytes; pending has neither.
+      bar.hidden = state === 'pending';
+      bar.querySelectorAll('button').forEach(function (b) { b.disabled = !ready; });
+      layer.querySelectorAll('[data-ghca-cv-newtab]').forEach(function (b) { b.disabled = !st.blob; b.hidden = state === 'pending'; });
+      layer.querySelectorAll('.gh-cv-ft [data-ghca-cv-download]').forEach(function (b) { b.disabled = !st.blob; b.hidden = state === 'pending'; });
+      if (ready) {
+        bar.querySelector('[data-ghca-cv-page="prev"]').disabled = st.page <= 1;
+        bar.querySelector('[data-ghca-cv-page="next"]').disabled = st.page >= st.pages;
+      }
+    }
+    function details(t) {
+      var rows = [
+        ['Employee', t.getAttribute('data-ghca-cv-employee')],
+        ['Group', t.getAttribute('data-ghca-cv-group')],
+        ['Course', t.getAttribute('data-ghca-cv-title')],
+        ['Completed', t.getAttribute('data-ghca-cv-completed')],
+        ['Expires', t.getAttribute('data-ghca-cv-expires')],
+        ['Source', t.getAttribute('data-ghca-cv-source')],
+        ['File', '']
+      ];
+      dl.innerHTML = '';
+      rows.forEach(function (r) {
+        if (r[0] !== 'File' && !r[1]) return;
+        var d = document.createElement('div');
+        var dt = document.createElement('dt'); dt.textContent = r[0];
+        var dd = document.createElement('dd'); dd.textContent = r[1] || '—';
+        if (r[0] === 'File') { dd.setAttribute('data-ghca-cv-file', ''); }
+        d.appendChild(dt); d.appendChild(dd); dl.appendChild(d);
+      });
+    }
+    function frameSrc() {
+      if (!st.objectUrl) return;
+      // The browser's PDF viewer reads the page and zoom from the fragment (Chromium, Firefox; Safari partly).
+      frame.src = st.objectUrl + '#page=' + st.page + (st.fit ? '&view=FitH' : '&zoom=' + st.zoom);
+      zoomEl.textContent = st.fit ? 'Fit' : st.zoom + '%';
+      pagesEl.textContent = st.page + ' / ' + st.pages;
+    }
+    function countPages(buf) {
+      try {
+        var text = new TextDecoder('latin1').decode(new Uint8Array(buf));
+        var m = text.match(/\/Type\s*\/Page(?![a-z])/g);
+        return m && m.length ? m.length : 1;
+      } catch (e) { return 1; }
+    }
+    function cleanup() {
+      st.request++;
+      frame.removeAttribute('src');
+      frame.hidden = true;
+      if (st.objectUrl) { URL.revokeObjectURL(st.objectUrl); }
+      st.objectUrl = ''; st.blob = null;
+    }
+    function load() {
+      var mine = ++st.request;
+      st.blob = null;
+      msg.textContent = '';
+      show('loading');
+      var url;
+      try { url = new URL(st.url, window.location.href); } catch (e) { url = null; }
+      if (!url || url.origin !== window.location.origin) { show('error'); return; }
+      fetch(url.href, { credentials: 'same-origin' }).then(function (res) {
+        var type = res.headers.get('Content-Type') || '';
+        return res.arrayBuffer().then(function (buf) { return { res: res, type: type, buf: buf }; });
+      }).then(function (r) {
+        if (mine !== st.request) return;
+        if (r.res.status === 403 || r.res.status === 400) { show('denied'); return; }
+        if (r.res.status === 404) { show('unavailable'); return; }
+        if (!r.res.ok || !ghcaCertificateResponseIsPdf(r.type, new Uint8Array(r.buf.slice(0, 5)))) { show('error'); return; }
+        st.blob = new Blob([r.buf], { type: 'application/pdf' });
+        st.objectUrl = URL.createObjectURL(st.blob);
+        st.pages = countPages(r.buf);
+        st.page = 1; st.zoom = 100; st.fit = false;
+        var fileDd = layer.querySelector('[data-ghca-cv-file]');
+        if (fileDd) { fileDd.textContent = 'PDF · ' + st.pages + (st.pages === 1 ? ' page · ' : ' pages · ') + Math.max(1, Math.round(r.buf.byteLength / 1024)) + ' KB'; }
+        if (navigator.pdfViewerEnabled === false) { show('blocked'); return; }
+        frameSrc();
+        frame.hidden = false;
+        show('ready');
+      }).catch(function () {
+        if (mine === st.request) show('error');
+      });
+    }
+    function open(t) {
+      cleanup();
+      st.trigger = t;
+      st.url = t.getAttribute('data-ghca-cv-url') || '';
+      st.user = t.getAttribute('data-ghca-cv-user') || '';
+      st.file = t.getAttribute('data-ghca-cv-file') || 'certificate.pdf';
+      var title = t.getAttribute('data-ghca-cv-title') || '';
+      var pending = t.getAttribute('data-ghca-cv-state') === 'pending';
+      titleEl.textContent = 'Certificate · ' + title;
+      subEl.textContent = (t.getAttribute('data-ghca-cv-employee') || '') + ' · ' + (pending ? ('completed ' + (t.getAttribute('data-ghca-cv-completed') || '') + ' · no certificate file yet') : st.file);
+      chip.className = 'gh-st ' + (pending ? 'gh-st--duesoon' : 'gh-st--completed');
+      chip.textContent = pending ? 'Not generated' : 'Issued';
+      details(t);
+      layer.hidden = false;
+      layer.setAttribute('aria-hidden', 'false');
+      document.documentElement.classList.add('ghca-acd--modal-open');
+      ghcaAcdOverlay.open(layer, t, close);
+      // Start on the close control that is shown at this width (top-left on phones, top-right otherwise).
+      var closers = Array.prototype.filter.call(dialog.querySelectorAll('.gh-cv-x, .gh-cv-x-phone'), function (b) { return b.offsetParent !== null; });
+      st.release = ghcaFocusTrap(dialog, closers[0] || dialog.querySelector('[data-ghca-cv-close]'));
+      if (pending) { show('pending'); } else { load(); }
+    }
+    function close() {
+      if (layer.hidden) return;
+      cleanup();
+      layer.hidden = true;
+      layer.setAttribute('aria-hidden', 'true');
+      document.documentElement.classList.remove('ghca-acd--modal-open');
+      ghcaAcdOverlay.close(layer);
+      if (st.release) { st.release(); st.release = null; }
+      if (st.trigger && st.trigger.isConnected) { st.trigger.focus(); }
+    }
+    function save() {
+      if (!st.blob) return;
+      var u = URL.createObjectURL(st.blob);
+      var a = document.createElement('a');
+      a.href = u; a.download = st.file;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.setTimeout(function () { URL.revokeObjectURL(u); }, 30000);
+      msg.textContent = 'Saved ' + st.file + '.';
+    }
+    document.addEventListener('click', function (e) {
+      var t = e.target.closest('.ghca-ui [data-ghca-cv-open]');
+      if (t) { e.preventDefault(); open(t); return; }
+      if (!layer.contains(e.target) || layer.hidden) return;
+      if (e.target.closest('[data-ghca-cv-close]')) { e.preventDefault(); close(); return; }
+      if (e.target.closest('[data-ghca-cv-download]')) { e.preventDefault(); save(); return; }
+      if (e.target.closest('[data-ghca-cv-retry]')) { e.preventDefault(); load(); return; }
+      if (e.target.closest('[data-ghca-cv-newtab]')) {
+        e.preventDefault();
+        if (st.objectUrl) { window.open(st.objectUrl, '_blank', 'noopener'); }
+        return;
+      }
+      if (e.target.closest('[data-ghca-cv-print]')) {
+        e.preventDefault();
+        try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (err) { msg.textContent = 'This browser can’t print from here. Use Open in new tab, then print.'; }
+        return;
+      }
+      var z = e.target.closest('[data-ghca-cv-zoom]');
+      if (z) {
+        var k = z.getAttribute('data-ghca-cv-zoom');
+        if (k === 'fit') { st.fit = true; }
+        else { st.fit = false; st.zoom = Math.max(50, Math.min(300, st.zoom + (k === 'in' ? 25 : -25))); }
+        frameSrc(); return;
+      }
+      var p = e.target.closest('[data-ghca-cv-page]');
+      if (p) {
+        st.page = Math.max(1, Math.min(st.pages, st.page + (p.getAttribute('data-ghca-cv-page') === 'next' ? 1 : -1)));
+        frameSrc(); show('ready'); return;
+      }
+      if (e.target.closest('[data-ghca-cv-to-employee]')) {
+        e.preventDefault();
+        var who = st.user;
+        close();
+        var opener = document.querySelector('.ghca-ui [data-ghca-employee-drawer="' + who + '"]');
+        if (opener) { opener.click(); }
+      }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !layer.hidden && ghcaAcdOverlay.isTop(layer)) { e.preventDefault(); close(); }
+    });
+    window.ghcaAcdCertViewer = { open: open, close: close };
+  }
+
+  /*
+   * Certificates tab selection and ZIP (slice 9). The selection is kept by "user:course" across filtering and paging.
+   * Selected certificates the current view does not show are counted and named in the bar; preparing a ZIP that
+   * would include them asks first (all, or only those shown), so hidden items are never included by accident.
+   * The server re-authorizes every item and refuses the whole request if any is not allowed.
+   */
+  function initCertSelection() {
+    var bar = document.querySelector('.ghca-ui [data-ghca-cert-bar]');
+    var mount = document.querySelector('.ghca-ui [data-ghca-table-id="certificates"]');
+    if (!bar || !mount) return;
+    var selected = {};
+    var order = [];
+    var busy = false;
+    var countEl = bar.querySelector('[data-ghca-cert-count]');
+    var hiddenEl = bar.querySelector('[data-ghca-cert-hidden]');
+    var keepBtn = bar.querySelector('[data-ghca-cert-keep]');
+    var zipBtn = bar.querySelector('[data-ghca-cert-zip]');
+    var zipLabel = bar.querySelector('[data-ghca-cert-zip-label]');
+    var confirmBox = bar.querySelector('[data-ghca-cert-confirm]');
+    var msgEl = bar.querySelector('[data-ghca-cert-msg]');
+
+    function shownKeys() {
+      var keys = {};
+      mount.querySelectorAll('[data-ghca-cert-select]').forEach(function (cb) { keys[cb.value] = true; });
+      return keys;
+    }
+    function keys() { return order.filter(function (k) { return selected[k]; }); }
+    function hiddenKeys() { var shown = shownKeys(); return keys().filter(function (k) { return !shown[k]; }); }
+    function message(text, tone) {
+      msgEl.textContent = text || '';
+      msgEl.hidden = !text;
+      msgEl.className = 'gh-small gh-certbar-msg' + (tone ? ' gh-certbar-msg--' + tone : '');
+      msgEl.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+    }
+    function sync() {
+      var all = keys();
+      mount.querySelectorAll('[data-ghca-cert-select]').forEach(function (cb) { cb.checked = !!selected[cb.value]; });
+      var boxes = Array.prototype.slice.call(mount.querySelectorAll('.gh-tbl [data-ghca-cert-select]'));
+      var head = mount.querySelector('[data-ghca-cert-select-page]');
+      if (head) {
+        var on = boxes.filter(function (b) { return b.checked; }).length;
+        head.checked = boxes.length > 0 && on === boxes.length;
+        head.indeterminate = on > 0 && on < boxes.length;
+      }
+      var hidden = hiddenKeys();
+      bar.hidden = all.length === 0 && msgEl.hidden;
+      countEl.textContent = all.length === 1 ? '1 certificate selected' : all.length + ' certificates selected';
+      if (hidden.length) {
+        var names = hidden.slice(0, 3).map(function (k) { return selected[k]; }).join('; ');
+        hiddenEl.textContent = hidden.length + ' not in the current view: ' + names + (hidden.length > 3 ? '; and ' + (hidden.length - 3) + ' more' : '') + '.';
+        hiddenEl.hidden = false;
+        keepBtn.hidden = false;
+      } else {
+        hiddenEl.hidden = true;
+        keepBtn.hidden = true;
+      }
+      zipLabel.textContent = all.length > 1 ? 'Download ' + all.length + ' as ZIP' : 'Download selected as ZIP';
+      zipBtn.disabled = busy || all.length === 0;
+    }
+    function toggle(key, label, on) {
+      if (on) { if (!selected[key]) { order.push(key); } selected[key] = label || key; }
+      else { delete selected[key]; order = order.filter(function (k) { return k !== key; }); }
+    }
+    function zip(list) {
+      if (busy || !list.length) return;
+      busy = true;
+      confirmBox.hidden = true;
+      zipBtn.setAttribute('aria-busy', 'true');
+      message('Preparing a ZIP of ' + list.length + (list.length === 1 ? ' certificate…' : ' certificates…'), '');
+      sync();
+      var p = new URLSearchParams();
+      p.append('action', 'ghca_acd_cert_zip');
+      p.append('nonce', window.ghcaAcd.nonce);
+      list.forEach(function (k) { p.append('items[]', k); });
+      fetch(window.ghcaAcd.ajaxUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: p.toString() })
+        .then(ghcaReadJson)
+        .then(function (json) {
+          if (!json || !json.success || !json.data || !json.data.download_url) {
+            throw { shown: (json && json.data && json.data.message) || 'The ZIP could not be prepared. Nothing was downloaded.' };
+          }
+          var d = json.data;
+          return fetch(d.download_url, { credentials: 'same-origin' }).then(function (res) {
+            var type = res.headers.get('Content-Type') || '';
+            return res.arrayBuffer().then(function (buf) {
+              var b = new Uint8Array(buf.slice(0, 2));
+              if (!res.ok || type.indexOf('application/zip') !== 0 || b[0] !== 0x50 || b[1] !== 0x4b) {
+                var text = '';
+                try { text = JSON.parse(new TextDecoder().decode(new Uint8Array(buf))).data.message; } catch (e) { text = ''; }
+                throw { shown: (text || 'The ZIP could not be downloaded.') + ' Nothing was saved.' };
+              }
+              var u = URL.createObjectURL(new Blob([buf], { type: 'application/zip' }));
+              var a = document.createElement('a');
+              a.href = u; a.download = d.name || 'certificates.zip';
+              document.body.appendChild(a); a.click(); a.remove();
+              window.setTimeout(function () { URL.revokeObjectURL(u); }, 30000);
+              message('Saved ' + (d.name || 'certificates.zip') + ' with ' + d.count + (d.count === 1 ? ' certificate.' : ' certificates.') + ' The server copy has been deleted.', 'success');
+            });
+          });
+        })
+        .catch(function (err) {
+          message(err && err.shown ? err.shown : (err && err.ghcaSession ? GHCA_SESSION_MSG : 'Network error. Nothing was downloaded; the selection is kept.'), 'error');
+        })
+        .then(function () {
+          busy = false;
+          zipBtn.removeAttribute('aria-busy');
+          sync();
+        });
+    }
+    mount.addEventListener('change', function (e) {
+      var cb = e.target.closest('[data-ghca-cert-select]');
+      if (cb) { toggle(cb.value, cb.getAttribute('data-label'), cb.checked); message('', ''); sync(); return; }
+      var head = e.target.closest('[data-ghca-cert-select-page]');
+      if (head) {
+        mount.querySelectorAll('.gh-tbl [data-ghca-cert-select]').forEach(function (b) { toggle(b.value, b.getAttribute('data-label'), head.checked); });
+        message('', ''); sync();
+      }
+    });
+    bar.addEventListener('click', function (e) {
+      if (e.target.closest('[data-ghca-cert-clear]')) { selected = {}; order = []; confirmBox.hidden = true; message('', ''); sync(); return; }
+      if (e.target.closest('[data-ghca-cert-keep]')) { hiddenKeys().forEach(function (k) { toggle(k, '', false); }); confirmBox.hidden = true; sync(); return; }
+      if (e.target.closest('[data-ghca-cert-zip-cancel]')) { confirmBox.hidden = true; zipBtn.focus(); return; }
+      if (e.target.closest('[data-ghca-cert-zip-all]')) { zip(keys()); return; }
+      if (e.target.closest('[data-ghca-cert-zip-shown]')) { var shown = shownKeys(); zip(keys().filter(function (k) { return shown[k]; })); return; }
+      if (e.target.closest('[data-ghca-cert-zip]')) {
+        var hidden = hiddenKeys();
+        if (hidden.length) {
+          var total = keys().length;
+          bar.querySelector('[data-ghca-cert-confirm-text]').textContent = hidden.length + ' of the ' + total + ' selected certificates are not in the current view. Include them?';
+          bar.querySelector('[data-ghca-cert-zip-all]').textContent = 'Include all ' + total;
+          var visible = total - hidden.length;
+          var shownBtn = bar.querySelector('[data-ghca-cert-zip-shown]');
+          shownBtn.textContent = 'Only the ' + visible + ' shown';
+          shownBtn.disabled = visible === 0;
+          confirmBox.hidden = false;
+          bar.querySelector('[data-ghca-cert-zip-all]').focus();
+          return;
+        }
+        zip(keys());
+      }
+    });
+    // The table is replaced when filters or the page change; the selection is applied to the new rows.
+    if (typeof MutationObserver !== 'undefined') { new MutationObserver(sync).observe(mount, { childList: true }); }
+    sync();
   }
 
   /*
@@ -3584,6 +4104,9 @@
   initEditRecordsSubpage();
   initAnnouncements();
   initInlineReport();
+  initCertViewer();
+  initCertSelection();
+  initCourseSelects();
   initManageUsers();
   initPdfPacket();
   initReminderMessaging();

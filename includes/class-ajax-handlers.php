@@ -183,8 +183,9 @@ final class GHCA_ACD_AJAX {
     );
     $audit_mapping  = class_exists( 'GHCA_Audit_Mapping' ) ? (array) get_option( GHCA_Audit_Mapping::OPTION_NAME, array() ) : array();
     $category_labels = class_exists( 'GHCA_Audit_Mapping' ) ? GHCA_Audit_Mapping::get_odp_categories() : array();
-    $format_course_title = static function ( string $title ): string {
-      return self::display_course_title( $title );
+    $format_course_title = static function ( string $title ) use ( $board ): string {
+      // Slice 9: the redesign shows readable Title Case (acronyms and codes kept); the legacy drawer is unchanged.
+      return $board && class_exists( 'GHCA_ACD_Course_Title' ) ? GHCA_ACD_Course_Title::format( $title ) : self::display_course_title( $title );
     };
     $priority = array( 'overdue' => 0, 'new_hire_overdue' => 0, 'expired' => 1, 'expiring_soon' => 2, 'in_progress' => 3, 'new_hire_in_progress' => 3, 'not_started' => 4, 'new_hire_not_started' => 4 );
     $attention_courses = array();
@@ -866,7 +867,7 @@ final class GHCA_ACD_AJAX {
       $started_ts   = self::get_course_activity_started( $user_id, $cid );
       $edit_courses[] = array(
         'id'              => $cid,
-        'title'           => self::display_course_title( (string) $course['title'] ),
+        'title'           => class_exists( 'GHCA_ACD_Course_Title' ) ? GHCA_ACD_Course_Title::format( (string) $course['title'] ) : self::display_course_title( (string) $course['title'] ),
         'completed'       => ! empty( $course['completed'] ),
         'completed_local' => $completed_ts > 0 ? wp_date( 'Y-m-d\TH:i', $completed_ts ) : '',
         'minutes'         => ( $completed_ts > 0 && $started_ts > 0 && $completed_ts > $started_ts ) ? (int) round( ( $completed_ts - $started_ts ) / 60 ) : 0,

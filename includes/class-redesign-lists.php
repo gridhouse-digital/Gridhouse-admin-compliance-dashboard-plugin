@@ -10,6 +10,8 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+require_once __DIR__ . '/class-course-title.php';
+require_once __DIR__ . '/class-redesign-certs.php';
 
 final class GHCA_ACD_Redesign_Lists {
 	/** Test clock for the day counts. Null in production, where the real time is used. */
@@ -217,7 +219,7 @@ final class GHCA_ACD_Redesign_Lists {
 		foreach ( (array) ( $employee['courses'] ?? array() ) as $course ) {
 			$expired = ! empty( $course['completed'] ) && 'expired' === (string) ( $course['compliance_state'] ?? '' );
 			if ( empty( $course['completed'] ) || $expired ) {
-				$out[] = array( 'title' => (string) ( $course['title'] ?? '' ), 'expired' => $expired );
+				$out[] = array( 'title' => GHCA_ACD_Course_Title::format( (string) ( $course['title'] ?? '' ) ), 'expired' => $expired );
 			}
 		}
 		return $out;
@@ -618,11 +620,11 @@ final class GHCA_ACD_Redesign_Lists {
 			// Yes or No from the course's certificate setting (LearnDash _ld_certificate), not whether anyone has earned one.
 			$certh = '<span class="gh-small gh-cert-flag">' . self::icon( $cert ? 'award' : 'minus-circle', 'sm' ) . esc_html( $cert ? __( 'Yes', 'ghca-acd' ) : __( 'No', 'ghca-acd' ) ) . '</span>';
 			$bar   = '<div class="gh-rate"><div class="' . esc_attr( self::course_bar_class( $pct ) ) . '" role="progressbar" aria-valuenow="' . esc_attr( (string) $pct ) . '" aria-valuemin="0" aria-valuemax="100" aria-label="' . esc_attr__( 'Course completion rate', 'ghca-acd' ) . '"><span style="width: ' . esc_attr( (string) $pct ) . '%;"></span></div><strong class="gh-num">' . esc_html( (string) $row['rate_label'] ) . '</strong></div>';
-			$h    .= '<tr><td><strong>' . esc_html( (string) $row['course'] ) . '</strong></td><td><span class="gh-badge gh-badge--outline">' . esc_html( (string) $row['group'] ) . '</span></td>';
+			$h    .= '<tr><td><strong>' . esc_html( GHCA_ACD_Course_Title::format( (string) $row['course'] ) ) . '</strong></td><td><span class="gh-badge gh-badge--outline">' . esc_html( (string) $row['group'] ) . '</span></td>';
 			$h    .= '<td class="c-num">' . esc_html( (string) (int) $row['required'] ) . '</td><td class="c-num">' . esc_html( (string) (int) $row['completed'] ) . '</td><td class="c-num">' . esc_html( (string) (int) $row['in_progress'] ) . '</td><td class="c-num">' . esc_html( (string) (int) $row['not_started'] ) . '</td>';
 			$h    .= '<td>' . $bar . '</td><td>' . $certh . '</td></tr>';
 			$cards .= '<div role="listitem">' . self::card_html(
-				'<strong class="gh-mcard-t">' . esc_html( (string) $row['course'] ) . '</strong>',
+				'<strong class="gh-mcard-t">' . esc_html( GHCA_ACD_Course_Title::format( (string) $row['course'] ) ) . '</strong>',
 				(string) $row['group'],
 				'',
 				array(
@@ -703,10 +705,12 @@ final class GHCA_ACD_Redesign_Lists {
 					'email'            => (string) ( $employee['email'] ?? '' ),
 					'group'            => (string) ( $employee['group'] ?? '' ),
 					'course_id'        => (int) ( $course['id'] ?? 0 ),
-					'course'           => (string) ( $course['title'] ?? '' ),
+					'course'           => GHCA_ACD_Course_Title::format( (string) ( $course['title'] ?? '' ) ),
 					'completed_ts'     => (int) ( $course['completed_ts'] ?? 0 ),
 					'expiration_ts'    => (int) ( $course['expiration_ts'] ?? 0 ),
 					'expiration_label' => (string) ( $course['expiration_label'] ?? '' ),
+					// The only certificate source this list holds today: LearnDash course certificates.
+					'source'           => 'LearnDash',
 				);
 			}
 		}
@@ -737,7 +741,13 @@ final class GHCA_ACD_Redesign_Lists {
 		$view = self::request_key( 'ghca_cert_view' );
 		$when = self::request_key( 'ghca_cert_when' );
 		$ord  = self::request_key( 'ghca_cert_order' );
+		// Employee filter (slice 9): kept only for an employee the viewer may see; otherwise ignored.
+		$user = absint( self::request_key( 'ghca_cert_user' ) ?: '0' );
+		if ( $user > 0 && ! GHCA_ACD_User_Report::can_view_user( $user ) ) {
+			$user = 0;
+		}
 		return array(
+			'user'     => $user,
 			'view'     => in_array( $view, array( 'issued', 'expiring', 'missing' ), true ) ? $view : 'issued',
 			'course'   => (string) absint( self::request_key( 'ghca_cert_course' ) ?: '0' ),
 			'search'   => self::request_text( 'ghca_cert_search' ),
@@ -758,9 +768,13 @@ final class GHCA_ACD_Redesign_Lists {
 	public static function filter_certificate_rows( array $rows, array $filters ): array {
 		$view   = (string) $filters['view'];
 		$course = (int) $filters['course'];
+		$user   = (int) ( $filters['user'] ?? 0 );
 		$search = (string) $filters['search'];
 		$since  = '30' === $filters['when'] ? self::now() - 30 * DAY_IN_SECONDS : 0;
-		$rows   = array_values( array_filter( $rows, static function ( array $row ) use ( $view, $course, $search, $since ): bool {
+		$rows   = array_values( array_filter( $rows, static function ( array $row ) use ( $view, $course, $user, $search, $since ): bool {
+			if ( $user > 0 && (int) $row['user_id'] !== $user ) {
+				return false;
+			}
 			if ( 'missing' === $view ? 'missing' !== $row['kind'] : 'issued' !== $row['kind'] ) {
 				return false;
 			}
@@ -804,6 +818,10 @@ final class GHCA_ACD_Redesign_Lists {
 	 */
 	public static function certificate_chips( array $filters, array $rows ): array {
 		$chips = array();
+		if ( (int) ( $filters['user'] ?? 0 ) > 0 ) {
+			$name = GHCA_ACD_Data_Provider::get_user_full_name( (int) $filters['user'] );
+			$chips[] = array( 'label' => sprintf( /* translators: %s: employee name */ __( 'Employee: %s', 'ghca-acd' ), $name ), 'clear' => 'ghca_cert_user', 'remove' => __( 'Remove employee filter', 'ghca-acd' ) );
+		}
 		if ( (int) $filters['course'] > 0 ) {
 			$courses = self::certificate_course_options( $rows );
 			$chips[] = array( 'label' => sprintf( /* translators: %s: course title */ __( 'Course: %s', 'ghca-acd' ), (string) ( $courses[ (int) $filters['course'] ] ?? $filters['course'] ) ), 'clear' => 'ghca_cert_course', 'remove' => __( 'Remove course filter', 'ghca-acd' ) );
@@ -835,23 +853,56 @@ final class GHCA_ACD_Redesign_Lists {
 	}
 
 	/**
-	 * Download goes through the existing certificate endpoint (and its broker), with ids only. Offered only to
-	 * people who can view employee documents, which is what that endpoint itself requires.
+	 * Row actions (slice 9). Issued: PDF opens the certificate viewer (preview); Download is a separate, explicit
+	 * action through the same authorized endpoint. Missing: the viewer's "not generated yet" state and the employee.
+	 * Offered only to people who can view employee documents, which is what the endpoint itself requires.
 	 *
 	 * @param array<string,mixed> $row
 	 */
 	private static function certificate_action_html( array $row, bool $can_docs, bool $small = true ): string {
-		if ( 'missing' === $row['kind'] ) {
-			return self::view_link( (int) $row['user_id'], (string) $row['name'], $small );
+		$sm   = $small ? ' gh-btn--sm' : '';
+		$name = (string) $row['name'];
+		$crs  = (string) $row['course'];
+		$view = self::view_link( (int) $row['user_id'], $name, $small );
+		if ( ! $can_docs || ! class_exists( 'GHCA_ACD_Redesign_Certs' ) ) {
+			return 'missing' === $row['kind'] ? $view : '';
 		}
-		if ( ! $can_docs ) {
-			return '';
+		$data = array(
+			'state'     => 'missing' === $row['kind'] ? 'pending' : 'issued',
+			'title'     => $crs,
+			'employee'  => $name,
+			'group'     => (string) $row['group'],
+			'completed' => (int) $row['completed_ts'] > 0 ? wp_date( 'M j, Y', (int) $row['completed_ts'] ) : '',
+			'expires'   => 'missing' === $row['kind'] ? '' : ( '' !== (string) $row['expiration_label'] ? (string) $row['expiration_label'] : __( 'No renewal set', 'ghca-acd' ) ),
+			'source'    => (string) $row['source'],
+			'file'      => GHCA_ACD_Redesign_Certs::slug( $name ) . '_' . GHCA_ACD_Redesign_Certs::slug( $crs ) . '.pdf',
+		);
+		$attrs = GHCA_ACD_Redesign_Certs::trigger_attrs( (int) $row['user_id'], (int) $row['course_id'], $data );
+		if ( 'missing' === $row['kind'] ) {
+			/* translators: 1: course title, 2: employee name */
+			return '<button type="button" class="gh-btn gh-btn--secondary' . $sm . '"' . $attrs . ' aria-label="' . esc_attr( sprintf( __( 'Certificate status, %1$s, %2$s', 'ghca-acd' ), $crs, $name ) ) . '">' . self::icon( 'clock', 'sm' ) . esc_html__( 'Status', 'ghca-acd' ) . '</button> ' . $view;
 		}
 		$url = GHCA_ACD_Certificate_Download::download_url( (int) $row['user_id'], (int) $row['course_id'] );
 		/* translators: 1: course title, 2: employee name */
-		$label = sprintf( __( 'Download PDF, %1$s, %2$s', 'ghca-acd' ), (string) $row['course'], (string) $row['name'] );
-		// A <button> on the board too, so it keeps the button cascade (no gh-btn--lnk).
-		return '<button type="button" class="gh-btn gh-btn--secondary' . ( $small ? ' gh-btn--sm' : '' ) . '" data-ghca-cert-pdf="' . esc_url( $url ) . '" data-ghca-cert-title="' . esc_attr( (string) $row['course'] ) . '" aria-label="' . esc_attr( $label ) . '">' . self::icon( 'download', 'sm' ) . esc_html__( 'PDF', 'ghca-acd' ) . '</button>';
+		$h  = '<button type="button" class="gh-btn gh-btn--secondary' . $sm . '"' . $attrs . ' aria-label="' . esc_attr( sprintf( __( 'View certificate PDF, %1$s, %2$s', 'ghca-acd' ), $crs, $name ) ) . '">' . self::icon( 'eye', 'sm' ) . esc_html__( 'PDF', 'ghca-acd' ) . '</button> ';
+		/* translators: 1: course title, 2: employee name */
+		$h .= '<button type="button" class="gh-btn gh-btn--ghost gh-btn--icon' . $sm . '" data-ghca-cert-pdf="' . esc_url( $url ) . '" data-ghca-cert-title="' . esc_attr( $data['file'] ) . '" aria-label="' . esc_attr( sprintf( __( 'Download PDF, %1$s, %2$s', 'ghca-acd' ), $crs, $name ) ) . '" title="' . esc_attr__( 'Download PDF', 'ghca-acd' ) . '">' . self::icon( 'download', 'sm' ) . '</button>';
+		return $h;
+	}
+
+	/** Whether this viewer can select certificates for a ZIP (document access and the PHP zip extension). */
+	public static function certificate_selectable(): bool {
+		return class_exists( 'GHCA_ACD_Redesign_Certs' ) && GHCA_ACD_Redesign_Certs::can_use() && GHCA_ACD_Redesign_Certs::zip_available();
+	}
+
+	/** @param array<string,mixed> $row */
+	private static function certificate_select( array $row, bool $card ): string {
+		$key   = (int) $row['user_id'] . ':' . (int) $row['course_id'];
+		$label = (string) $row['name'] . ' — ' . (string) $row['course'];
+		/* translators: %s: employee and course */
+		$aria  = sprintf( __( 'Select certificate: %s', 'ghca-acd' ), $label );
+		$input = '<input type="checkbox" class="gh-cb" data-ghca-cert-select value="' . esc_attr( $key ) . '" data-label="' . esc_attr( $label ) . '"' . ( $card ? '' : ' aria-label="' . esc_attr( $aria ) . '"' ) . ' />';
+		return $card ? '<label class="gh-mcard-sel">' . $input . '<span class="gh-sr">' . esc_html( $aria ) . '</span></label>' : '<td class="c-check">' . $input . '</td>';
 	}
 
 	/**
@@ -882,24 +933,30 @@ final class GHCA_ACD_Redesign_Lists {
 
 		$by    = (string) $filters['orderby'];
 		$order = (string) $filters['order'];
-		$h     = '<div class="gh-table-wrap gh-table-wrap--flat gh-tbl" tabindex="0" role="group" aria-label="' . esc_attr__( 'Certificates table', 'ghca-acd' ) . '"><table class="gh-table"><thead><tr>';
+		$sel   = 'missing' !== $view && self::certificate_selectable();
+		$h     = '<div class="gh-table-wrap gh-table-wrap--flat gh-tbl gh-tbl--cert" role="group" aria-label="' . esc_attr__( 'Certificates table', 'ghca-acd' ) . '"><table class="gh-table"><thead><tr>';
+		if ( $sel ) {
+			$h .= '<th scope="col" class="c-check"><input type="checkbox" class="gh-cb" data-ghca-cert-select-page aria-label="' . esc_attr__( 'Select all certificates on this page', 'ghca-acd' ) . '" /></th>';
+		}
 		$h    .= GHCA_ACD_Redesign_Tables::sort_th( 'completed_ts', __( 'Completed', 'ghca-acd' ), $by, $order );
-		$h    .= '<th scope="col">' . esc_html__( 'Employee', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Course', 'ghca-acd' ) . '</th>';
+		$h    .= '<th scope="col">' . esc_html__( 'Employee', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Course', 'ghca-acd' ) . '</th><th scope="col">' . esc_html__( 'Source', 'ghca-acd' ) . '</th>';
 		$h    .= '<th scope="col">' . esc_html( 'missing' === $view ? __( 'Certificate', 'ghca-acd' ) : __( 'Expires', 'ghca-acd' ) ) . '</th><th scope="col" class="c-act"><span class="gh-sr">' . esc_html__( 'Actions', 'ghca-acd' ) . '</span></th></tr></thead><tbody>';
 		$cards = '';
 		foreach ( $paged['rows'] as $row ) {
 			$done    = (int) $row['completed_ts'] > 0 ? wp_date( 'M j, Y', (int) $row['completed_ts'] ) : '—';
 			$fourth  = 'missing' === $row['kind'] ? '<span class="gh-st gh-st--missing">' . esc_html__( 'No certificate link', 'ghca-acd' ) . '</span>' : self::expires_html( $row );
 			$action  = self::certificate_action_html( $row, $can_docs );
-			$h      .= '<tr' . ( 'missing' === $row['kind'] ? ' class="is-risk"' : '' ) . '><td class="gh-num gh-nowrap">' . esc_html( $done ) . '</td>';
+			$source  = '<span class="gh-badge gh-badge--neutral">' . esc_html( (string) $row['source'] ) . '</span>';
+			$h      .= '<tr' . ( 'missing' === $row['kind'] ? ' class="is-risk"' : '' ) . '>' . ( $sel ? self::certificate_select( $row, false ) : '' ) . '<td class="gh-num gh-nowrap">' . esc_html( $done ) . '</td>';
 			$h      .= '<td><strong>' . esc_html( (string) $row['name'] ) . '</strong><div class="gh-small gh-muted">' . esc_html( (string) $row['group'] ) . '</div></td>';
-			$h      .= '<td>' . esc_html( (string) $row['course'] ) . '</td><td class="gh-num">' . $fourth . '</td><td class="c-act">' . $action . '</td></tr>';
-			$cards  .= '<div role="listitem">' . self::card_html(
-				'<strong class="gh-mcard-t">' . esc_html( (string) $row['course'] ) . '</strong>',
+			$h      .= '<td>' . esc_html( (string) $row['course'] ) . '</td><td>' . $source . '</td><td class="gh-num">' . $fourth . '</td><td class="c-act"><div class="gh-row-acts">' . $action . '</div></td></tr>';
+			$cards  .= '<div role="listitem"' . ( $sel ? ' class="gh-cert-card-sel"' : '' ) . '>' . ( $sel ? self::certificate_select( $row, true ) : '' ) . self::card_html(
+				'<strong class="gh-mcard-t">' . esc_html( GHCA_ACD_Course_Title::format( (string) $row['course'] ) ) . '</strong>',
 				(string) $row['name'],
 				'missing' === $row['kind'] ? '<span class="gh-st gh-st--missing">' . esc_html__( 'Missing', 'ghca-acd' ) . '</span>' : '',
 				array(
 					array( __( 'Completed', 'ghca-acd' ), esc_html( $done ) ),
+					array( __( 'Source', 'ghca-acd' ), esc_html( (string) $row['source'] ) ),
 					array( 'missing' === $view ? __( 'Certificate', 'ghca-acd' ) : __( 'Expires', 'ghca-acd' ), 'missing' === $row['kind'] ? esc_html__( 'No certificate link', 'ghca-acd' ) : self::expires_html( $row ) ),
 				),
 				self::certificate_action_html( $row, $can_docs, false ),
@@ -941,9 +998,31 @@ final class GHCA_ACD_Redesign_Lists {
 		foreach ( $items as $item ) {
 			$ts   = (int) ( $item['ts'] ?? 0 );
 			$when = $ts > 0 ? sprintf( /* translators: %s: human-readable time difference */ __( '%s ago', 'ghca-acd' ), human_time_diff( $ts, self::now() ) ) : __( 'Recently', 'ghca-acd' );
-			$h   .= '<li><span class="gh-tl-dot gh-tl-dot--success">' . self::icon( 'check', 'sm' ) . '</span><strong>' . esc_html( (string) ( $item['name'] ?? '' ) ) . '</strong><div class="gh-small gh-secondary">' . esc_html( (string) ( $item['course'] ?? '' ) ) . '</div><div class="gh-small gh-muted">' . esc_html( $when ) . '</div></li>';
+			$h   .= '<li><span class="gh-tl-dot gh-tl-dot--success">' . self::icon( 'check', 'sm' ) . '</span><strong>' . esc_html( (string) ( $item['name'] ?? '' ) ) . '</strong><div class="gh-small gh-secondary">' . esc_html( GHCA_ACD_Course_Title::format( (string) ( $item['course'] ?? '' ) ) ) . '</div><div class="gh-small gh-muted">' . esc_html( $when ) . '</div></li>';
 		}
 		return $h . '</ol></div></div>';
+	}
+
+	/**
+	 * Selection bar for certificate ZIPs (slice 9). Hidden until something is selected. The selection is kept across
+	 * filtering and paging; selected certificates that the current view does not show are counted and named here,
+	 * and the ZIP asks before including them.
+	 */
+	private static function certificate_bar_html(): string {
+		if ( ! class_exists( 'GHCA_ACD_Redesign_Certs' ) || ! GHCA_ACD_Redesign_Certs::can_use() ) {
+			return '';
+		}
+		if ( ! GHCA_ACD_Redesign_Certs::zip_available() ) {
+			return '<p class="gh-small gh-muted gh-cert-zipnote">' . self::icon( 'info', 'sm' ) . esc_html__( 'ZIP downloads are not available on this server (the PHP zip extension is missing), so selecting several certificates is turned off. Each certificate can still be viewed and downloaded.', 'ghca-acd' ) . '</p>';
+		}
+		$h  = '<div class="gh-certbar" data-ghca-cert-bar hidden role="region" aria-label="' . esc_attr__( 'Selected certificates', 'ghca-acd' ) . '">';
+		$h .= '<div class="gh-certbar-main"><strong class="gh-certbar-n" data-ghca-cert-count role="status" aria-live="polite"></strong><span class="gh-small gh-certbar-hidden" data-ghca-cert-hidden hidden></span></div>';
+		$h .= '<div class="gh-certbar-acts"><button type="button" class="gh-btn gh-btn--primary gh-btn--sm" data-ghca-cert-zip>' . self::icon( 'download', 'sm' ) . '<span data-ghca-cert-zip-label>' . esc_html__( 'Download selected as ZIP', 'ghca-acd' ) . '</span></button>';
+		$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-cert-keep hidden>' . esc_html__( 'Keep only those shown', 'ghca-acd' ) . '</button>';
+		$h .= '<button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-ghca-cert-clear>' . esc_html__( 'Clear selection', 'ghca-acd' ) . '</button></div>';
+		$h .= '<div class="gh-certbar-confirm" data-ghca-cert-confirm hidden role="group" aria-labelledby="ghca-cert-confirm-t"><p id="ghca-cert-confirm-t" class="gh-small" data-ghca-cert-confirm-text></p><div class="gh-certbar-acts"><button type="button" class="gh-btn gh-btn--primary gh-btn--sm" data-ghca-cert-zip-all></button><button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-cert-zip-shown></button><button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-ghca-cert-zip-cancel>' . esc_html__( 'Cancel', 'ghca-acd' ) . '</button></div></div>';
+		$h .= '<p class="gh-small gh-certbar-msg" data-ghca-cert-msg hidden></p></div>';
+		return $h;
 	}
 
 	/** @param array<string,mixed> $atts */
@@ -959,7 +1038,7 @@ final class GHCA_ACD_Redesign_Lists {
 		$parts     = self::certificate_parts( $filters );
 		$form      = self::CERTIFICATES_FORM;
 
-		$h  = '<div class="gh-toolbar"><div><h2 class="gh-h3">' . esc_html__( 'Certificates & records', 'ghca-acd' ) . '</h2><span class="gh-small gh-muted">' . esc_html__( 'Certificates issued through LearnDash to active employees in your view.', 'ghca-acd' ) . '</span></div></div>';
+		$h  = '<div class="gh-toolbar"><div><h2 class="gh-h3">' . esc_html__( 'Certificates & records', 'ghca-acd' ) . '</h2><span class="gh-small gh-muted">' . esc_html__( 'Certificates issued through LearnDash to active employees in your view. Open one to preview it, or select several to download them as a ZIP.', 'ghca-acd' ) . '</span></div></div>';
 		$h .= self::certificate_stats_html( $aggregate, $counts );
 		$missing = (int) ( $aggregate['certificates_missing'] ?? $counts['missing'] );
 		if ( $missing > 0 ) {
@@ -984,13 +1063,16 @@ final class GHCA_ACD_Redesign_Lists {
 		$h .= '</div></div><div class="gh-cert-filters"><div class="gh-filters">';
 		$h .= '<input type="hidden" name="ghca_cert_view" value="' . esc_attr( (string) $filters['view'] ) . '" data-ghca-not-filter />';
 		$h .= '<input type="hidden" name="ghca_cert_page" value="' . esc_attr( (string) $filters['page'] ) . '" data-ghca-page-input />';
+		// Employee filter: set by employee-specific certificate links, shown as a removable chip.
+		$h .= '<input type="hidden" name="ghca_cert_user" value="' . esc_attr( (int) $filters['user'] > 0 ? (string) $filters['user'] : '' ) . '" data-ghca-clearable data-ghca-cert-user-field />';
 		$h .= '<input type="hidden" name="ghca_cert_orderby" value="' . esc_attr( (string) $filters['orderby'] ) . '" />';
 		$h .= '<input type="hidden" name="ghca_cert_order" value="' . esc_attr( (string) $filters['order'] ) . '" />';
 		$h .= self::search_field( $form, 'ghca_cert_search', (string) $filters['search'], __( 'Employee or course', 'ghca-acd' ), true, __( 'Search certificates', 'ghca-acd' ) );
-		$h .= str_replace( 'class="gh-label"', 'class="gh-label gh-sr"', GHCA_ACD_Redesign_Tables::select_field( $form . '-c', __( 'Course', 'ghca-acd' ), 'ghca_cert_course', (int) $filters['course'] > 0 ? (string) $filters['course'] : '', self::certificate_course_options( $every ), __( 'All courses', 'ghca-acd' ) ) );
+		$h .= str_replace( array( 'class="gh-label"', '<select ' ), array( 'class="gh-label gh-sr"', '<select data-ghca-course-select ' ), GHCA_ACD_Redesign_Tables::select_field( $form . '-c', __( 'Course', 'ghca-acd' ), 'ghca_cert_course', (int) $filters['course'] > 0 ? (string) $filters['course'] : '', self::certificate_course_options( $every ), __( 'All courses', 'ghca-acd' ) ) );
 		$h .= str_replace( 'class="gh-label"', 'class="gh-label gh-sr"', GHCA_ACD_Redesign_Tables::select_field( $form . '-d', __( 'Completed', 'ghca-acd' ), 'ghca_cert_when', (string) $filters['when'], array( '30' => __( 'Last 30 days', 'ghca-acd' ) ), __( 'Any date', 'ghca-acd' ) ) );
 		$h .= '</div><div class="gh-chiprow" data-ghca-chips="certificates">' . $parts['chips'] . '</div></div></form>';
 		$h .= '<p class="gh-sr" role="status" aria-live="polite" data-ghca-table-status="certificates"></p>';
+		$h .= self::certificate_bar_html();
 		$h .= '<div class="gh-tmount gh-tmount--card" data-ghca-table data-ghca-table-id="certificates">' . $parts['html'] . '</div>';
 		$h .= '</div>' . self::recent_html( $aggregate ) . '</div>';
 		return $h;
