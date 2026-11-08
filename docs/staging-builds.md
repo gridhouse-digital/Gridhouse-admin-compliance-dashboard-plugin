@@ -6,7 +6,7 @@ One place for what each staging site runs. Update it whenever a build is install
 
 | Build | Status | Date | Notes |
 | --- | --- | --- | --- |
-| `1.7.3-rc.8-NEXT14` | Prepared, not installed | | Slice 9 with drawer Documents PDF previews in the redesigned viewer (same grants and audit) and no blank space under Overview Announcements. `docs/dashboard-redesign-phase2-slice9.md`. |
+| `1.7.3-rc.8-74a0a3d` | Prepared, not installed | | Slice 9 with drawer Documents PDF previews in the redesigned viewer (same grants and audit) and no blank space under Overview Announcements. `docs/dashboard-redesign-phase2-slice9.md`. |
 | `1.7.3-rc.8-10161f1` | Prepared, not installed. Superseded; do not install | | Same runtime files as `54bcc15` (byte-identical); BUILD.txt corrected to the measured 49 real-site checks per theme. Slice 9 with the Overview restored to the reference card sizes and proportions, list caps (6 group rows, 3 announcements; list bodies scroll with themed scrollbars) and a taller KPI strip. `docs/dashboard-redesign-phase2-slice9.md`. |
 | `1.7.3-rc.8-54bcc15` | Built, never delivered or installed | | Its BUILD.txt stated 53 real-site checks per theme before the run; the measured count is 49. Replaced by the build above. |
 | `1.7.3-rc.8-3ce13be` | Prepared, not installed. Superseded; do not install | | Slice 9 with certificate preview Fit to width corrected (opens fitted, whole page shown, zoom and Fit work in Chromium) and long Overview group names wrapping. `docs/dashboard-redesign-phase2-slice9.md`. |
