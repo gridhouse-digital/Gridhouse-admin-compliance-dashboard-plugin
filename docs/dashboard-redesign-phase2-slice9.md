@@ -71,7 +71,7 @@ How it works:
   - **Where the record lives:** each ZIP has its own row in the options table, not autoloaded. It is read and written with `$wpdb` directly, not as a transient: a transient never reaches the database when a persistent object cache is installed, and neither offers an atomic claim.
   - **Claiming:** the download claims the row with a compare-and-swap `UPDATE … WHERE option_value = <the unclaimed value>`. The database lets exactly one simultaneous request change it; every other request gets "no longer available" (410).
   - **Owner binding:** the claim happens only after checking that the requester built the ZIP. A request by anyone else is answered like a missing ZIP and leaves it unclaimed for its owner. The claimed record stores who claimed it and when.
-  - **Database errors:** if the database cannot answer the claim, the user gets "try the download again" (503) and the ZIP is not consumed.
+  - **Database errors:** if the database cannot answer the lookup or the claim, the user gets "try the download again" (503) and the ZIP is not consumed. A failed lookup is kept distinct from "missing" and "expired", which stay 410 (corrected again after `84e9985`, where a failed lookup looked like a missing ZIP).
 - **Failed reads (corrected build):** after the claim, the file must be read completely: the length must equal the file size and the content must start as a ZIP. Otherwise the answer is 500 with a JSON message ("could not be read… prepare it again"), never an empty or partial 200. The claimed file and record are deleted. The page shows that message.
 - **Expiry and cleanup (corrected build):** access expiry and physical deletion are separate.
   - **Access expiry:** a ZIP can be downloaded for 15 minutes after it is built. This is checked at download time, whatever cron has or has not done.
@@ -83,6 +83,12 @@ How it works:
     - before every new ZIP is built;
     - when the plugin is deactivated (everything).
   - **What cleanup removes:** expired records and their files, and claims that never finished after 5 minutes. It also removes ZIP and ZipArchive temporary files with no record once they are older than 20 minutes, judged by age, so a ZIP being written is never touched. It never touches the folder's deny files or anything else.
+  - **Deletion outcomes (corrected again after `84e9985`):**
+    - **Confirming deletions:** every file deletion is confirmed afterwards (the file must be gone), and every record deletion must be accepted by the database. A file or record that is already gone counts as success. Only confirmed removals are counted.
+    - **Keeping the record:** if a ZIP's file cannot be deleted, its record is kept, so the next run retries through it. If a record cannot be deleted, it stays.
+    - **Records or folder unreadable:** the run fails. If the records cannot be read, no file is deleted by age, because it is unknown which files belong to a live ZIP.
+    - **Retry state:** after any failure, the due marker is kept (set for a retry in 5 minutes) and the hourly backstop is scheduled again if it was missing. Both are cleared only by a run that completes with no failures and finds nothing left.
+    - **After a download or an expired request:** the file is removed first, then the record. If either fails, the claimed record stays (it can no longer be downloaded) and a retry is kept due.
   - **WP-Cron timing:** WP-Cron is not a clock. Events run only when someone loads a page, or when a system cron calls `wp-cron.php`, so "due at" means "no earlier than". On a quiet site, or with `DISABLE_WP_CRON` and no system cron, files can stay on disk longer, until the next request runs the fallback. They are unreachable meanwhile: the private folder's deny rules block them, and the download refuses expired ZIPs. For predictable deletion, staging should call `wp-cron.php` from a system cron (every 5 minutes is plenty).
 - **File names:** readable and distinct, `employee_course.pdf`, with `-2` and so on for clashes. The archive is named `certificates-YYYY-MM-DD-HHMMSS-N.zip`.
 - **PHP zip extension:** if it is missing, selection is disabled and a note says ZIP downloads are not available on this site, so there are no decorative controls.
@@ -154,7 +160,7 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 
 | Test | Result | Covers |
 | --- | --- | --- |
-| `tests/integration-slice9.php` (new) | 66 checks | ZIP building and private storage. Duplicate selections. Distinct and clashing file names. Archive name. Download refused without document access, with a bad nonce, with a malformed token, and for another administrator. Single use, owner-only. A fetch failure means no archive, with the failed items named. A non-PDF answer is a failure. The 20-item limit. Malformed selections. A real `group_leader` is refused for a selection with an out-of-scope certificate before any fetch, with a count only and no names, and can ZIP their own group's certificate. The preview endpoint refuses out-of-scope employees (403) and answers 404, never a file, when no certificate exists. The Certificates employee filter ignores out-of-scope ids. **Corrected build adds:**
+| `tests/integration-slice9.php` (new) | 90 checks | ZIP building and private storage. Duplicate selections. Distinct and clashing file names. Archive name. Download refused without document access, with a bad nonce, with a malformed token, and for another administrator. Single use, owner-only. A fetch failure means no archive, with the failed items named. A non-PDF answer is a failure. The 20-item limit. Malformed selections. A real `group_leader` is refused for a selection with an out-of-scope certificate before any fetch, with a count only and no names, and can ZIP their own group's certificate. The preview endpoint refuses out-of-scope employees (403) and answers 404, never a file, when no certificate exists. The Certificates employee filter ignores out-of-scope ids. **Corrected build adds:**
   - **Archive failures:** a refused entry write, a refused close (half-written file), an entry silently missing and an entry with different bytes. Each gives an error, leaves no file (temporary files included) and no record, and is simulated with ZipArchive subclasses injected through a test-only seam.
   - **Read failures:** the read returns false, a short read and an empty read. Each gives a 500 JSON answer, never a 200; the file and record are removed and a retry gets 410. Simulated with an injected reader; a real disk read error was not produced.
   - **Expiry and cleanup:**
@@ -165,7 +171,16 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
     - if WP-Cron refuses both events, the ZIP is still offered and the request-end fallback deletes it once overdue (not before);
     - with nothing left, the due time and every event are removed.
   - **Concurrency:** separate forked processes, each with its own database connection, start at the same instant. In each of 5 rounds, 8 simultaneous downloads (4 by the owner, 4 by another administrator) give exactly one 200, from the owner and with the complete archive; the other 7 get 410, and nothing is left afterwards. Six simultaneous requests by another administrator all get 410 and leave the ZIP unclaimed, and the owner can download it afterwards.
-  - **Negative control:** with the claim made non-atomic on the test site's copy only, the concurrency checks fail in every round (several 200s). The test therefore detects the race it is meant to. |
+  - **Negative control:** with the claim made non-atomic on the test site's copy only, the concurrency checks fail in every round (several 200s). The test therefore detects the race it is meant to.
+  - **Deletion failures (second correction):** these are real failures, not simulated. The immutable file flag makes the filesystem refuse `unlink` even for root, and database statements are pointed at a missing table, so MariaDB returns a real error.
+    - **Failed unlink of an expired ZIP:** 0 files and 0 records are reported, and the file and record are kept. The retry is due within 5 minutes and the backstop is rescheduled. A fallback retry that fails again keeps that state. Once deletion works, the next run removes and counts both and only then clears the state.
+    - **Failed unlink of an abandoned file:** the same pattern.
+    - **Failed record deletion:** the file, confirmed gone, is counted and the record is not; the retry state is kept. The next run treats the already-absent file as success, deletes the record and clears the state.
+    - **Unreadable records:** the run fails and deletes nothing, not even a ZIP that would be due, and keeps the state.
+    - **Download, failed lookup:** a 503 "try again", not a 410. The ZIP is untouched, and a retry downloads it. A token with no record is still a 410.
+    - **Download served, file deletion refused:** the complete archive is still served. The claimed record stays, the retry is kept, and a second download is refused. Cleanup removes the ZIP after the grace period.
+    - **Download served, record deletion refused:** the claimed record stays and the retry is kept. The retry deletes it.
+  - **Second negative control:** with file deletion made to report success without checking, on the test site's copy only, 12 of these checks fail. |
 | `tests/browser-real-site9.cjs` under **Twenty Twenty-Four** | 23 checks | Container width at 1920. Overview columns at 1440 and 1280, and stacking at 1100, 834 and 390, with a long announcement (created and deleted again). Certificates routing and the employee filter: report action, Overview "View all", chip removal, the Certificates tab by click (also while filtered) and by arrow key (corrected build), direct link. Report picker icons at 1440 and 390. |
 | Same under **Twenty Twenty-Two** | 23 checks | Same |
 | `browser-real-site.cjs` (Slice 8) under both themes | 67 checks each | Regression |
@@ -191,6 +206,15 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 - **Archive results were not checked.** `addFromString()` results were ignored, and the archive was not checked after closing.
 - **A failed file read could become an empty 200 download.** `(string) file_get_contents()` turned `false` into `''`.
 - **Clicking the Certificates tab itself did not clear an employee filter**, although this document said it did.
+
+## Corrections after `84e9985`
+
+`84e9985` was prepared and never installed. Review found these problems:
+- **`discard()` hid deletion failures.** It suppressed them, and `cleanup()` counted them as removed. It could also clear the due marker and the scheduled backstop while files or records were still there.
+- **Failed lookups looked like missing ZIPs.** A failed database lookup at download was answered like a missing or expired ZIP (410) instead of a retryable error.
+- **Unreadable records led to age-based deletion.** If the records could not be read, the age-based scan could have treated every ZIP file as abandoned.
+
+All three are fixed as described under "Deletion outcomes" and "Database errors".
 
 ## Package
 

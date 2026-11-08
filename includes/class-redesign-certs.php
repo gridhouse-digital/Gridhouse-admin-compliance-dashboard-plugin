@@ -34,6 +34,8 @@ final class GHCA_ACD_Redesign_Certs {
 	const ZIP_DELETE_GRACE   = 300;
 	/** The request-end fallback cleans up once a cleanup is this overdue (cron late, disabled or not scheduled). */
 	const ZIP_FALLBACK_LAG   = 600;
+	/** After a deletion fails, the next cleanup is due this much later (cron backstop and fallback both retry). */
+	const ZIP_RETRY_DELAY    = 300;
 	const ZIP_MAX_ITEMS      = 20;
 	const ZIP_MAX_BYTES      = 104857600;
 	const CLEANUP_HOOK       = 'ghca_acd_cert_zip_cleanup';
@@ -235,22 +237,22 @@ final class GHCA_ACD_Redesign_Certs {
 		$written = __( 'The ZIP file could not be written. Nothing was downloaded; try again.', 'ghca-acd' );
 		$zip     = self::new_archive();
 		if ( true !== $zip->open( $path, ZipArchive::CREATE | ZipArchive::EXCL ) ) {
-			self::discard( $path );
+			self::discard_or_retry( $path, $now );
 			return array( 'ok' => false, 'message' => __( 'The ZIP file could not be created. Nothing was downloaded.', 'ghca-acd' ) );
 		}
 		foreach ( $files as $fname => $bytes ) {
 			if ( true !== $zip->addFromString( $fname, $bytes ) ) {
 				self::abandon( $zip );
-				self::discard( $path );
+				self::discard_or_retry( $path, $now );
 				return array( 'ok' => false, 'message' => $written );
 			}
 		}
 		if ( true !== $zip->close() ) {
-			self::discard( $path );
+			self::discard_or_retry( $path, $now );
 			return array( 'ok' => false, 'message' => $written );
 		}
 		if ( ! self::verify_archive( $path, $files ) ) {
-			self::discard( $path );
+			self::discard_or_retry( $path, $now );
 			return array( 'ok' => false, 'message' => __( 'The ZIP file failed its check after writing (an entry was missing or different). Nothing was downloaded; try again.', 'ghca-acd' ) );
 		}
 		@chmod( $path, 0600 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
@@ -258,7 +260,7 @@ final class GHCA_ACD_Redesign_Certs {
 		$name = 'certificates-' . gmdate( 'Y-m-d-His', $now ) . '-' . count( $files ) . '.zip';
 		$job  = array( 'owner' => $owner, 'path' => $path, 'name' => $name, 'created' => $now, 'expires' => $now + self::ZIP_TTL, 'count' => count( $files ), 'bytes' => (int) filesize( $path ) );
 		if ( ! self::insert_job( $token, $job ) ) {
-			self::discard( $path );
+			self::discard_or_retry( $path, $now );
 			return array( 'ok' => false, 'message' => __( 'The ZIP file could not be registered for download. Nothing was downloaded; try again.', 'ghca-acd' ) );
 		}
 		$scheduled = self::schedule_cleanup( $token, $job['expires'] + self::ZIP_DELETE_GRACE );
@@ -301,14 +303,60 @@ final class GHCA_ACD_Redesign_Certs {
 		}
 	}
 
-	/** Deletes an archive and any temporary file ZipArchive left beside it. */
-	private static function discard( string $path ): void {
-		foreach ( array_merge( array( $path ), (array) glob( $path . '.*' ) ) as $file ) {
-			if ( is_string( $file ) && is_file( $file ) ) {
-				@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+	/** @var callable|null */
+	private static $file_deleter = null;
+
+	/**
+	 * Tests only: replace how files are deleted (to simulate a deletion the filesystem refuses). Pass null to restore.
+	 *
+	 * @internal
+	 */
+	public static function use_file_deleter( ?callable $deleter ): void {
+		self::$file_deleter = $deleter;
+	}
+
+	/**
+	 * Deletes one file and confirms it. A file that is already gone counts as deleted; true only when it is gone.
+	 */
+	private static function delete_file( string $file ): bool {
+		clearstatcache( true, $file );
+		if ( ! file_exists( $file ) ) {
+			return true;
+		}
+		if ( null !== self::$file_deleter ) {
+			call_user_func( self::$file_deleter, $file );
+		} else {
+			@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- the outcome is checked below.
+		}
+		clearstatcache( true, $file );
+		return ! file_exists( $file );
+	}
+
+	/**
+	 * Deletes an archive and any temporary file ZipArchive left beside it. True only when all of them are confirmed
+	 * gone (already absent counts); false when any deletion failed or the folder could not be listed.
+	 */
+	private static function discard( string $path ): bool {
+		$ok    = self::delete_file( $path );
+		$names = @scandir( dirname( $path ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- false is handled.
+		if ( false === $names ) {
+			return false;
+		}
+		$prefix = basename( $path ) . '.';
+		foreach ( $names as $name ) {
+			if ( 0 === strpos( (string) $name, $prefix ) ) {
+				$ok = self::delete_file( dirname( $path ) . '/' . $name ) && $ok;
 			}
 		}
-		clearstatcache();
+		return $ok;
+	}
+
+	/** Deletes an archive; if that cannot be confirmed, keeps a cleanup due so the leftover is retried. */
+	private static function discard_or_retry( string $path, int $now ): void {
+		if ( ! self::discard( $path ) ) {
+			// No record points at it, so the age-based scan removes it; due once it is old enough for that scan.
+			self::keep_retry( $now + self::ZIP_TTL + self::ZIP_DELETE_GRACE + 1 );
+		}
 	}
 
 	/**
@@ -356,21 +404,36 @@ final class GHCA_ACD_Redesign_Certs {
 	}
 
 	/**
-	 * The stored record for a token, with its raw value (for the compare-and-swap). Null when there is none.
+	 * Looks a record up and says which of three things happened: found (with the record and its raw value, for the
+	 * compare-and-swap), missing (no such ZIP, or a malformed token or record), or error (the database did not
+	 * answer, so nothing can be said about the ZIP).
+	 *
+	 * @return array{state:string,job?:array<string,mixed>,raw?:string}
+	 */
+	public static function lookup_job( string $token ): array {
+		global $wpdb;
+		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
+			return array( 'state' => 'missing' );
+		}
+		$raw = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::record_key( $token ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( '' !== (string) $wpdb->last_error ) {
+			return array( 'state' => 'error' );
+		}
+		if ( ! is_string( $raw ) ) {
+			return array( 'state' => 'missing' );
+		}
+		$job = json_decode( $raw, true );
+		return is_array( $job ) && isset( $job['owner'], $job['path'], $job['expires'] ) ? array( 'state' => 'found', 'job' => $job, 'raw' => $raw ) : array( 'state' => 'missing' );
+	}
+
+	/**
+	 * The stored record for a token, or null when there is none or it could not be read (see lookup_job()).
 	 *
 	 * @return array{job:array<string,mixed>,raw:string}|null
 	 */
 	public static function job( string $token ): ?array {
-		global $wpdb;
-		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
-			return null;
-		}
-		$raw = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::record_key( $token ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		if ( ! is_string( $raw ) ) {
-			return null;
-		}
-		$job = json_decode( $raw, true );
-		return is_array( $job ) && isset( $job['owner'], $job['path'], $job['expires'] ) ? array( 'job' => $job, 'raw' => $raw ) : null;
+		$r = self::lookup_job( $token );
+		return 'found' === $r['state'] ? array( 'job' => $r['job'], 'raw' => $r['raw'] ) : null;
 	}
 
 	/** @param array<string,mixed> $job */
@@ -379,9 +442,10 @@ final class GHCA_ACD_Redesign_Certs {
 		return 1 === $wpdb->insert( $wpdb->options, array( 'option_name' => self::record_key( $token ), 'option_value' => (string) wp_json_encode( $job ), 'autoload' => 'no' ), array( '%s', '%s', '%s' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
-	private static function delete_job( string $token ): void {
+	/** Deletes a record. True when it is gone (already absent counts); false when the database refused. */
+	private static function delete_job( string $token ): bool {
 		global $wpdb;
-		$wpdb->delete( $wpdb->options, array( 'option_name' => self::record_key( $token ) ), array( '%s' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return false !== $wpdb->delete( $wpdb->options, array( 'option_name' => self::record_key( $token ) ), array( '%s' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	/**
@@ -417,6 +481,9 @@ final class GHCA_ACD_Redesign_Certs {
 	 * WP-Cron only runs when someone loads a page (or a system cron calls wp-cron.php), so the scheduled times are
 	 * "no earlier than", not exact; on a site with no traffic deletion waits for the next request. Access expiry
 	 * does not depend on cron.
+	 * Every deletion is confirmed (a file must be gone, a record deletion accepted; already absent counts). A
+	 * failure is never counted as a removal and never clears the due marker or the backstop: both stay until a
+	 * cleanup run completes without failures and finds nothing left.
 	 * ------------------------------------------------------------------- */
 
 	/** Schedules this ZIP's cleanup; records when one is due so the fallback can take over. */
@@ -439,30 +506,58 @@ final class GHCA_ACD_Redesign_Certs {
 	}
 
 	/**
+	 * Keeps cleanup state after something could not be deleted: the due marker (never later than $when, so the
+	 * request-end fallback retries) and the hourly backstop (so cron retries). Neither is cleared until a cleanup
+	 * confirms that nothing is left.
+	 */
+	private static function keep_retry( int $when ): void {
+		$due = (int) get_option( self::CLEANUP_DUE_OPTION, 0 );
+		update_option( self::CLEANUP_DUE_OPTION, $due > 0 ? min( $due, $when ) : $when, true );
+		if ( ! wp_next_scheduled( self::CLEANUP_HOOK ) ) {
+			wp_schedule_event( $when, 'hourly', self::CLEANUP_HOOK, array(), true );
+		}
+	}
+
+	/**
 	 * Physically removes expired, claimed-and-abandoned and orphaned ZIP files and records. Safe to run any time:
 	 * a ZIP that may still be downloaded is never touched.
 	 *
-	 * @return array{files:int,records:int,remaining:int}
+	 * Only confirmed removals are counted. When a file cannot be deleted its record is kept, so the next run retries
+	 * with it; when a record cannot be deleted, or the records or the folder cannot be read, the run is a failure.
+	 * After any failure the due marker and the hourly backstop are kept (the marker set for a retry in
+	 * ZIP_RETRY_DELAY); they are cleared only by a run that completes and finds nothing left.
+	 *
+	 * @return array{ok:bool,files:int,records:int,remaining:int,failed:int}
 	 */
 	public static function cleanup( string $dir = '', int $now = 0 ): array {
 		global $wpdb;
 		$now = $now > 0 ? $now : time();
-		$out = array( 'files' => 0, 'records' => 0, 'remaining' => 0 );
+		$out = array( 'ok' => true, 'files' => 0, 'records' => 0, 'remaining' => 0, 'failed' => 0 );
 		try {
 			$dir = '' !== $dir ? $dir : self::zip_dir();
 		} catch ( RuntimeException $e ) {
+			$out['ok']     = false;
+			$out['failed'] = 1;
+			self::keep_retry( $now + self::ZIP_RETRY_DELAY );
 			return $out;
 		}
 		$next = 0;
+		$seen = array();
 		// Records.
-		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( self::ZIP_RECORD ) . '%' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( self::ZIP_RECORD ) . '%' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$records_ok = '' === (string) $wpdb->last_error && is_array( $rows );
+		if ( ! $records_ok ) {
+			++$out['failed']; // Unknown records: never conclude that nothing is left.
+			$rows = array();
+		}
 		foreach ( $rows as $row ) {
 			$token = substr( (string) $row->option_name, strlen( self::ZIP_RECORD ) );
 			$job   = json_decode( (string) $row->option_value, true );
 			if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
 				continue;
 			}
-			$delete_at = is_array( $job ) ? (int) ( $job['expires'] ?? 0 ) + self::ZIP_DELETE_GRACE : 0;
+			$seen[ $token ] = true;
+			$delete_at      = is_array( $job ) ? (int) ( $job['expires'] ?? 0 ) + self::ZIP_DELETE_GRACE : 0;
 			if ( is_array( $job ) && ! empty( $job['claimed_at'] ) ) {
 				$delete_at = min( $delete_at, (int) $job['claimed_at'] + self::ZIP_DELETE_GRACE );
 			}
@@ -472,33 +567,60 @@ final class GHCA_ACD_Redesign_Certs {
 				continue;
 			}
 			$path = is_array( $job ) ? (string) ( $job['path'] ?? '' ) : '';
-			if ( '' !== $path && self::path_ok( $path, $token, $dir ) && is_file( $path ) ) {
-				self::discard( $path );
-				++$out['files'];
+			if ( '' !== $path && self::path_ok( $path, $token, $dir ) ) {
+				clearstatcache( true, $path );
+				$had = file_exists( $path );
+				if ( ! self::discard( $path ) ) {
+					// Keep the record: it is how the next run finds this file again.
+					++$out['failed'];
+					++$out['remaining'];
+					continue;
+				}
+				if ( $had ) {
+					++$out['files'];
+				}
 			}
-			self::delete_job( $token );
-			++$out['records'];
+			if ( self::delete_job( $token ) ) {
+				++$out['records'];
+			} else {
+				++$out['failed'];
+				++$out['remaining'];
+			}
 		}
-		// Files on disk with no live record (abandoned builds, temporary files, records lost): by age only, so a
-		// ZIP being written right now is never removed.
+		// Files on disk with no record (abandoned builds, temporary files, records lost): by age only, so a ZIP being
+		// written right now is never removed. Files that belong to a record were handled above.
 		$cutoff = $now - self::ZIP_TTL - self::ZIP_DELETE_GRACE;
-		foreach ( (array) glob( $dir . '/*' ) as $file ) {
-			$base = basename( (string) $file );
-			if ( ! preg_match( '/^[a-f0-9]{32}\.zip(\.[A-Za-z0-9]+)?$/', $base ) || ! is_file( $file ) ) {
+		// Without the records it is unknown which files belong to a ZIP that may still be downloaded: skip the scan.
+		$names = $records_ok ? @scandir( $dir ) : array(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- false is handled.
+		if ( false === $names ) {
+			++$out['failed'];
+			$names = array();
+		}
+		foreach ( $names as $base ) {
+			$base = (string) $base;
+			$file = $dir . '/' . $base;
+			if ( ! preg_match( '/^([a-f0-9]{32})\.zip(\.[A-Za-z0-9]+)?$/', $base, $m ) || isset( $seen[ $m[1] ] ) || ! is_file( $file ) ) {
 				continue; // Never touch the folder's deny files or anything else.
 			}
 			$mtime = (int) filemtime( $file );
-			if ( $mtime < $cutoff ) {
-				@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-				++$out['files'];
-			} else {
+			if ( $mtime >= $cutoff ) {
 				++$out['remaining'];
 				$at   = $mtime + self::ZIP_TTL + self::ZIP_DELETE_GRACE;
 				$next = $next > 0 ? min( $next, $at ) : $at;
+			} elseif ( self::delete_file( $file ) ) {
+				++$out['files'];
+			} else {
+				++$out['failed'];
+				++$out['remaining'];
 			}
 		}
 		clearstatcache();
-		if ( $next > 0 ) {
+		if ( $out['failed'] > 0 ) {
+			$out['ok'] = false;
+			$retry     = $now + self::ZIP_RETRY_DELAY;
+			update_option( self::CLEANUP_DUE_OPTION, $next > 0 ? min( $next, $retry ) : $retry, true );
+			self::keep_retry( $retry );
+		} elseif ( $next > 0 ) {
 			update_option( self::CLEANUP_DUE_OPTION, $next, true );
 		} else {
 			delete_option( self::CLEANUP_DUE_OPTION );
@@ -527,9 +649,11 @@ final class GHCA_ACD_Redesign_Certs {
 		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( self::ZIP_RECORD ) . '%' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		delete_option( self::CLEANUP_DUE_OPTION );
 		try {
-			foreach ( (array) glob( self::zip_dir() . '/*' ) as $file ) {
-				if ( preg_match( '/^[a-f0-9]{32}\.zip(\.[A-Za-z0-9]+)?$/', basename( (string) $file ) ) && is_file( $file ) ) {
-					@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$dir = self::zip_dir();
+			// Best effort: with the plugin inactive nothing can retry, and any file left stays behind the deny rules.
+			foreach ( (array) @scandir( $dir ) as $name ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				if ( preg_match( '/^[a-f0-9]{32}\.zip(\.[A-Za-z0-9]+)?$/', (string) $name ) && is_file( $dir . '/' . $name ) ) {
+					self::delete_file( $dir . '/' . $name );
 				}
 			}
 		} catch ( RuntimeException $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- no folder, nothing to remove.
@@ -591,8 +715,13 @@ final class GHCA_ACD_Redesign_Certs {
 			return self::json_answer( 403, __( 'Permission denied.', 'ghca-acd' ) );
 		}
 		$token = isset( $request['token'] ) ? (string) $request['token'] : '';
-		$rec   = self::job( $token );
-		$user  = get_current_user_id();
+		$look  = self::lookup_job( $token );
+		if ( 'error' === $look['state'] ) {
+			// Not "expired" or "missing": the database did not answer, and the ZIP may well still be there.
+			return self::json_answer( 503, __( 'The ZIP could not be checked just now. Try the download again in a moment.', 'ghca-acd' ) );
+		}
+		$rec  = 'found' === $look['state'] ? $look : null;
+		$user = get_current_user_id();
 		// Someone else's ZIP looks exactly like a missing one, and is left alone for its owner.
 		if ( null === $rec || (int) $rec['job']['owner'] !== $user || ! empty( $rec['job']['claimed_at'] ) ) {
 			return $gone;
@@ -607,10 +736,7 @@ final class GHCA_ACD_Redesign_Certs {
 		// Access expiry is checked here, whatever cron has or has not done.
 		if ( (int) $job['expires'] < $now || ! self::path_ok( $path, $token, $dir ) || ! is_file( $path ) ) {
 			if ( 1 === self::claim_job( $token, $rec['raw'], $job, $user, $now ) ) {
-				if ( self::path_ok( $path, $token, $dir ) ) {
-					self::discard( $path );
-				}
-				self::delete_job( $token );
+				self::remove_claimed( $token, self::path_ok( $path, $token, $dir ) ? $path : '', $now );
 			}
 			return $gone;
 		}
@@ -625,8 +751,7 @@ final class GHCA_ACD_Redesign_Certs {
 		clearstatcache( true, $path );
 		$size = is_file( $path ) ? (int) filesize( $path ) : -1;
 		$body = call_user_func( $read ?: 'file_get_contents', $path );
-		self::discard( $path );
-		self::delete_job( $token );
+		self::remove_claimed( $token, $path, $now );
 		if ( ! is_string( $body ) || $size <= 0 || strlen( $body ) !== $size || 0 !== strpos( $body, 'PK' ) ) {
 			return self::json_answer( 500, __( 'The ZIP file could not be read on the server. Nothing was downloaded; select the certificates and prepare it again.', 'ghca-acd' ) );
 		}
@@ -640,6 +765,19 @@ final class GHCA_ACD_Redesign_Certs {
 			),
 			'body'    => $body,
 		);
+	}
+
+	/**
+	 * Removes a claimed ZIP's file and then its record. The record is deleted only once the file is confirmed gone;
+	 * if either deletion fails, the claimed record (which can no longer be downloaded) stays for cleanup to retry,
+	 * and a retry is kept due.
+	 */
+	private static function remove_claimed( string $token, string $path, int $now ): void {
+		$file_ok = '' === $path || self::discard( $path );
+		$rec_ok  = $file_ok && self::delete_job( $token );
+		if ( ! $rec_ok ) {
+			self::keep_retry( $now + self::ZIP_DELETE_GRACE + 1 );
+		}
 	}
 
 	public static function ajax_zip_download(): void {

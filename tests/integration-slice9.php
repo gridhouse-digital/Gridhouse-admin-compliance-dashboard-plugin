@@ -112,6 +112,14 @@ $records = static function (): int { global $wpdb; return (int) $wpdb->get_var( 
 // Change fields of a stored record directly in the database (to move it in time).
 $set_job = static function ( string $token, array $fields ): void { global $wpdb; $j = GHCA_ACD_Redesign_Certs::job( $token )['job']; $wpdb->update( $wpdb->options, array( 'option_value' => wp_json_encode( array_merge( $j, $fields ) ) ), array( 'option_name' => GHCA_ACD_Redesign_Certs::ZIP_RECORD . $token ) ); };
 $drop = static function ( string $token ): void { global $wpdb; $j = GHCA_ACD_Redesign_Certs::job( $token ); if ( $j ) { @unlink( (string) $j['job']['path'] ); } $wpdb->delete( $wpdb->options, array( 'option_name' => GHCA_ACD_Redesign_Certs::ZIP_RECORD . $token ) ); }; // phpcs:ignore
+// Setup: remove ZIP leftovers of earlier interrupted runs on this disposable site, so every count below starts at zero.
+( static function () use ( $dir ): void {
+	global $wpdb;
+	foreach ( (array) scandir( $dir ) as $n ) { if ( preg_match( '/^[a-f0-9]{32}\.zip/', (string) $n ) ) { exec( 'chattr -i ' . escapeshellarg( $dir . '/' . $n ) . ' 2>/dev/null' ); unlink( $dir . '/' . $n ); } }
+	$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( GHCA_ACD_Redesign_Certs::ZIP_RECORD ) . '%' ) );
+	delete_option( GHCA_ACD_Redesign_Certs::CLEANUP_DUE_OPTION );
+	wp_unschedule_hook( GHCA_ACD_Redesign_Certs::CLEANUP_HOOK );
+} )();
 
 
 // ---- Global admin: a ZIP of three, privately stored, single use.
@@ -259,6 +267,139 @@ update_option( GHCA_ACD_Redesign_Certs::CLEANUP_DUE_OPTION, time() - GHCA_ACD_Re
 GHCA_ACD_Redesign_Certs::fallback_cleanup(); // runs on 'shutdown' of any request
 check( ! is_file( (string) $jf['path'] ) && null === GHCA_ACD_Redesign_Certs::job( $r['token'] ), 'once overdue, the request-end fallback deletes it without cron' );
 check( false === get_option( GHCA_ACD_Redesign_Certs::CLEANUP_DUE_OPTION ) && false === wp_next_scheduled( GHCA_ACD_Redesign_Certs::CLEANUP_HOOK ) && 0 === $records() && array() === $all_zip_files(), 'with nothing left, the due time and every cleanup event are removed' );
+
+// ================= Deletion failures: nothing counts as removed until confirmed; retry state is kept =================
+// Real refusals: the immutable flag makes the filesystem refuse unlink even for root, and database statements are
+// pointed at a table that does not exist, so MariaDB itself returns the error.
+$C       = 'GHCA_ACD_Redesign_Certs';
+$lock    = static function ( string $f, bool $on ): bool { exec( 'chattr ' . ( $on ? '+i' : '-i' ) . ' ' . escapeshellarg( $f ) . ' 2>&1', $o, $rc ); return 0 === $rc; };
+$state   = static function () use ( $C ): array { return array( 'due' => (int) get_option( $C::CLEANUP_DUE_OPTION, 0 ), 'backstop' => wp_next_scheduled( $C::CLEANUP_HOOK ) ); };
+$cleared = static function () use ( $C ): bool { return false === get_option( $C::CLEANUP_DUE_OPTION ) && false === wp_next_scheduled( $C::CLEANUP_HOOK ); };
+$retry_kept = static function () use ( $state, $C ): bool { $s = $state(); return $s['due'] > time() && $s['due'] <= time() + $C::ZIP_RETRY_DELAY + 5 && false !== $s['backstop']; };
+$break = static function ( string $verb, string $needle ) { global $wpdb; return static function ( $q ) use ( $verb, $needle, $wpdb ) { return 0 === stripos( ltrim( (string) $q ), $verb ) && false !== strpos( (string) $q, $needle ) ? str_replace( $wpdb->options, 'ghca_no_such_table', (string) $q ) : $q; }; };
+global $wpdb;
+$C::cleanup();
+check( $cleared(), 'setup: nothing left and no cleanup state' );
+
+// (a) Failed unlink of an expired ZIP's file.
+$r  = $C::build_zip( $two, $admin->ID, $fetch_ok );
+$tk = $r['token'];
+$jp = (string) $C::job( $tk )['job']['path'];
+$set_job( $tk, array( 'expires' => time() - $C::ZIP_DELETE_GRACE - 1 ) );
+wp_unschedule_hook( $C::CLEANUP_HOOK ); // so the test sees cleanup itself put the backstop back
+check( $lock( $jp, true ), 'setup: the filesystem refuses to delete the archive (immutable flag)' );
+$c = $C::cleanup();
+clearstatcache();
+check( false === $c['ok'] && $c['failed'] >= 1 && 0 === $c['files'] && 0 === $c['records'] && is_file( $jp ) && null !== $C::job( $tk ), 'failed unlink: not reported as removed (0 files, 0 records); the file and its record are kept so the next run finds it' );
+check( $retry_kept(), 'failed unlink: the due marker is kept for a retry within 5 minutes and the hourly backstop is scheduled again' );
+update_option( $C::CLEANUP_DUE_OPTION, time() - $C::ZIP_FALLBACK_LAG - 1, true );
+$C::fallback_cleanup();
+clearstatcache();
+check( is_file( $jp ) && $retry_kept(), 'a fallback retry that fails again keeps the retry state again (nothing is cleared)' );
+$lock( $jp, false );
+$c = $C::cleanup();
+clearstatcache();
+check( true === $c['ok'] && 1 === $c['files'] && 1 === $c['records'] && 0 === $c['failed'] && ! is_file( $jp ) && null === $C::job( $tk ), 'once the filesystem allows it, the next run removes the file and record and counts both' );
+check( $cleared(), '…and only that confirmed run clears the due marker and the backstop' );
+
+// (b) Failed unlink of an abandoned file with no record.
+$orph = $dir . '/' . str_repeat( 'f', 32 ) . '.zip';
+file_put_contents( $orph, 'PK' );
+touch( $orph, time() - $C::ZIP_TTL - $C::ZIP_DELETE_GRACE - 60 );
+$lock( $orph, true );
+$c = $C::cleanup();
+clearstatcache();
+check( false === $c['ok'] && 0 === $c['files'] && is_file( $orph ) && $retry_kept(), 'failed unlink of an abandoned file: not counted, file kept, retry state kept' );
+$lock( $orph, false );
+$c = $C::cleanup();
+clearstatcache();
+check( $c['ok'] && 1 === $c['files'] && ! is_file( $orph ) && $cleared(), 'abandoned file: removed and counted on the next run; state cleared' );
+
+// (c) Failed database deletion of an expired ZIP's record.
+$r  = $C::build_zip( $two, $admin->ID, $fetch_ok );
+$tk = $r['token'];
+$jp = (string) $C::job( $tk )['job']['path'];
+$set_job( $tk, array( 'expires' => time() - $C::ZIP_DELETE_GRACE - 1 ) );
+wp_unschedule_hook( $C::CLEANUP_HOOK );
+$f = $break( 'DELETE', $C::ZIP_RECORD . $tk );
+add_filter( 'query', $f );
+$quiet = $wpdb->suppress_errors( true );
+$c = $C::cleanup();
+$wpdb->suppress_errors( $quiet );
+remove_filter( 'query', $f );
+clearstatcache();
+check( false === $c['ok'] && 1 === $c['files'] && 0 === $c['records'] && ! is_file( $jp ) && null !== $C::job( $tk ), 'failed record deletion (database error): the file, confirmed gone, is counted; the record is not, and it stays' );
+check( $retry_kept(), 'failed record deletion: retry due and backstop kept' );
+$c = $C::cleanup();
+check( $c['ok'] && 0 === $c['files'] && 1 === $c['records'] && null === $C::job( $tk ) && $cleared(), 'next run: the file is already gone (counts as success), the record is deleted; state cleared' );
+
+// (d) Failed reading of the records: never treated as "nothing left".
+$r  = $C::build_zip( $two, $admin->ID, $fetch_ok );
+$tk = $r['token'];
+$jp = (string) $C::job( $tk )['job']['path'];
+$f = $break( 'SELECT option_name, option_value', 'option_name LIKE' ); // the LIKE pattern is escaped, so match the clause
+add_filter( 'query', $f );
+$quiet = $wpdb->suppress_errors( true );
+$c = $C::cleanup( '', time() + 7200 ); // far enough ahead that the ZIP would otherwise be deleted
+$wpdb->suppress_errors( $quiet );
+remove_filter( 'query', $f );
+clearstatcache();
+check( false === $c['ok'] && is_file( $jp ) && null !== $C::job( $tk ) && false !== get_option( $C::CLEANUP_DUE_OPTION ) && false !== wp_next_scheduled( $C::CLEANUP_HOOK ), 'records cannot be read (database error): the run fails, deletes nothing and keeps the due marker and backstop' );
+
+// (e) Download: a failed job lookup is a retryable 503, not "expired" or "missing", and consumes nothing.
+$f = $break( 'SELECT option_value', $C::ZIP_RECORD . $tk );
+add_filter( 'query', $f );
+$quiet = $wpdb->suppress_errors( true );
+$d = $C::zip_download( array( 'token' => $tk, 'nonce' => $nonce ) );
+$wpdb->suppress_errors( $quiet );
+remove_filter( 'query', $f );
+$jl = $C::job( $tk );
+check( 503 === $d['status'] && false !== strpos( $d['body'], 'Try the download again' ) && false === strpos( $d['body'], 'no longer available' ), 'download with a failed job lookup: 503 "try again", not the expired/missing 410' );
+check( null !== $jl && empty( $jl['job']['claimed_at'] ) && is_file( $jp ), '…and the ZIP is untouched (not claimed, file kept)' );
+$d = $C::zip_download( array( 'token' => $tk, 'nonce' => $nonce ) );
+check( 200 === $d['status'] && 0 === strpos( $d['body'], 'PK' ), 'retrying once the database answers downloads it' );
+$d = $C::zip_download( array( 'token' => str_repeat( 'a', 32 ), 'nonce' => $nonce ) );
+check( 410 === $d['status'], 'a token with no record is still the 410 "no longer available"' );
+$C::cleanup();
+
+// (f) Download served, but the file deletion afterwards is refused.
+$r  = $C::build_zip( $two, $admin->ID, $fetch_ok );
+$tk = $r['token'];
+$jp = (string) $C::job( $tk )['job']['path'];
+wp_unschedule_hook( $C::CLEANUP_HOOK );
+delete_option( $C::CLEANUP_DUE_OPTION );
+$want = sha1( (string) file_get_contents( $jp ) );
+$lock( $jp, true );
+$d  = $C::zip_download( array( 'token' => $tk, 'nonce' => $nonce ) );
+$jl = $C::job( $tk );
+clearstatcache();
+check( 200 === $d['status'] && sha1( $d['body'] ) === $want, 'the owner still gets the complete archive' );
+check( is_file( $jp ) && null !== $jl && ! empty( $jl['job']['claimed_at'] ), 'the undeletable file keeps its claimed record (not removed, not reported removed)' );
+$s = $state();
+check( $s['due'] > 0 && false !== $s['backstop'], 'a retry is due and the backstop scheduled' );
+check( 410 === $C::zip_download( array( 'token' => $tk, 'nonce' => $nonce ) )['status'], 'the claimed ZIP cannot be downloaded a second time' );
+$lock( $jp, false );
+$c = $C::cleanup( '', time() + $C::ZIP_DELETE_GRACE + 2 );
+clearstatcache();
+check( $c['ok'] && 1 === $c['files'] && 1 === $c['records'] && ! is_file( $jp ) && null === $C::job( $tk ) && $cleared(), 'after the grace period cleanup removes it, counts it and clears the state' );
+
+// (g) Download served, file deleted, but the record deletion is refused.
+$r  = $C::build_zip( $two, $admin->ID, $fetch_ok );
+$tk = $r['token'];
+$jp = (string) $C::job( $tk )['job']['path'];
+wp_unschedule_hook( $C::CLEANUP_HOOK );
+delete_option( $C::CLEANUP_DUE_OPTION );
+$f = $break( 'DELETE', $C::ZIP_RECORD . $tk );
+add_filter( 'query', $f );
+$quiet = $wpdb->suppress_errors( true );
+$d = $C::zip_download( array( 'token' => $tk, 'nonce' => $nonce ) );
+$wpdb->suppress_errors( $quiet );
+remove_filter( 'query', $f );
+clearstatcache();
+$s = $state();
+check( 200 === $d['status'] && ! is_file( $jp ) && null !== $C::job( $tk ) && $s['due'] > 0 && false !== $s['backstop'], 'record deletion refused after a download: the claimed record stays and a retry is kept' );
+$c = $C::cleanup( '', time() + $C::ZIP_DELETE_GRACE + 2 );
+check( $c['ok'] && 1 === $c['records'] && null === $C::job( $tk ) && $cleared(), 'the retry deletes the record and clears the state' );
 
 // ================= Concurrency: separate processes, separate database connections =================
 check( function_exists( 'pcntl_fork' ), 'setup: pcntl is available for the concurrency checks' );
