@@ -13,6 +13,13 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const SITE = process.env.GHCA_REAL_SITE || '';
+// Optional: the disposable site's WordPress folder, used to give one synthetic group a long name for the wrapping
+// checks (restored afterwards). Without it those checks are skipped and say so.
+const WPROOT = process.env.GHCA_REAL_WP || '';
+const { execFileSync } = require('node:child_process');
+const LONG_GROUP = 'Direct Support Professionals — Residential Overnight Shift, Lancaster County Community Homes (New Hire Orientation Cohort)';
+// Renames the first tracked synthetic group; returns its previous name.
+const renameGroup = (title) => execFileSync('php', ['-r', 'define("WP_USE_THEMES", false); $_SERVER["HTTP_HOST"]="localhost"; require getenv("WPR") . "/wp-load.php"; if (!defined("GHCA_DISPOSABLE_TEST_SITE")) { exit(1); } $g = (array) get_option("ghca_acd_tracked_groups"); $id = (int) reset($g); $old = get_the_title($id); wp_update_post(array("ID" => $id, "post_title" => getenv("TITLE"))); echo $old;'], { env: { ...process.env, WPR: WPROOT, TITLE: title } }).toString();
 const THEME = process.env.GHCA_REAL_THEME || 'the active theme';
 const shots = process.argv[2] || '';
 if (!SITE) { process.stdout.write('SKIP: set GHCA_REAL_SITE to a disposable site\n'); process.exit(0); }
@@ -49,6 +56,45 @@ const cols = (page) => page.evaluate(() => {
     const w = await page.evaluate(() => Math.round(document.querySelector('.ghca-ui .gh-main').getBoundingClientRect().width));
     assert.ok(w <= 1480 && w > 1320, 'container ' + w); ok(THEME + ' 1920: the dashboard is ' + w + 'px wide (was up to 1600px; the board is 1320px)');
     await ctx.close();
+  }
+
+  // ---------- Overview: a long group name wraps instead of being cut off ----------
+  if (WPROOT) {
+    const before = renameGroup(LONG_GROUP);
+    try {
+      const { ctx, page, errors } = await login(browser, { width: 1440, height: 900 });
+      await dash(page);
+      for (const [w, layout] of [[1920, 'three'], [1440, 'three'], [1280, 'three'], [1100, 'two'], [834, 'one'], [390, 'one']]) {
+        await page.setViewportSize({ width: w, height: 900 });
+        const g = await page.evaluate((name) => {
+          const a = Array.from(document.querySelectorAll('.gh-ovp .gh-grp-n a')).find((x) => x.textContent.trim() === name);
+          if (!a) { return null; }
+          const card = a.closest('.gh-card').getBoundingClientRect();
+          const r = a.getBoundingClientRect();
+          const cs = getComputedStyle(a);
+          const li = a.closest('li');
+          const parts = Array.from(li.children).map((c) => c.getBoundingClientRect());
+          return { lines: Math.round(r.height / parseFloat(cs.lineHeight)), clipped: a.scrollWidth > a.clientWidth + 1, ellipsis: cs.textOverflow, nowrap: cs.whiteSpace, inside: parts.every((p) => p.left >= card.left - 1 && p.right <= card.right + 1), pct: li.querySelector('.gh-grp-pct').getBoundingClientRect().width > 0, page: document.documentElement.scrollWidth > window.innerWidth };
+        }, LONG_GROUP);
+        assert.ok(g, 'the long group name is on the Overview');
+        assert.equal(g.clipped, false); assert.notEqual(g.ellipsis, 'ellipsis'); assert.notEqual(g.nowrap, 'nowrap');
+        assert.ok(g.inside && g.pct && !g.page, JSON.stringify(g));
+        assert.ok(g.lines >= 2 && g.lines <= 4, JSON.stringify(g)); // wrapped, but not into a tall narrow block
+        ok(THEME + ' ' + w + ': the long group name is shown in full, wrapped on ' + g.lines + ' line' + (g.lines === 1 ? '' : 's') + ' (no ellipsis); bar, % and status stay inside the card; no sideways scrolling');
+        if (layout === 'three') {
+          const c = await cols(page);
+          assert.ok(c[0].w >= 280 && c[0].w <= 320 && c[1].w < c[2].w, JSON.stringify(c));
+          ok(THEME + ' ' + w + ': columns ' + c.map((x) => x.w).join(' / ') + ' px with the long name: Announcements still wider than Compliance by group');
+        }
+        if (shots && [1440, 1280, 834, 390].includes(w)) { await page.locator('.gh-ovp .gh-card', { has: page.locator('#gh-groups-h') }).screenshot({ path: path.join(shots, 'real9-overview-longgroup-' + w + '.png') }); }
+      }
+      assert.equal(errors.length, 0, errors.join(' | '));
+      await ctx.close();
+    } finally {
+      renameGroup(before);
+    }
+  } else {
+    process.stdout.write('skip - long group name checks: set GHCA_REAL_WP to the disposable site\'s WordPress folder\n');
   }
 
   // ---------- Overview columns, long announcement ----------

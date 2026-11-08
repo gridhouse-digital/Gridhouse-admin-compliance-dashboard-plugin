@@ -22,6 +22,18 @@ if (shots) { fs.mkdirSync(shots, { recursive: true }); }
 const HOST = 'https://example.test';
 const MIME = { '.css': 'text/css', '.js': 'text/javascript', '.woff2': 'font/woff2' };
 const PDF = Buffer.concat([Buffer.from('%PDF-1.4\n1 0 obj << /Type /Page >> endobj\n'), Buffer.alloc(2048, 32), Buffer.from('\n%%EOF\n')]);
+// A synthetic certificate page of the given size in points: a red border on the page edges and LEFT/RIGHT marks.
+function makePdf(w, h) {
+  const content = `1 0 0 RG 12 w 6 6 ${w - 12} ${h - 12} re S\nBT /F1 36 Tf 20 ${h / 2} Td (LEFT) Tj ET\nBT /F1 36 Tf ${w - 130} ${h / 2} Td (RIGHT) Tj ET\nBT /F1 24 Tf ${w / 2 - 170} ${h - 80} Td (SYNTHETIC CERTIFICATE) Tj ET`;
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>`, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+  let out = '%PDF-1.4\n'; const offs = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join('') + `trailer << /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
+const LANDSCAPE = makePdf(792, 612);
+const PORTRAIT = makePdf(612, 792);
 const ZIPBYTES = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(200, 0)]);
 
 let n = 0;
@@ -33,7 +45,7 @@ async function openLists(browser, viewport, opt = {}) {
   const env = { ...process.env, GHCA_PREVIEW_ASSETS: HOST + '/assets', GHCA_PREVIEW_PERMS: opt.perms || '', GHCA_PREVIEW_EXTRA_CERTS: String(opt.extra ?? 20) };
   execFileSync('php', [listsPreview, 'page', dir, 'gridhouse', opt.hostile ? 'hostile' : ''], { env });
   const file = path.join(dir, 'lists.html');
-  const state = { ajax: [], downloads: 0, cert: opt.cert || 'pdf', zip: [], zipReply: 'ok', zipGets: 0 };
+  const state = { ajax: [], downloads: 0, cert: opt.cert || 'pdf', pdf: opt.pdf || PDF, zip: [], zipReply: 'ok', zipGets: 0 };
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: shots ? 2 : 1, acceptDownloads: true });
   if (opt.pdfViewer !== undefined) {
     await ctx.addInitScript((v) => {
@@ -79,7 +91,7 @@ async function openLists(browser, viewport, opt = {}) {
       if (state.cert === '404') { return route.fulfill({ status: 404, contentType: 'text/plain', body: 'Not found' }); }
       if (state.cert === '403') { return route.fulfill({ status: 403, contentType: 'text/plain', body: 'Forbidden' }); }
       if (state.cert === 'slow') { await new Promise((r) => setTimeout(r, 700)); }
-      return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="x.pdf"' }, body: PDF });
+      return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="x.pdf"' }, body: state.pdf });
     }
     if (url.pathname === '/lists.html') { return route.fulfill({ contentType: 'text/html', body: fs.readFileSync(file) }); }
     if (url.pathname.startsWith('/assets/')) {
@@ -128,16 +140,19 @@ const visibleRow = (page, i) => page.locator(C + ' .gh-tbl:visible tbody tr, ' +
     assert.equal(await page.locator('.gh-cv-ft [data-ghca-cv-download]').isDisabled(), true); ok(w + ': viewer opens in its loading state: header and details at once, Download waits for the file');
     await page.waitForFunction(() => document.querySelector('#ghca-acd-cert-viewer').getAttribute('data-ghca-cv-current') === 'ready');
     const blobSrc = await page.getAttribute('[data-ghca-cv-frame]', 'data-sim-src');
-    assert.match(blobSrc, /^blob:https:\/\/example\.test\/.+#page=1&zoom=100$/);
+    assert.match(blobSrc, /^blob:https:\/\/example\.test\/.+#page=1&navpanes=0&toolbar=0&view=FitH&zoom=page-width$/);
+    assert.equal(await page.locator('[data-ghca-cv-zoomval]').innerText(), 'Fit');
     assert.equal(await page.locator('[data-ghca-cv-frame]').isVisible(), true);
     assert.equal(downloads.length, 0); assert.equal(state.downloads, 1); ok(w + ': ready: the frame is given a same-page blob of the PDF (one authorized fetch; nothing downloaded; display itself simulated in headless Chromium)');
     const dl = await page.locator('[data-ghca-cv-dl]').innerText();
     assert.match(dl, /Employee[\s\S]*Course[\s\S]*Source\s*LearnDash[\s\S]*File\s*PDF · 1 page · \d+ KB/); ok(w + ': details: employee, course, source and the real file facts (pages, size)');
     if (w >= 720) {
+      await page.evaluate(() => { document.querySelector('[data-ghca-cv-frame]').ghcaOld = true; });
       await page.click('[data-ghca-cv-zoom="in"]');
-      assert.match(await page.getAttribute('[data-ghca-cv-frame]', 'data-sim-src'), /zoom=125$/); assert.equal(await page.locator('[data-ghca-cv-zoomval]').innerText(), '125%');
+      assert.match(await page.getAttribute('[data-ghca-cv-frame]', 'data-sim-src'), /&zoom=125$/); assert.equal(await page.locator('[data-ghca-cv-zoomval]').innerText(), '125%');
+      assert.equal(await page.locator('[data-ghca-cv-frame]').count(), 1); assert.equal(await page.evaluate(() => document.querySelector('[data-ghca-cv-frame]').ghcaOld), undefined);
       await page.click('[data-ghca-cv-zoom="fit"]');
-      assert.match(await page.getAttribute('[data-ghca-cv-frame]', 'data-sim-src'), /view=FitH$/); ok(w + ': zoom and fit drive the browser PDF viewer');
+      assert.match(await page.getAttribute('[data-ghca-cv-frame]', 'data-sim-src'), /view=FitH&zoom=page-width$/); ok(w + ': opens in Fit; zoom and Fit each load a fresh frame (a fragment change alone is ignored by the PDF viewer)');
     }
     assert.equal(await page.evaluate(() => document.activeElement.closest('[data-ghca-cv-dialog]') !== null), true);
     for (let i = 0; i < 25; i++) { await page.keyboard.press('Tab'); }
@@ -384,5 +399,68 @@ const visibleRow = (page, i) => page.locator(C + ' .gh-tbl:visible tbody tr, ' +
   }
 
   await browser.close();
-  process.stdout.write('PASS: ' + n + ' slice 9 browser checks (synthetic pages; mocked server answers; nothing sent; no record changed)\n');
+
+  // ================= Real PDF viewer: Fit to width shows the whole page =================
+  // Full Chromium in its new headless mode has the built-in PDF viewer, so these checks look at the pixels it
+  // actually renders (synthetic PDFs: a red border on the page edges), not at a simulated frame.
+  const real = await chromium.launch({ channel: 'chromium' });
+  // Red border pixels in a screenshot of the frame: their extent tells which page edges are visible.
+  const extent = async (page) => {
+    const png = (await page.locator('[data-ghca-cv-frame]').screenshot()).toString('base64');
+    return page.evaluate((b64) => new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        // The page's border lines: columns (and rows) where at least half of the frame's height (width) is red.
+        const W = c.width, Hh = c.height, col = new Array(W).fill(0), row = new Array(Hh).fill(0);
+        for (let y = 0; y < Hh; y += 1) { for (let x = 0; x < W; x += 1) { const i = (y * W + x) * 4; if (d[i] > 200 && d[i + 1] < 70 && d[i + 2] < 70) { col[x] += 1; row[y] += 1; } } }
+        const cols = col.map((v, x) => (v >= Hh * 0.5 ? x : -1)).filter((x) => x >= 0);
+        const rows = row.map((v, y) => (v >= W * 0.5 ? y : -1)).filter((y) => y >= 0);
+        resolve({ w: W, h: Hh, x0: cols.length ? cols[0] : -1, x1: cols.length ? cols[cols.length - 1] : -1, y0: rows.length ? rows[0] : -1, y1: rows.length ? rows[rows.length - 1] : -1 });
+      };
+      img.src = 'data:image/png;base64,' + b64;
+    }), png);
+  };
+  const rendered = async (page, test) => { let e; for (let i = 0; i < 40; i += 1) { await page.waitForTimeout(250); e = await extent(page); if (e.x0 >= 0 && test(e)) { return e; } } return e; };
+  // Whole page: the left and right border lines near the frame's sides and the top and bottom ones near its ends.
+  const fullWidth = (e) => e.x0 >= 0 && e.x0 <= e.w * 0.04 && e.x1 >= e.w * 0.96;
+  const whole = (e) => fullWidth(e) && e.y0 >= 0 && e.y0 <= e.h * 0.06 && e.y1 >= e.h * 0.94;
+  for (const vp of [{ width: 1440, height: 900 }, { width: 834, height: 1000 }, { width: 390, height: 844 }]) {
+    const w = vp.width;
+    const { ctx, page, errors } = await openLists(real, vp, { pdf: LANDSCAPE });
+    assert.equal(await page.evaluate(() => navigator.pdfViewerEnabled), true);
+    await page.locator(C + ' [data-ghca-cv-open][data-ghca-cv-state="issued"]:visible').first().click();
+    await page.waitForFunction(() => document.querySelector('#ghca-acd-cert-viewer').getAttribute('data-ghca-cv-current') === 'ready');
+    let e = await rendered(page, whole);
+    assert.ok(whole(e), JSON.stringify(e));
+    const geo = await page.evaluate(() => { const f = document.querySelector('[data-ghca-cv-frame]').getBoundingClientRect(); const s = document.querySelector('.gh-cv-stage').getBoundingClientRect(); return { f: { l: f.left, r: f.right, w: f.width, h: f.height }, s: { l: s.left, r: s.right }, over: document.documentElement.scrollWidth > window.innerWidth }; });
+    assert.ok(geo.f.l >= geo.s.l - 0.5 && geo.f.r <= geo.s.r + 0.5 && !geo.over, JSON.stringify(geo));
+    ok(w + ': a landscape certificate opens in Fit to width and the whole page is visible: all four edges rendered inside the ' + Math.round(geo.f.w) + '×' + Math.round(geo.f.h) + ' frame (real PDF viewer), frame inside the stage, no sideways page scroll');
+    await shot(page, 'viewer-real-fit-' + w);
+    if (w >= 720) {
+      await page.click('[data-ghca-cv-zoom="in"]'); await page.click('[data-ghca-cv-zoom="in"]');
+      const z = await page.locator('[data-ghca-cv-zoomval]').innerText();
+      e = await rendered(page, (x) => x.x1 < x.w * 0.9);
+      // Only the left border line is in view now.
+      assert.ok(e.x0 >= 0 && e.x1 < e.w * 0.9, JSON.stringify(e)); ok(w + ': zooming in (' + z + ') really re-renders the page larger in the PDF viewer');
+      await page.click('[data-ghca-cv-zoom="fit"]');
+      e = await rendered(page, whole);
+      assert.ok(whole(e), JSON.stringify(e)); ok(w + ': Fit again shows the whole page');
+    }
+    assert.equal(errors.length, 0, errors.join(' | '));
+    await ctx.close();
+  }
+  {
+    const { ctx, page, errors } = await openLists(real, { width: 1440, height: 900 }, { pdf: PORTRAIT });
+    await page.locator(C + ' [data-ghca-cv-open][data-ghca-cv-state="issued"]:visible').first().click();
+    await page.waitForFunction(() => document.querySelector('#ghca-acd-cert-viewer').getAttribute('data-ghca-cv-current') === 'ready');
+    const e = await rendered(page, fullWidth);
+    assert.ok(fullWidth(e), JSON.stringify(e)); ok('1440: a portrait page in Fit to width shows its full width (left and right edges); it scrolls vertically, never sideways');
+    assert.equal(errors.length, 0, errors.join(' | '));
+    await ctx.close();
+  }
+  await real.close();
+  process.stdout.write('PASS: ' + n + ' slice 9 browser checks (synthetic pages; mocked server answers; real Chromium PDF viewer for Fit to width; nothing sent; no record changed)\n');
 })().catch((e) => { process.stderr.write(String(e && e.stack || e) + '\n'); process.exit(1); });

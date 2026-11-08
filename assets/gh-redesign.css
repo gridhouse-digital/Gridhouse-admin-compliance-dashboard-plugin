@@ -1703,8 +1703,15 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
 }
 @media (min-width: 1241px) {
   :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 { grid-template-columns: minmax(280px, 320px) minmax(360px, 1fr) minmax(360px, 1.15fr); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp li { grid-template-columns: minmax(0, 1fr) 40px auto; row-gap: 6px; align-items: center; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp-n { grid-column: 1 / -1; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp li > .gh-bar { margin-top: 0; }
 }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp-n, :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-ann-t, :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-ann-m { overflow-wrap: anywhere; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grp-n a, :is(.ghca-ui, #ghca-ui-scope) .gh-grp-n a > span { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; word-break: normal; hyphens: manual; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grp li { align-items: start; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grp li > .gh-bar { margin-top: 7px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-grp li > .gh-grp-pct { line-height: 19px; }
 :is(.ghca-ui, #ghca-ui-scope) .i-zoom-out { --i:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='black'><path d='M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128Z'/></svg>") }
 :is(.ghca-ui, #ghca-ui-scope) .i-fit { --i:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='black'><path d='M136,40V216a8,8,0,0,1-16,0V40a8,8,0,0,1,16,0ZM69.66,90.34a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,0,11.32l32,32a8,8,0,0,0,11.32-11.32L51.31,136H96a8,8,0,0,0,0-16H51.31l18.35-18.34A8,8,0,0,0,69.66,90.34Zm160,32-32-32a8,8,0,0,0-11.32,11.32L204.69,120H160a8,8,0,0,0,0,16h44.69l-18.35,18.34a8,8,0,0,0,11.32,11.32l32-32A8,8,0,0,0,229.66,122.34Z'/></svg>") }
 :is(.ghca-ui, #ghca-ui-scope) .gh-cv-layer .gh-modal { position: relative; left: auto; top: auto; transform: none; z-index: 1; display: flex; flex-direction: column; max-height: calc(100vh - 32px); }

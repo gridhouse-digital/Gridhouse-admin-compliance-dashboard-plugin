@@ -258,7 +258,7 @@ Synthetic browser checks (no site needed): the certificate viewer, certificate s
 node tests/browser-slice9.cjs [screenshot-dir]
 ```
 
-Headless Chromium has no PDF viewer, so this suite simulates the viewer's "ready" display; real inline PDF display must be checked by hand in a desktop browser.
+Chromium's headless shell has no PDF viewer, so most viewer checks simulate the "ready" display. The Fit to width section instead launches full Chromium (`channel: 'chromium'`, new headless mode, which has the built-in PDF viewer) and checks the rendered pixels. Other browsers must be checked by hand.
 
 On the disposable real site (prepared as for Slice 8), with the plugin copied into it:
 
@@ -267,7 +267,9 @@ php wp-content/plugins/<plugin folder>/tests/integration-slice9.php
 ```
 
 ```bash
-GHCA_REAL_SITE=http://127.0.0.1:8099 GHCA_REAL_THEME="Twenty Twenty-Four" node tests/browser-real-site9.cjs [screenshot-dir]
+GHCA_REAL_WP=<wp-root> GHCA_REAL_SITE=http://127.0.0.1:8099 GHCA_REAL_THEME="Twenty Twenty-Four" node tests/browser-real-site9.cjs [screenshot-dir]
 ```
+
+With `GHCA_REAL_WP` set, `browser-real-site9.cjs` temporarily gives one synthetic group a long name (and restores it) to check that names wrap.
 
 `integration-slice9.php` needs the PHP `zip` and `pcntl` extensions. It builds real archives in the private folder from synthetic PDFs. It checks per-item authorization with a real `group_leader`, single use, owner binding, access expiry versus deletion, the cleanup event, abandoned-file cleanup, and the request-end fallback when scheduling fails. It checks failed entry writes, closes and reads through test-only seams. For concurrency, it races 8 downloads of one ZIP from forked processes, each with its own database connection, over 5 rounds, and expects exactly one 200. Deletion failures are real: it uses `chattr +i` to make the filesystem refuse `unlink` (needs root and a filesystem that supports the immutable flag), and a `query` filter that points statements at a missing table to make MariaDB return errors. It removes ZIP leftovers of earlier interrupted runs before it starts. Nothing is sent and no training record is changed. Never point either at staging or live.

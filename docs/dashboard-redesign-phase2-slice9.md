@@ -47,6 +47,13 @@ How it works:
 - **Phone:** full-screen sheet with the details below the page and 48px Download and Open in new tab buttons. Tablet: one column.
 - **Keyboard and focus:** focus is trapped, Escape closes, and the close button is visible. Focus returns to the button that opened the viewer. The blob URL is revoked on close.
 - **Toolbar:** page and zoom work through PDF-viewer URL fragments (`#page=`, `zoom=`, `view=FitH`). These work in Chromium and Firefox and only partly in Safari. Print uses the frame's print, with a message if the browser blocks it.
+- **Fit to width (corrected after `70e1d6b`):** these findings come from Chromium's real PDF viewer (see Tests). Firefox, Safari and Edge were not tested.
+  - **Opens in Fit.** The viewer used to open at 100%, which shows only the left part of a landscape certificate. It now opens in Fit to width.
+  - **Chrome's own panels are hidden** (`navpanes=0&toolbar=0`). Chrome's thumbnail sidebar took about half of the frame's width, so even Fit showed a small page. Its toolbar is hidden too, because this viewer has its own page, zoom, Fit and print controls.
+  - **Fit uses two parameters:** `view=FitH` for Chromium and `zoom=page-width` for Firefox's viewer. Chromium was checked to still fit with both present.
+  - **Every change loads a fresh frame.** Chromium ignores a change to only the fragment of a PDF that is already loaded, so the Fit and zoom buttons previously did nothing there.
+  - **The frame takes the page's shape.** In Fit the frame is as tall as the page at the frame's width (from the PDF's MediaBox; rotation is respected), up to the stage's maximum, so a landscape certificate is visible whole. Taller pages scroll vertically, never sideways. The height is set after the loading panel has gone, and kept right when the stage changes width.
+  - **Zoom steps start from Fit.** Zooming in or out from Fit steps in 25% increments from the size the page is currently shown at.
 - **Not built** from the design: Rotate and the Certificate ID line. There is no stored certificate ID to show.
 
 ## 3. Certificates tab
@@ -132,6 +139,9 @@ How it behaves:
 - At 1241px and wider the Overview grid is `minmax(280px, 320px) minmax(360px, 1fr) minmax(360px, 1.15fr)`. The left column is unchanged; Compliance by group is narrower and Announcements gets the width.
   - Measured: 320 / 476 / 548 px at 1440, and 320 / 409 / 471 px at 1280.
 - Stacking is unchanged: two columns with Announcements full width below at 1100, and one column at 834 and 390. Long announcements wrap inside the card, and the ⋯ control stays usable.
+- **Long group names (corrected after `70e1d6b`):** group names wrap in full instead of being cut off with an ellipsis. Long unbroken words break only as a last resort.
+  - **Row layout in three columns:** at 1241px and wider, the middle column is narrow and the board's one-line row left a name only 100–140px. Rows there use the board's own narrow pattern: the name on its own line, with bar, % and status beneath.
+  - **Measured on the real site** with a 112-character name: 2 lines at 1920 and 1440, and 3 lines at 1280, 1100, 834 and 390. Announcements stays wider: 320 / 476 / 548 px at 1440, and 320 / 409 / 471 px at 1280.
 - **Container:** reduced from 1600px to 1480px, as requested mid-slice ("too wide, reduce it a bit"). It is still wider than the board's 1320px.
 
 ## Decisions and dependencies to report
@@ -147,12 +157,19 @@ How it behaves:
 
 | Suite | Result | Covers |
 | --- | --- | --- |
-| `tests/browser-slice9.cjs` (new) | 104 checks | Certificates columns, Source and Title Case. Viewer: preview versus download, toolbar, focus trap and restore, Escape, phone sheet and tablet layout. States: blocked (nothing downloaded on its own), unavailable, denied, error with retry, pending. Selection across paging and filtering, hidden-selection notice, Keep only those shown, Clear. ZIP preparation, success and failure messages. Course listbox at 1440, 834 and 390: wrapping, viewport bounds, keyboard, filtering, chips. Report picker icons, states and keyboard. Title Case in the drawer and Edit Records. |
+| `tests/browser-slice9.cjs` (new) | 112 checks | Certificates columns, Source and Title Case. Viewer: preview versus download, toolbar, focus trap and restore, Escape, phone sheet and tablet layout. States: blocked (nothing downloaded on its own), unavailable, denied, error with retry, pending. Selection across paging and filtering, hidden-selection notice, Keep only those shown, Clear. ZIP preparation, success and failure messages. Course listbox at 1440, 834 and 390: wrapping, viewport bounds, keyboard, filtering, chips. Report picker icons, states and keyboard. Title Case in the drawer and Edit Records. |
 | Updated suites | lists 51, tables 54, drawer 159, slice8 182 | Markup changes: listbox button in tab order, viewer trigger, Source and select columns |
 | Other browser suites | slice7 150, bulk 24, admin 20, drawer access 9 | Earlier slices |
 | All `tests/test-*.php` and `tests/test-*.js` | 82 files, all pass | Includes the new `test-course-title.php` (23 checks) |
 
-**Simulated in the browser suite:** headless Chromium has no PDF viewer, so it downloads a PDF placed in an iframe instead of showing it. The "ready" display is therefore simulated: the test replaces the frame's source after the real fetch and state change. **Real inline PDF rendering was not verified in any browser.** The ZIP and certificate endpoints in this suite are mocked; the real ones are tested below.
+**Simulated, then real:**
+- **The main viewer checks are simulated.** They run in Chromium's headless shell, which has no PDF viewer, so the frame's source is recorded instead of rendered.
+- **Fit to width is checked with real rendering.** Since `70e1d6b`, a section of the suite runs full Chromium in its new headless mode, which includes the built-in PDF viewer.
+  - It reads the pixels the viewer actually renders: the synthetic PDFs have a red border on the page edges, and the test finds those border lines.
+  - **Landscape page:** opens in Fit with all four edges inside the frame at 1440, 834 and 390. Zooming in really re-renders it larger, and Fit shows the whole page again.
+  - **Portrait page:** its full width is shown.
+- **Not covered by real rendering:** other browsers, and LearnDash's own certificate PDFs.
+- **Mocked endpoints:** the ZIP and certificate endpoints in this suite are mocked; the real ones are tested below.
 
 ### Real WordPress 6.6.2 + MariaDB 10.11, disposable `ghca_test` site (not the staging theme, not staging)
 
@@ -181,8 +198,8 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
     - **Download served, file deletion refused:** the complete archive is still served. The claimed record stays, the retry is kept, and a second download is refused. Cleanup removes the ZIP after the grace period.
     - **Download served, record deletion refused:** the claimed record stays and the retry is kept. The retry deletes it.
   - **Second negative control:** with file deletion made to report success without checking, on the test site's copy only, 12 of these checks fail. |
-| `tests/browser-real-site9.cjs` under **Twenty Twenty-Four** | 23 checks | Container width at 1920. Overview columns at 1440 and 1280, and stacking at 1100, 834 and 390, with a long announcement (created and deleted again). Certificates routing and the employee filter: report action, Overview "View all", chip removal, the Certificates tab by click (also while filtered) and by arrow key (corrected build), direct link. Report picker icons at 1440 and 390. |
-| Same under **Twenty Twenty-Two** | 23 checks | Same |
+| `tests/browser-real-site9.cjs` under **Twenty Twenty-Four** | 32 checks | A temporarily renamed group with a 112-character name, at 1920, 1440, 1280, 1100, 834 and 390. At each width it is shown in full on 2–4 lines, with no ellipsis and no clipping, and bar, % and status stay inside the card with no sideways scrolling. Announcements stays wider in three columns. The name is restored afterwards; this needs `GHCA_REAL_WP`. Container width at 1920. Overview columns at 1440 and 1280, and stacking at 1100, 834 and 390, with a long announcement (created and deleted again). Certificates routing and the employee filter: report action, Overview "View all", chip removal, the Certificates tab by click (also while filtered) and by arrow key (corrected build), direct link. Report picker icons at 1440 and 390. |
+| Same under **Twenty Twenty-Two** | 32 checks | Same |
 | `browser-real-site.cjs` (Slice 8) under both themes | 67 checks each | Regression |
 | Other `integration-*.php` (slice8 36, packet-ready 29, bulk-recovery 29, …) | pass | Regression |
 | Redesign off (legacy) on the real site | pass | Legacy dashboard loads with no viewer, selection bar or listbox, and no script errors |
@@ -191,7 +208,7 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 
 - **Staging:** nothing ran on Akansoh staging, under its BuddyBoss/Elementor theme, or with real people.
 - **LearnDash:** real LearnDash certificates were not used. The stand-ins have none, so the 200 path of the real endpoint, and real PDFs inside a real ZIP, were tested only with synthetic PDFs through the same code.
-- **Inline PDF display:** not verified in any browser (see Simulated).
+- **Inline PDF display:** verified only in Chromium's built-in viewer, with synthetic PDFs (see Simulated, then real). Firefox, Safari and Edge, and real LearnDash certificates, were not checked.
 - **Browsers:** Chromium only. Safari and Firefox page/zoom fragments, and print, were not checked.
 - **PHP zip on staging:** the extension's presence on staging is unknown.
 - **Cron on staging:** whether staging runs WP-Cron from traffic or from a system cron is unknown; the fallback covers both, but deletion times depend on it.

@@ -1627,7 +1627,7 @@
     var msg = layer.querySelector('[data-ghca-cv-msg]');
     var pagesEl = layer.querySelector('[data-ghca-cv-pages]');
     var zoomEl = layer.querySelector('[data-ghca-cv-zoomval]');
-    var st = { trigger: null, url: '', blob: null, objectUrl: '', file: 'certificate.pdf', page: 1, pages: 1, zoom: 100, fit: false, request: 0, release: null, user: '' };
+    var st = { trigger: null, url: '', blob: null, objectUrl: '', file: 'certificate.pdf', page: 1, pages: 1, zoom: 100, fit: true, aspect: 0, widthPt: 0, request: 0, release: null, user: '' };
 
     function show(state) {
       layer.querySelectorAll('[data-ghca-cv-pane]').forEach(function (el) { el.hidden = el.getAttribute('data-ghca-cv-pane') !== state; });
@@ -1663,12 +1663,45 @@
         d.appendChild(dt); d.appendChild(dd); dl.appendChild(d);
       });
     }
+    // Fit to width: the frame is as tall as the page at the frame's width (never taller than the stage allows), so a
+    // landscape certificate is shown whole; a taller page scrolls vertically, never sideways.
+    function fitHeight() {
+      if (!st.fit || !st.aspect || frame.hidden) { frame.style.height = ''; return; }
+      frame.style.height = '';
+      var max = frame.clientHeight;
+      var w = frame.clientWidth;
+      if (!max || !w) return;
+      frame.style.height = Math.min(max, Math.round(w * st.aspect) + 6) + 'px';
+    }
     function frameSrc() {
       if (!st.objectUrl) return;
-      // The browser's PDF viewer reads the page and zoom from the fragment (Chromium, Firefox; Safari partly).
-      frame.src = st.objectUrl + '#page=' + st.page + (st.fit ? '&view=FitH' : '&zoom=' + st.zoom);
+      // The browser's PDF viewer reads the page and zoom from the fragment only when it loads a document: changing
+      // just the fragment of a loaded PDF is ignored (Chromium), so every change loads a fresh frame. Its own
+      // thumbnail panel and toolbar are turned off (navpanes, toolbar): they took about half of the frame's width,
+      // so even "fit" showed a small page, and this viewer has its own page, zoom, fit and print controls.
+      // view=FitH is Chromium's fit to width; zoom=page-width is Firefox's (pdf.js); each ignores the other.
+      var fresh = frame.cloneNode(false);
+      fresh.hidden = frame.hidden;
+      fresh.src = st.objectUrl + '#page=' + st.page + '&navpanes=0&toolbar=0' + (st.fit ? '&view=FitH&zoom=page-width' : '&zoom=' + st.zoom);
+      frame.parentNode.replaceChild(fresh, frame);
+      frame = fresh;
+      fitHeight();
       zoomEl.textContent = st.fit ? 'Fit' : st.zoom + '%';
       pagesEl.textContent = st.page + ' / ' + st.pages;
+    }
+    // Page size of the first page from its MediaBox (rotation swaps the sides), for the fit height and for the zoom
+    // steps that follow "Fit". Unknown sizes fall back to the CSS height.
+    function pageBox(buf) {
+      try {
+        var text = new TextDecoder('latin1').decode(new Uint8Array(buf));
+        var m = text.match(/\/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\]/);
+        if (!m) return null;
+        var w = Math.abs(parseFloat(m[3]) - parseFloat(m[1]));
+        var h = Math.abs(parseFloat(m[4]) - parseFloat(m[2]));
+        var r = text.match(/\/Rotate\s+(-?\d+)/);
+        if (r && Math.abs(parseInt(r[1], 10)) % 180 === 90) { var t = w; w = h; h = t; }
+        return w > 0 && h > 0 ? { w: w, h: h } : null;
+      } catch (e) { return null; }
     }
     function countPages(buf) {
       try {
@@ -1681,6 +1714,7 @@
       st.request++;
       frame.removeAttribute('src');
       frame.hidden = true;
+      frame.style.height = '';
       if (st.objectUrl) { URL.revokeObjectURL(st.objectUrl); }
       st.objectUrl = ''; st.blob = null;
     }
@@ -1703,13 +1737,16 @@
         st.blob = new Blob([r.buf], { type: 'application/pdf' });
         st.objectUrl = URL.createObjectURL(st.blob);
         st.pages = countPages(r.buf);
-        st.page = 1; st.zoom = 100; st.fit = false;
+        st.page = 1; st.zoom = 100; st.fit = true;
+        var box = pageBox(r.buf);
+        st.aspect = box ? box.h / box.w : 0;
+        st.widthPt = box ? box.w : 0;
         var fileDd = layer.querySelector('[data-ghca-cv-file]');
         if (fileDd) { fileDd.textContent = 'PDF · ' + st.pages + (st.pages === 1 ? ' page · ' : ' pages · ') + Math.max(1, Math.round(r.buf.byteLength / 1024)) + ' KB'; }
         if (navigator.pdfViewerEnabled === false) { show('blocked'); return; }
-        frameSrc();
         frame.hidden = false;
-        show('ready');
+        show('ready'); // first, so the frame has its final width (no loading panel beside it) when it is sized
+        frameSrc();
       }).catch(function () {
         if (mine === st.request) show('error');
       });
@@ -1776,7 +1813,17 @@
       if (z) {
         var k = z.getAttribute('data-ghca-cv-zoom');
         if (k === 'fit') { st.fit = true; }
-        else { st.fit = false; st.zoom = Math.max(50, Math.min(300, st.zoom + (k === 'in' ? 25 : -25))); }
+        else {
+          if (st.fit) {
+            // Leaving "Fit": step from the size the page is shown at now (100% = 96 px per inch), in 25% steps.
+            var now = st.widthPt ? frame.clientWidth / (st.widthPt * 96 / 72) * 100 : 100;
+            st.zoom = k === 'in' ? Math.floor(now / 25) * 25 + 25 : Math.ceil(now / 25) * 25 - 25;
+          } else {
+            st.zoom += k === 'in' ? 25 : -25;
+          }
+          st.fit = false;
+          st.zoom = Math.max(25, Math.min(300, st.zoom));
+        }
         frameSrc(); return;
       }
       var p = e.target.closest('[data-ghca-cv-page]');
@@ -1795,6 +1842,14 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !layer.hidden && ghcaAcdOverlay.isTop(layer)) { e.preventDefault(); close(); }
     });
+    // Keep the fit height right whenever the stage changes width (window resize, details panel moving below).
+    var stage = frame.parentNode;
+    if (window.ResizeObserver) {
+      var lastW = 0;
+      new ResizeObserver(function () { var w2 = stage.clientWidth; if (w2 !== lastW) { lastW = w2; if (!layer.hidden) { fitHeight(); } } }).observe(stage);
+    } else {
+      window.addEventListener('resize', function () { if (!layer.hidden) { fitHeight(); } });
+    }
     window.ghcaAcdCertViewer = { open: open, close: close };
   }
 
