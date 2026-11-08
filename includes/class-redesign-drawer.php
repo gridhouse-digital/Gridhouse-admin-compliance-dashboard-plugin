@@ -399,7 +399,7 @@ final class GHCA_ACD_Redesign_Drawer {
 			} else {
 				$h .= '<ul class="gh-files">';
 				foreach ( $d['rows'] as $row ) {
-					$h .= self::file_row_html( (array) $row );
+					$h .= self::file_row_html( (array) $row, (string) $d['name'] );
 				}
 				$h .= '</ul>';
 			}
@@ -413,7 +413,7 @@ final class GHCA_ACD_Redesign_Drawer {
 	}
 
 	/** @param array<string,mixed> $row A row of GHCA_ACD_Jotform_UI::employee_record_rows(). */
-	private static function file_row_html( array $row ): string {
+	private static function file_row_html( array $row, string $employee = '' ): string {
 		$manual = 'manual' === (string) $row['kind'];
 		$attr   = $manual ? 'data-ghca-manual-open' : 'data-ghca-document-open';
 		$label  = 'application/pdf' === (string) $row['media_type'] ? 'PDF' : 'FILE';
@@ -425,7 +425,12 @@ final class GHCA_ACD_Redesign_Drawer {
 		$h  = '<li class="gh-file"><span class="gh-file-ico" aria-hidden="true">' . esc_html( $label ) . '</span><div class="gh-file-main"><strong class="gh-file-n">' . esc_html( (string) $row['name'] ) . '</strong><div class="gh-small gh-muted">' . esc_html( implode( ' · ', $sub ) ) . '</div></div>';
 		$h .= '<span class="gh-st gh-st--' . esc_attr( self::review_tone( (string) ( $row['status_key'] ?? '' ) ) ) . '">' . esc_html( (string) $row['status'] ) . '</span>';
 		if ( ! empty( $row['viewable'] ) ) {
-			$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" ' . $attr . '="' . (int) $row['id'] . '" data-action="preview">' . esc_html__( 'Preview', 'ghca-acd' ) . '</button>';
+			// PDFs open in the redesigned certificate viewer, which needs these facts; other files keep their preview.
+			$doc = '';
+			if ( 'application/pdf' === (string) $row['media_type'] ) {
+				$doc = ' data-ghca-doc-pdf="1" data-ghca-doc-employee="' . esc_attr( $employee ) . '" data-ghca-doc-context="' . esc_attr( (string) $row['context'] ) . '" data-ghca-doc-date="' . esc_attr( $date ) . '" data-ghca-doc-status="' . esc_attr( (string) $row['status'] ) . '" data-ghca-doc-tone="' . esc_attr( self::review_tone( (string) ( $row['status_key'] ?? '' ) ) ) . '" data-ghca-doc-source="' . esc_attr( $manual ? __( 'Outside certificate (manual entry)', 'ghca-acd' ) : __( 'Jotform submission', 'ghca-acd' ) ) . '"';
+			}
+			$h .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" ' . $attr . '="' . (int) $row['id'] . '" data-action="preview"' . $doc . '>' . esc_html__( 'Preview', 'ghca-acd' ) . '</button>';
 		}
 		return $h . '</li>';
 	}

@@ -151,10 +151,29 @@ How it behaves:
   - **The ⋯ menu** of an announcement opens upward when it would be cut off at the bottom of the list.
   - The phone layout keeps the same caps.
 - **KPI strip (requested: "a little height"):** on desktop and tablet the tiles have 22px top and 24px bottom padding and an 8px gap, up from 16px, 18px and 4px. At 1440 they are 133px tall. The phone keeps its compact 12px tiles.
+- **No blank space under Announcements (corrected after `10161f1`, requested):**
+  - **The card keeps its own height.** It used to stretch to the row's height, which the taller Compliance by group card sets, and that left blank space under the list. It now ends with the list.
+  - **The caps end exactly at the last visible item.** They previously included the body's bottom padding, which let the top of the next note (or group row) show.
+  - Measured on the real site: 3 complete notes, nothing of the fourth, and 1 px between the list and the card's bottom edge at every width. The heading stays fixed, and the agency-coloured scrollbar is unchanged.
 - **Long group names:** names wrap in full instead of being cut off with an ellipsis. Long unbroken words break only as a last resort. In the reference layout, a 112-character name takes 3 lines at 1920, 4 at 1440 and 5 at 1280. Bar, % and status stay inside the card.
 - **Long announcements** wrap inside the card, and the ⋯ control stays usable.
 - **Container:** 1480px wide, as requested mid-slice; unchanged.
 - **Certificate viewer:** unchanged by this adjustment.
+
+## 8. Drawer Documents tab: PDF previews in the redesigned viewer (after `10161f1`, requested)
+
+- **Which previews:** in the redesigned dashboard, Preview on a PDF opens the certificate viewer. This covers both a Jotform submission and an outside certificate entered by hand, from the drawer's Documents tab or its "View all documents" list.
+- **Access is unchanged.** It uses the same short-lived, single-use grants from the same endpoints, with the server's checks and audit events unchanged (`ghca_acd_jotform_document_token`, `ghca_acd_jotform_manual_token`).
+  - **Preview:** the viewer asks for one preview grant and fetches the file once, which the server audits as a preview. The file is shown only if it really is a PDF. Try again asks for a fresh preview grant, because a used grant is never reused.
+  - **Download:** the viewer's Download asks for its own download grant when pressed, and the server sends the file as an attachment and audits it as a download. The preview bytes are not reused for it, so preview and download stay separate in the audit trail as before.
+  - **The list's own Download** is unchanged.
+- **What the viewer shows for a document:** the heading "Document · name", the review status as the chip, and "Document details" with employee, form, date, review status, source ("Jotform submission" or "Outside certificate (manual entry)") and file facts. The note says Download is a separate, recorded download.
+- **Errors:** a refused grant or an unreadable file shows the viewer's error state, with Try again, instead of a browser alert.
+- **Not changed:**
+  - non-PDF files (images) keep their existing preview;
+  - the legacy dashboard (redesign off) has no redesigned viewer, so its previews are unchanged too.
+- **Stacking:** the viewer now uses the certificate overlay's level in the dashboard's overlay ladder (100006: above the documents list at 100005, below toasts), so it opens above "View all documents". Escape closes only the viewer.
+- **Escaping:** values placed in attributes of the client-rendered list are attribute-escaped, quotes included.
 
 ## Decisions and dependencies to report
 

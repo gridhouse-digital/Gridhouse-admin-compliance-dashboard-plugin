@@ -191,7 +191,7 @@ final class GHCA_ACD_Announcements {
     if ( ! GHCA_ACD_Shortcodes::can_view_dashboard() ) {
       return '';
     }
-    $html  = '<div class="gh-card" aria-labelledby="gh-ann-h"><div class="gh-card-hd gh-card-hd--plain"><div><h2 class="gh-h3" id="gh-ann-h">' . esc_html__( 'Announcements', 'ghca-acd' ) . '</h2>';
+    $html  = '<div class="gh-card gh-ovp-ann" aria-labelledby="gh-ann-h"><div class="gh-card-hd gh-card-hd--plain"><div><h2 class="gh-h3" id="gh-ann-h">' . esc_html__( 'Announcements', 'ghca-acd' ) . '</h2>';
     $html .= '<span class="gh-small gh-muted">' . esc_html__( 'Notes for admins and staff', 'ghca-acd' ) . '</span></div>';
     if ( self::can_manage_announcements() ) {
       $html .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-announce-add><span class="gh-i gh-i--sm i-plus" aria-hidden="true"></span>' . esc_html__( 'Add note', 'ghca-acd' ) . '</button>';

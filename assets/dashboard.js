@@ -1627,7 +1627,7 @@
     var msg = layer.querySelector('[data-ghca-cv-msg]');
     var pagesEl = layer.querySelector('[data-ghca-cv-pages]');
     var zoomEl = layer.querySelector('[data-ghca-cv-zoomval]');
-    var st = { trigger: null, url: '', blob: null, objectUrl: '', file: 'certificate.pdf', page: 1, pages: 1, zoom: 100, fit: true, aspect: 0, widthPt: 0, request: 0, release: null, user: '' };
+    var st = { trigger: null, focus: null, mint: null, kind: 'certificate', url: '', blob: null, objectUrl: '', file: 'certificate.pdf', page: 1, pages: 1, zoom: 100, fit: true, aspect: 0, widthPt: 0, request: 0, release: null, user: '' };
 
     function show(state) {
       layer.querySelectorAll('[data-ghca-cv-pane]').forEach(function (el) { el.hidden = el.getAttribute('data-ghca-cv-pane') !== state; });
@@ -1644,7 +1644,15 @@
       }
     }
     function details(t) {
-      var rows = [
+      // Employee documents (drawer Documents tab): the document's own facts instead of course facts.
+      var rows = st.kind === 'document' ? [
+        ['Employee', t.getAttribute('data-ghca-cv-employee')],
+        ['Form', t.getAttribute('data-ghca-cv-context')],
+        ['Date', t.getAttribute('data-ghca-cv-date')],
+        ['Review', t.getAttribute('data-ghca-cv-status')],
+        ['Source', t.getAttribute('data-ghca-cv-source')],
+        ['File', '']
+      ] : [
         ['Employee', t.getAttribute('data-ghca-cv-employee')],
         ['Group', t.getAttribute('data-ghca-cv-group')],
         ['Course', t.getAttribute('data-ghca-cv-title')],
@@ -1723,10 +1731,15 @@
       st.blob = null;
       msg.textContent = '';
       show('loading');
-      var url;
-      try { url = new URL(st.url, window.location.href); } catch (e) { url = null; }
-      if (!url || url.origin !== window.location.origin) { show('error'); return; }
-      fetch(url.href, { credentials: 'same-origin' }).then(function (res) {
+      // Employee documents use single-use access grants: every load (and Try again) asks for a fresh preview grant,
+      // which the server checks and audits as a preview, exactly as the previous document preview did.
+      var source = st.mint ? st.mint('preview') : Promise.resolve(st.url);
+      source.then(function (raw) {
+        var url;
+        try { url = new URL(raw, window.location.href); } catch (e) { url = null; }
+        if (!url || url.origin !== window.location.origin) { throw new Error('origin'); }
+        return fetch(url.href, { credentials: 'same-origin' });
+      }).then(function (res) {
         var type = res.headers.get('Content-Type') || '';
         return res.arrayBuffer().then(function (buf) { return { res: res, type: type, buf: buf }; });
       }).then(function (r) {
@@ -1751,23 +1764,37 @@
         if (mine === st.request) show('error');
       });
     }
-    function open(t) {
+    function open(t, opt) {
       cleanup();
+      opt = opt || {};
       st.trigger = t;
+      st.focus = opt.focus || t;
+      st.mint = typeof opt.mint === 'function' ? opt.mint : null;
+      st.kind = st.mint ? 'document' : 'certificate';
       st.url = t.getAttribute('data-ghca-cv-url') || '';
       st.user = t.getAttribute('data-ghca-cv-user') || '';
       st.file = t.getAttribute('data-ghca-cv-file') || 'certificate.pdf';
       var title = t.getAttribute('data-ghca-cv-title') || '';
       var pending = t.getAttribute('data-ghca-cv-state') === 'pending';
-      titleEl.textContent = 'Certificate · ' + title;
+      titleEl.textContent = (st.kind === 'document' ? 'Document · ' : 'Certificate · ') + title;
+      // Side heading and note: certificate wording by default, document wording for employee documents.
+      layer.querySelectorAll('[data-ghca-cv-side-h], [data-ghca-cv-note]').forEach(function (el) {
+        if (!el.hasAttribute('data-ghca-cv-cert-text')) { el.setAttribute('data-ghca-cv-cert-text', el.textContent); }
+        el.textContent = el.getAttribute(st.kind === 'document' ? 'data-ghca-cv-doc-text' : 'data-ghca-cv-cert-text');
+      });
       subEl.textContent = (t.getAttribute('data-ghca-cv-employee') || '') + ' · ' + (pending ? ('completed ' + (t.getAttribute('data-ghca-cv-completed') || '') + ' · no certificate file yet') : st.file);
-      chip.className = 'gh-st ' + (pending ? 'gh-st--duesoon' : 'gh-st--completed');
-      chip.textContent = pending ? 'Not generated' : 'Issued';
+      if (st.kind === 'document') {
+        chip.className = 'gh-st gh-st--' + (t.getAttribute('data-ghca-cv-tone') || 'progress');
+        chip.textContent = t.getAttribute('data-ghca-cv-status') || 'Document';
+      } else {
+        chip.className = 'gh-st ' + (pending ? 'gh-st--duesoon' : 'gh-st--completed');
+        chip.textContent = pending ? 'Not generated' : 'Issued';
+      }
       details(t);
       layer.hidden = false;
       layer.setAttribute('aria-hidden', 'false');
       document.documentElement.classList.add('ghca-acd--modal-open');
-      ghcaAcdOverlay.open(layer, t, close);
+      ghcaAcdOverlay.open(layer, st.focus, close);
       // Start on the close control that is shown at this width (top-left on phones, top-right otherwise).
       var closers = Array.prototype.filter.call(dialog.querySelectorAll('.gh-cv-x, .gh-cv-x-phone'), function (b) { return b.offsetParent !== null; });
       st.release = ghcaFocusTrap(dialog, closers[0] || dialog.querySelector('[data-ghca-cv-close]'));
@@ -1781,9 +1808,21 @@
       document.documentElement.classList.remove('ghca-acd--modal-open');
       ghcaAcdOverlay.close(layer);
       if (st.release) { st.release(); st.release = null; }
-      if (st.trigger && st.trigger.isConnected) { st.trigger.focus(); }
+      if (st.focus && st.focus.isConnected) { st.focus.focus(); }
     }
     function save() {
+      if (st.mint) {
+        // A document download keeps its own grant (checked and audited as a download, sent as an attachment):
+        // the preview bytes are not reused for it.
+        msg.textContent = 'Preparing the download…';
+        st.mint('download').then(function (u) {
+          window.location.assign(u);
+          msg.textContent = 'Download started: ' + st.file + '.';
+        }, function () {
+          msg.textContent = 'The download could not be started. Try again.';
+        });
+        return;
+      }
       if (!st.blob) return;
       var u = URL.createObjectURL(st.blob);
       var a = document.createElement('a');
@@ -1850,7 +1889,16 @@
     } else {
       window.addEventListener('resize', function () { if (!layer.hidden) { fitHeight(); } });
     }
-    window.ghcaAcdCertViewer = { open: open, close: close };
+    // Employee documents (drawer Documents tab and its "View all documents" list): PDFs open here. `mint(access)`
+    // returns a promise of a fresh single-use grant URL for 'preview' or 'download'.
+    function openDocument(o) {
+      var t = document.createElement('span');
+      var set = function (k, v) { if (v) { t.setAttribute('data-ghca-cv-' + k, String(v)); } };
+      set('title', o.title); set('employee', o.employee); set('context', o.context); set('date', o.date);
+      set('status', o.status); set('tone', o.tone); set('source', o.source); set('file', o.file || o.title || 'document.pdf');
+      open(t, { focus: o.trigger, mint: o.mint });
+    }
+    window.ghcaAcdCertViewer = { open: open, close: close, openDocument: openDocument };
   }
 
   /*
@@ -2129,10 +2177,10 @@
       body.removeAttribute('aria-label');
       return;
     }
+    // End exactly at the bottom of the Nth item: no part of the next one shows below it.
     var top = body.getBoundingClientRect().top;
     var last = items[n - 1].getBoundingClientRect().bottom;
-    var padBottom = parseFloat(getComputedStyle(body).paddingBottom) || 0;
-    body.style.maxHeight = Math.ceil(last - top + padBottom) + 'px';
+    body.style.maxHeight = Math.floor(last - top) + 'px';
     body.classList.add('gh-ovp-scroll');
     // Keyboard users can scroll it even when the list has nothing focusable (read-only announcements).
     body.setAttribute('tabindex', '0');
@@ -3813,6 +3861,22 @@
             }
             return json.data.url;
           });
+      }
+
+      // A PDF preview in the redesigned dashboard opens in its certificate viewer, which asks for its own fresh
+      // preview grant (and a download grant only when Download is pressed).
+      if (action === 'preview' && btn.getAttribute('data-ghca-doc-pdf') === '1' && window.ghcaAcdCertViewer && typeof window.ghcaAcdCertViewer.openDocument === 'function') {
+        window.ghcaAcdCertViewer.openDocument({
+          trigger: btn, title: title, mint: mint,
+          employee: btn.getAttribute('data-ghca-doc-employee') || '',
+          context: btn.getAttribute('data-ghca-doc-context') || '',
+          date: btn.getAttribute('data-ghca-doc-date') || '',
+          status: btn.getAttribute('data-ghca-doc-status') || '',
+          tone: btn.getAttribute('data-ghca-doc-tone') || '',
+          source: btn.getAttribute('data-ghca-doc-source') || '',
+          file: title
+        });
+        return;
       }
 
       btn.disabled = true;

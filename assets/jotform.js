@@ -99,8 +99,28 @@
     });
   }
 
+  // A PDF preview opened in the redesigned dashboard uses its certificate viewer: a fresh preview grant for the
+  // page, a fresh download grant when Download is pressed. Anything else (images, the legacy dashboard) is unchanged.
+  function openInViewer(trigger, title, mint) {
+    var viewer = window.ghcaAcdCertViewer;
+    if (!trigger || trigger.getAttribute('data-ghca-doc-pdf') !== '1' || !viewer || typeof viewer.openDocument !== 'function') return false;
+    viewer.openDocument({
+      trigger: trigger, title: title || '', mint: mint,
+      employee: trigger.getAttribute('data-ghca-doc-employee') || '',
+      context: trigger.getAttribute('data-ghca-doc-context') || '',
+      date: trigger.getAttribute('data-ghca-doc-date') || '',
+      status: trigger.getAttribute('data-ghca-doc-status') || '',
+      tone: trigger.getAttribute('data-ghca-doc-tone') || '',
+      source: trigger.getAttribute('data-ghca-doc-source') || '',
+      file: title || ''
+    });
+    return true;
+  }
+  window.ghcaAcdOpenDocumentInViewer = openInViewer;
+
   function openDocument(documentId, access, trainingId, title, trigger) {
     var wanted = access || 'preview';
+    if (wanted === 'preview' && openInViewer(trigger, title, function (a) { return mintDocumentUrl(documentId, a, trainingId); })) return;
     if (wanted === 'download' || typeof window.ghcaAcdOpenCertificateModal !== 'function') {
       mintDocumentUrl(documentId, wanted, trainingId)
         .then(function (url) {
@@ -156,7 +176,9 @@
        var id = parseInt(item.id, 10) || 0;
        var approved = String(item.status || '').toLowerCase() === 'approved';
        var attribute = item.kind === 'manual' ? 'data-ghca-manual-open' : 'data-ghca-document-open';
-       var actions = item.viewable === false ? '' : '<button type="button" ' + attribute + '="' + id + '" data-action="preview">Preview</button><button type="button" ' + attribute + '="' + id + '" data-action="download">Download</button>';
+       // PDFs carry what the redesigned viewer shows about them (used only where that viewer is on the page).
+       var meta = item.type === 'PDF' ? ' data-ghca-doc-pdf="1" data-ghca-doc-employee="' + escapeAttr(modal.dataset.employeeName || '') + '" data-ghca-doc-context="' + escapeAttr(item.form) + '" data-ghca-doc-date="' + escapeAttr(item.date) + '" data-ghca-doc-status="' + escapeAttr(item.status) + '" data-ghca-doc-tone="' + (approved ? 'approved' : 'review') + '" data-ghca-doc-source="' + (item.kind === 'manual' ? 'Outside certificate (manual entry)' : 'Jotform submission') + '"' : '';
+       var actions = item.viewable === false ? '' : '<button type="button" ' + attribute + '="' + id + '" data-action="preview"' + meta + '>Preview</button><button type="button" ' + attribute + '="' + id + '" data-action="download">Download</button>';
        var origin = item.kind === 'manual' ? ' <span>Manual entry</span>' : '';
        return '<li><span class="ghca-jotform-list__file" aria-hidden="true">' + escapeHtml(item.type) + '</span><span class="ghca-jotform-list__content"><strong>' + escapeHtml(item.name) + '</strong><small class="ghca-jotform-list__meta"><span>' + escapeHtml(item.form) + '</span><span>' + escapeHtml(item.date) + '</span>' + origin + '</small></span><span class="ghca-jotform-list__status' + (approved ? ' is-approved' : '') + '">' + escapeHtml(item.status) + '</span><span class="ghca-jotform-list__actions">' + actions + '</span></li>';
      }).join('') + '</ul>' : '<p>' + escapeHtml(window.ghcaAcdJotform.empty) + '</p>';
@@ -170,6 +192,10 @@
    }).catch(function () { results.textContent = window.ghcaAcdJotform.error; count.textContent = 'Documents unavailable'; });
   }
 
+  function escapeAttr(value) {
+    return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   function escapeHtml(value) {
     var node = document.createElement('div');
     node.textContent = value == null ? '' : String(value);
@@ -178,13 +204,19 @@
 
   document.addEventListener('click', function (event) {
     var open = event.target.closest('[data-ghca-document-open]');
-    if (open && !open.closest('#ghca-jotform-modal')) { openDocument(open.getAttribute('data-ghca-document-open'), open.getAttribute('data-action'), open.getAttribute('data-training-id')); return; }
+    if (open && !open.closest('#ghca-jotform-modal')) {
+      var row = open.closest('li');
+      var strong = row ? row.querySelector('strong') : null;
+      openDocument(open.getAttribute('data-ghca-document-open'), open.getAttribute('data-action'), open.getAttribute('data-training-id'), strong ? strong.textContent : '', open);
+      return;
+    }
     var all = event.target.closest('[data-ghca-documents-all]');
     if (all) {
       var modal = ensureModal();
    modal.dataset.employeeId = all.getAttribute('data-ghca-documents-all');
    modal.querySelector('[data-ghca-doc-search]').value = '';
    var employeeName = all.getAttribute('data-ghca-documents-name') || '';
+   modal.dataset.employeeName = employeeName;
    modal.querySelector('[data-ghca-doc-intro]').textContent = 'Protected employee-submitted and external-training records' + (employeeName ? ' for ' + employeeName : '') + '.';
       openModal(modal, all);
       loadDocuments(modal, 1);

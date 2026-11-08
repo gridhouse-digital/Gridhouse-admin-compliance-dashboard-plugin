@@ -80,6 +80,10 @@ const cols = (page) => page.evaluate(() => {
             const b = body.getBoundingClientRect();
             const shown = () => items.filter((i) => { const x = i.getBoundingClientRect(); return x.top >= b.top - 1 && x.bottom <= b.bottom + 1; }).length;
             const first = shown();
+            // Nothing of the item after the cap shows below it, and (Announcements) no blank space under the list.
+            const capN = key === 'groups' ? 6 : 3;
+            const peek = items[capN] ? items[capN].getBoundingClientRect().top < b.bottom - 1 : false;
+            const gap = Math.round(card.getBoundingClientRect().bottom - b.bottom);
             const hdTop = hd.getBoundingClientRect().top;
             body.scrollTop = body.scrollHeight;
             const last = items[items.length - 1].getBoundingClientRect();
@@ -87,7 +91,7 @@ const cols = (page) => page.evaluate(() => {
             const hdSame = Math.abs(hd.getBoundingClientRect().top - hdTop) < 1 && hd.getBoundingClientRect().bottom <= body.getBoundingClientRect().top + 1;
             body.scrollTop = 0;
             const cs = getComputedStyle(body);
-            out[key] = { n: items.length, shown: first, scrolls: body.scrollHeight > body.clientHeight + 1, lastIn, hdSame, overflowY: cs.overflowY, sbColor: cs.scrollbarColor, sbWidth: cs.scrollbarWidth, tab: body.getAttribute('tabindex'), role: body.getAttribute('role'), label: body.getAttribute('aria-label') };
+            out[key] = { n: items.length, shown: first, peek, gap, scrolls: body.scrollHeight > body.clientHeight + 1, lastIn, hdSame, overflowY: cs.overflowY, sbColor: cs.scrollbarColor, sbWidth: cs.scrollbarWidth, tab: body.getAttribute('tabindex'), role: body.getAttribute('role'), label: body.getAttribute('aria-label') };
           }
           const kpi = document.querySelector('.gh-kpi--overview > .gh-stat');
           out.kpi = { h: Math.round(kpi.getBoundingClientRect().height), pt: getComputedStyle(kpi).paddingTop };
@@ -101,9 +105,11 @@ const cols = (page) => page.evaluate(() => {
           assert.ok(x.scrolls && x.lastIn && x.hdSame && x.overflowY === 'auto', key + ' ' + JSON.stringify(x));
           assert.ok(x.sbWidth === 'thin' && /color-mix|rgba|\d%/.test(x.sbColor) && x.sbColor !== 'auto', key + ' ' + JSON.stringify(x));
           assert.ok(x.tab === '0' && x.role === 'region' && /scrollable list/.test(x.label), key + ' ' + JSON.stringify(x));
+          assert.equal(x.peek, false, key + ' ' + JSON.stringify(x));
+          if (key === 'ann') { assert.ok(x.gap >= 0 && x.gap <= 2, key + ' ' + JSON.stringify(x)); }
         }
         assert.equal(r.page, false);
-        ok(THEME + ' ' + w + ': ' + r.groups.n + ' groups and ' + r.ann.n + ' announcements: exactly 6 group rows and 3 announcements visible; only the list body scrolls (to the last item), the card headings stay fixed; thin semi-transparent theme-coloured scrollbars; keyboard-scrollable region; no sideways page scroll');
+        ok(THEME + ' ' + w + ': ' + r.groups.n + ' groups and ' + r.ann.n + ' announcements: exactly 6 group rows and 3 complete announcements visible, nothing of the next one peeking, no blank space under the announcements (' + r.ann.gap + ' px); only the list body scrolls (to the last item), the card headings stay fixed; thin semi-transparent theme-coloured scrollbars; keyboard-scrollable region; no sideways page scroll');
         if (w >= 1241) {
           const c = await cols(page);
           assert.ok(refCols(c), JSON.stringify(c)); ok(THEME + ' ' + w + ': columns ' + c.map((x) => x.w).join(' / ') + ' px: the reference proportions');

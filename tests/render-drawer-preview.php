@@ -127,5 +127,7 @@ $theme_css  = $tabs_css . ( $hostile
 file_put_contents( $out . '/drawer.html', '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Synthetic drawer preview</title>'
 	. $legacy_css . '<link rel="stylesheet" href="' . $assets . '/gh-redesign.css"><style>' . $theme_css . '</style></head><body class="ghca-acd-page">'
 	. '<p style="margin:0;padding:6px 16px;background:#222;color:#fff;font:600 12px/1.2 sans-serif">SYNTHETIC PREVIEW. Not live data.</p>' . $page
-	. '<script>window.ghcaAcd={ajaxUrl:"https://preview.test/ajax",nonce:"test",loading:"Loading…"};</script><script src="' . $assets . '/dashboard.js"></script><script src="' . $assets . '/agency-training.js"></script></body></html>' );
+	. '<script>window.ghcaAcd={ajaxUrl:"https://preview.test/ajax",nonce:"test",loading:"Loading…"};</script><script src="' . $assets . '/dashboard.js"></script><script src="' . $assets . '/agency-training.js"></script>'
+	// The documents script, configured as GHCA_ACD_Jotform_UI localizes it in WordPress (it binds the Preview buttons).
+	. '<script>window.ghcaAcdJotform={ajaxUrl:"https://preview.test/ajax",nonce:"test",empty:"No indexed documents were found.",error:"Documents could not be loaded."};</script><script src="' . $assets . '/jotform.js"></script></body></html>' );
 echo "wrote $out/drawer.html\n";
