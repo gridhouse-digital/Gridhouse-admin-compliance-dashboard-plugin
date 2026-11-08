@@ -1,6 +1,6 @@
 # Dashboard redesign, phase 2, slice 8: drawer header, Employees table, packet notice, inline report, Manage users, announcements
 
-Opt-in, behind `ghca_acd_ui_redesign`, like every slice. This continues from `94b612d`, which the site owner installed on Akansoh staging on November 8. All Slice 1–7 behaviour is preserved, and every earlier test suite still passes; three tests were updated where this slice deliberately changed the layout (see Tests).
+Opt-in, behind `ghca_acd_ui_redesign`, like every slice. This continues from `94b612d`, which the site owner installed on Akansoh staging on November 7 at 8:50 PM Toronto time, replacing `826d342`. All Slice 1–7 behaviour is preserved, and every earlier test suite still passes; three tests were updated where this slice deliberately changed the layout (see Tests).
 
 With the redesign off, the legacy screens are unchanged. This was checked on the real disposable site: the legacy announcement modal publishes and deletes, and legacy Manage users keeps its table and modal. Unchanged in this slice:
 - the outbound guard;
@@ -131,6 +131,11 @@ When the redesign is on, the Manage users page uses the board.
 - **Delete confirmation:** an alert dialog naming the announcement, with focus on **Keep it** and **Delete announcement** as the alternative.
 - **Results:** "Announcement published", "updated" and "deleted" toasts.
 - **Expired session:** nothing is published, the toast says "Couldn't publish. Your session timed out. Nothing was published — sign in again and your text will still be here." The form stays open with the text. A new announcement's text is also kept in this browser and offered again, with a note, the next time Add is opened after signing in.
+- **Group scope on edit and delete (correction before packaging):** every edit and every delete is checked against the *stored* announcement first, before any other validation or write.
+  - A group announcement belongs to its group. A scoped manager (a group leader whose view is limited to their LearnDash groups) cannot edit it, move it to any audience including "everyone", "admins only" or their own group, edit it through the legacy form, or delete it, unless that group is in their view.
+  - Out-of-scope, unknown and non-announcement ids all get the same answer ("Announcement not found."), so an id outside one's scope is not confirmed to exist.
+  - Global admins (unscoped managers) keep full access.
+  - Unchanged: a scoped manager may still edit announcements whose audience is "Employees and admins" or "Admins only", as before this slice; only group announcements are tied to a group.
 - **Server:**
   - Audience is stored as `ghca_announce_audience` (`all`, `admins` or `group`), with `ghca_announce_group`. A group must be one of the saving user's visible groups.
   - Saves from the legacy form, which has no audience field, keep the stored audience; new ones default to employees and admins.
@@ -162,7 +167,7 @@ The site is prepared by `tests/real-site/setup.php`. Its LearnDash stand-ins (`t
 | --- | --- | --- |
 | `tests/browser-real-site.cjs` under **Twenty Twenty-Four** | 67 checks | Real pages, AJAX and database. Employees table and cards; drawer header. The real packet built with TCPDF/FPDI, with notice contrast in card, tray and used states at 1440 and 390; download saves a real PDF; the same link is then refused by the server. Inline report (real handler). Announcements: validation, publish, stored after reload, keyboard ⋯ menu, edit with group audience, delete confirmation, Escape keeps; session loss keeps the text and it is restored after signing in again (never published). Manage users at 1440/834/390: table or cards, search, Inactive empty state, inline email check, 520px drawer, Escape and focus return, edit and save through the real handler. |
 | Same under **Twenty Twenty-Two** | 67 checks | Same |
-| `tests/integration-slice8.php` (new) | 20 checks | Report permission boundaries (admin, unknown id, bad nonce, subscriber), masked email. Announcement audience validation (no group, a group outside scope), storage, legacy saves keeping the audience, Admins only dropping the group, subscriber cannot publish or delete. Manage users form contract, no welcome-email switch, subscriber refusal. |
+| `tests/integration-slice8.php` (new) | 36 checks | Report permission boundaries (admin, unknown id, bad nonce, subscriber), masked email. Announcement audience validation (no group, a group outside scope), storage, legacy saves keeping the audience, Admins only dropping the group, subscriber cannot publish or delete. **Stored group scope:** a real `group_leader` managing group A only cannot see group B's announcement, and cannot, by id, edit its text, move it to everyone, to admins only or into group A, edit it from the legacy form, or delete it; each attempt is refused with the same answer as an unknown id and leaves title, message, type, audience and group unchanged. The leader can edit their own group's announcement but cannot move it into group B or create one for group B. A global admin then edits, moves to everyone and deletes the same group-B announcement. Manage users form contract, no welcome-email switch, subscriber refusal. |
 | `integration-packet-ready` 29, `integration-bulk-recovery` 29, other `integration-*` | pass | Earlier slices |
 | Redesign off (legacy) on the real site | pass | Legacy announcement modal publishes and deletes; legacy Manage users table and modal |
 
@@ -175,26 +180,7 @@ The site is prepared by `tests/real-site/setup.php`. Its LearnDash stand-ins (`t
 
 ## Package
 
-| | |
-| --- | --- |
-| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-1cde2ca.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
-| Commit | `1cde2ca4526084ee08bf3049bcaef37cf904c62f` |
-| Size | 707,932 bytes |
-| SHA-256 | `d682555c1b873035fbb6a934c612ca76f492ec326e45be578ea1a1da695a25db` |
-| Manifest | `BUILD.txt`, inside the archive and alongside it: all 143 runtime files with their SHA-256 |
-
-**Verification:**
-- `unzip -t` reports no errors.
-- Every packaged file matches the commit byte for byte, and its hash is in the manifest.
-- `php -l` passes on every PHP file.
-- Tests and the test-only LearnDash stand-ins are not in the package.
-- The extracted package was installed on the disposable site, where it passed:
-  - `integration-packet-ready` (29 checks);
-  - `integration-slice8` (20 checks);
-  - `integration-bulk-recovery` (29 checks);
-  - `browser-real-site` under Twenty Twenty-Four (67 checks).
-
-**Not installed on staging.**
+Recorded after the corrected build (see below).
 
 ## Rollback
 

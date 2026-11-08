@@ -94,6 +94,72 @@ foreach ( array( $post->ID, $legacy ? $legacy->ID : 0 ) as $id ) {
 }
 check( ! get_post( $post->ID ), 'an admin deletes it' );
 
+// ---- Stored group scope on edit and delete: a scoped manager vs a global admin.
+if ( ! get_role( 'group_leader' ) ) {
+	add_role( 'group_leader', 'Group Leader', array( 'read' => true ) );
+}
+$leader = get_user_by( 'login', 'synthetic-leader' );
+if ( ! $leader ) {
+	$leader = get_user_by( 'id', wp_insert_user( array( 'user_login' => 'synthetic-leader', 'user_email' => 'leader@example.test', 'user_pass' => wp_generate_password(), 'role' => 'group_leader' ) ) );
+}
+$ga = $groups[0];
+$gb = $groups[1];
+update_user_meta( $leader->ID, 'ghca_rs_leads', array( $ga->ID ) ); // leads group A only
+update_option( GHCA_ACD_Settings::OPTION_PERM_MANAGE_ANNOUNCEMENTS, (string) $leader->ID );
+update_option( GHCA_ACD_Settings::OPTION_PERM_UNRESTRICTED_VIEW, '' );
+
+// The global admin creates one announcement for each group.
+wp_set_current_user( $admin->ID );
+ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => 0, 'title' => 'S8 scope B', 'body' => 'Group B only', 'type' => 'alert', 'audience' => 'group', 'audience_group' => $gb->ID ) );
+ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => 0, 'title' => 'S8 scope A', 'body' => 'Group A only', 'type' => 'alert', 'audience' => 'group', 'audience_group' => $ga->ID ) );
+$xb = get_posts( array( 'post_type' => 'ghca-announce', 'title' => 'S8 scope B', 'post_status' => 'any' ) )[0];
+$xa = get_posts( array( 'post_type' => 'ghca-announce', 'title' => 'S8 scope A', 'post_status' => 'any' ) )[0];
+$state = static function ( int $id ): string {
+	clean_post_cache( $id );
+	$p = get_post( $id );
+	return $p ? $p->post_title . '|' . $p->post_content . '|' . get_post_meta( $id, 'ghca_announce_type', true ) . '|' . get_post_meta( $id, 'ghca_announce_audience', true ) . '|' . get_post_meta( $id, 'ghca_announce_group', true ) : 'deleted';
+};
+$b_before = $state( $xb->ID );
+
+wp_set_current_user( $leader->ID );
+check( GHCA_ACD_Scoping::is_scoped_user() && array( $ga->ID ) === GHCA_ACD_Scoping::get_visible_group_ids() && GHCA_ACD_Announcements::can_manage_announcements(), 'setup: the leader is a scoped manager of group A only, allowed to manage announcements' );
+check( false === strpos( GHCA_ACD_Announcements::render_announcement_list_html( 'v2' ), 'S8 scope B' ) && false !== strpos( GHCA_ACD_Announcements::render_announcement_list_html( 'v2' ), 'S8 scope A' ), 'scoped manager: group B\'s announcement is not listed; group A\'s is' );
+$attempts = array(
+	'edit its text (audience unchanged)'        => array( 'title' => 'S8 scope B, hijacked', 'type' => 'alert', 'audience' => 'group', 'audience_group' => $gb->ID ),
+	'move it to everyone'                       => array( 'title' => 'S8 scope B', 'type' => 'alert', 'audience' => 'all' ),
+	'move it to admins only'                    => array( 'title' => 'S8 scope B', 'type' => 'alert', 'audience' => 'admins' ),
+	'move it into their own group'              => array( 'title' => 'S8 scope B', 'type' => 'alert', 'audience' => 'group', 'audience_group' => $ga->ID ),
+	'edit it from the legacy form (no audience)' => array( 'title' => 'S8 scope B, legacy', 'type' => 'update' ),
+);
+foreach ( $attempts as $what => $req ) {
+	$r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => $xb->ID ) + $req );
+	check( empty( $r['success'] ) && 'Announcement not found.' === ( $r['data']['message'] ?? '' ) && $state( $xb->ID ) === $b_before, "scoped manager cannot $what by id; nothing changed" );
+}
+$r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_delete_announcement' ), array( 'announce_id' => $xb->ID ) );
+check( empty( $r['success'] ) && 'Announcement not found.' === ( $r['data']['message'] ?? '' ) && $state( $xb->ID ) === $b_before, 'scoped manager cannot delete another group\'s announcement by id' );
+$r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_delete_announcement' ), array( 'announce_id' => 987654321 ) );
+$r2 = ajax( array( 'GHCA_ACD_Announcements', 'ajax_delete_announcement' ), array( 'announce_id' => $jordan->ID ) );
+check( 'Announcement not found.' === ( $r['data']['message'] ?? '' ) && 'Announcement not found.' === ( $r2['data']['message'] ?? '' ), 'unknown ids and non-announcement ids get the same answer (no confirmation that an out-of-scope id exists)' );
+$r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => 0, 'title' => 'S8 leader into B', 'audience' => 'group', 'audience_group' => $gb->ID ) );
+check( empty( $r['success'] ) && ! get_posts( array( 'post_type' => 'ghca-announce', 'title' => 'S8 leader into B', 'post_status' => 'any' ) ), 'scoped manager cannot create an announcement for another group' );
+// Their own group's announcement: allowed to edit, not allowed to move into another group.
+$r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => $xa->ID, 'title' => 'S8 scope A, edited', 'type' => 'reminder', 'audience' => 'group', 'audience_group' => $ga->ID ) );
+check( ! empty( $r['success'] ) && 0 === strpos( $state( $xa->ID ), 'S8 scope A, edited|' ), 'scoped manager can edit their own group\'s announcement' );
+$r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => $xa->ID, 'title' => 'S8 scope A, edited', 'type' => 'reminder', 'audience' => 'group', 'audience_group' => $gb->ID ) );
+check( empty( $r['success'] ) && (int) get_post_meta( $xa->ID, 'ghca_announce_group', true ) === $ga->ID, 'scoped manager cannot move their own announcement into another group' );
+
+// The global admin keeps full access to the same announcement.
+wp_set_current_user( $admin->ID );
+check( ! GHCA_ACD_Scoping::is_scoped_user() && false !== strpos( GHCA_ACD_Announcements::render_announcement_list_html( 'v2' ), 'S8 scope B' ), 'global admin: group B\'s announcement is listed' );
+$r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => $xb->ID, 'title' => 'S8 scope B, admin edit', 'type' => 'alert', 'audience' => 'group', 'audience_group' => $gb->ID ) );
+check( ! empty( $r['success'] ) && 0 === strpos( $state( $xb->ID ), 'S8 scope B, admin edit|' ), 'global admin can edit another group\'s announcement' );
+$r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => $xb->ID, 'title' => 'S8 scope B, admin edit', 'type' => 'alert', 'audience' => 'all' ) );
+check( ! empty( $r['success'] ) && 'all' === get_post_meta( $xb->ID, 'ghca_announce_audience', true ), 'global admin can move it to everyone' );
+$r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_delete_announcement' ), array( 'announce_id' => $xb->ID ) );
+check( ! empty( $r['success'] ) && 'deleted' === $state( $xb->ID ), 'global admin can delete it' );
+ajax( array( 'GHCA_ACD_Announcements', 'ajax_delete_announcement' ), array( 'announce_id' => $xa->ID ) );
+update_option( GHCA_ACD_Settings::OPTION_PERM_MANAGE_ANNOUNCEMENTS, '' );
+
 // ---- Manage users: the board page keeps the per-row permission and the form contract.
 $html = GHCA_ACD_Manage_Users_UI::render_shortcode();
 check( false !== strpos( $html, 'id="ghca-acd-user-form"' ) && false !== strpos( $html, 'name="ghca_nonce"' ) && false !== strpos( $html, 'value="ghca_acd_save_employee"' ), 'Manage users (board) posts the same form, nonce and action as before' );

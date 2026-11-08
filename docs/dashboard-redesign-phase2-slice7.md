@@ -119,7 +119,7 @@ When the merge finished, the redesigned drawer navigated to the download URL, so
 
 ### Not verified
 
-- **Staging:** this build (`94b612d`) was later installed on Akansoh staging by the site owner (November 8). The assistant did not install it or run checks on staging; the results above are from the synthetic and disposable-site runs only.
+- **Staging:** this build (`94b612d`) was later installed on Akansoh staging by the site owner on November 7 at 8:50 PM Toronto time, replacing `826d342`. The assistant did not install it or run checks on staging; the results above are from the synthetic and disposable-site runs only.
 - **Untested in other browsers:** the browser checks ran in Chromium only. Safari and Firefox download handling for the blob save was not tested.
 
 ## Package
@@ -138,7 +138,7 @@ When the merge finished, the redesigned drawer navigated to the download URL, so
 - `php -l` passes on every PHP file.
 - The extracted package was installed on the disposable `ghca_test` site, where `integration-packet-ready` (29) and `integration-bulk-recovery` (29) pass.
 
-**Installed on Akansoh staging by the site owner on November 8** (not by the assistant).
+**Installed on Akansoh staging by the site owner on November 7 at 8:50 PM Toronto time, replacing `826d342`** (not by the assistant).
 
 ## Rollback
 

@@ -29,7 +29,8 @@ if ( ! function_exists( 'learndash_get_users_group_ids' ) ) {
 	function learndash_groups() { return get_posts( array( 'post_type' => 'groups', 'numberposts' => -1, 'post_status' => 'publish' ) ); }
 	function learndash_group_enrolled_courses( $group_id = 0, $bypass = false ) { return array(); }
 	function learndash_get_groups_courses_ids( $user_id = 0, $group_ids = array() ) { return array(); }
-	function learndash_get_administrators_group_ids( $user_id = 0, $bypass = false ) { return array(); }
+	// Groups a synthetic group leader leads (slice 8 scope tests).
+	function learndash_get_administrators_group_ids( $user_id = 0, $bypass = false ) { return array_map( 'intval', (array) get_user_meta( (int) $user_id, 'ghca_rs_leads', true ) ); }
 	function learndash_is_group_leader_user( $user = 0 ) { return false; }
 	function learndash_is_admin_user( $user = 0 ) { return user_can( $user ?: get_current_user_id(), 'manage_options' ); }
 	function learndash_user_get_enrolled_courses( $user_id = 0, $args = array(), $bypass = false ) { return array(); }

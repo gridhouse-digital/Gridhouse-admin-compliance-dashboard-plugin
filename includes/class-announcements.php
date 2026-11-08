@@ -123,6 +123,23 @@ final class GHCA_ACD_Announcements {
     return in_array( $group_id, array_map( 'intval', GHCA_ACD_Scoping::get_visible_group_ids() ), true );
   }
 
+  /**
+   * Whether the signed-in manager may change or delete this stored announcement. A group announcement belongs to
+   * its group: a scoped manager may touch it only when that group is in their view, whatever audience they ask for.
+   * Unscoped managers (global admins) may touch every announcement. Checked on every edit and delete, against the
+   * stored values, before anything is written.
+   */
+  public static function can_touch_existing( int $announce_id ): bool {
+    if ( $announce_id <= 0 || 'ghca-announce' !== get_post_type( $announce_id ) ) {
+      return false;
+    }
+    $stored = self::sanitize_audience( (string) get_post_meta( $announce_id, 'ghca_announce_audience', true ) ?: 'all' );
+    if ( 'group' !== $stored ) {
+      return true;
+    }
+    return self::viewer_sees_group( (int) get_post_meta( $announce_id, 'ghca_announce_group', true ) );
+  }
+
   private static function audience_label( string $audience, int $group_id ): string {
     if ( 'group' === $audience ) {
       /* translators: %s: LearnDash group name */
@@ -412,6 +429,12 @@ final class GHCA_ACD_Announcements {
     }
 
     $announce_id = isset( $_POST['announce_id'] ) ? (int) $_POST['announce_id'] : 0;
+    // An edit is checked against the stored announcement first, before any other validation or write: an
+    // out-of-scope group announcement cannot be edited or moved to any audience (including "everyone"), and
+    // out-of-scope ids answer exactly like unknown ids.
+    if ( $announce_id > 0 && ! self::can_touch_existing( $announce_id ) ) {
+      wp_send_json_error( array( 'message' => __( 'Announcement not found.', 'ghca-acd' ) ) );
+    }
     $title       = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
     $body        = isset( $_POST['body'] ) ? sanitize_textarea_field( wp_unslash( $_POST['body'] ) ) : '';
     $type        = isset( $_POST['type'] ) ? self::sanitize_announcement_type( wp_unslash( $_POST['type'] ) ) : 'update';
@@ -439,9 +462,6 @@ final class GHCA_ACD_Announcements {
     );
 
     if ( $announce_id > 0 ) {
-      if ( get_post_type( $announce_id ) !== 'ghca-announce' ) {
-        wp_send_json_error( array( 'message' => __( 'Announcement not found.', 'ghca-acd' ) ) );
-      }
       $postarr['ID'] = $announce_id;
       $result        = wp_update_post( $postarr, true );
     } else {
@@ -532,7 +552,8 @@ final class GHCA_ACD_Announcements {
     }
 
     $announce_id = isset( $_POST['announce_id'] ) ? (int) $_POST['announce_id'] : 0;
-    if ( $announce_id <= 0 || get_post_type( $announce_id ) !== 'ghca-announce' ) {
+    // Unknown, not an announcement, or a group announcement outside this manager's groups: the same answer.
+    if ( ! self::can_touch_existing( $announce_id ) ) {
       wp_send_json_error( array( 'message' => __( 'Announcement not found.', 'ghca-acd' ) ) );
     }
 

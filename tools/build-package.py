@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Builds the cumulative GHCA plugin ZIP from one exact commit. Never overwrites an existing file.
 
-Usage: python3 tools/build-package.py <repo> <commit> <branch> <output-dir> ["contents"] ["previous staging"] ["doc"]
+Usage: python3 tools/build-package.py <repo> <commit> <branch> <output-dir> ["contents"] ["previous staging"] ["doc"] ["verification"]
 The ZIP root is Gridhouse-admin-compliance-dashboard-plugin-main/ (the folder staging uses). BUILD.txt
-records the build time, so a rebuild has the same 139 runtime files but a different ZIP checksum."""
+records the build time, so a rebuild has the same runtime files but a different ZIP checksum. The verification
+text states what was actually tested for this build; the default is the earlier synthetic-only wording."""
 import hashlib, io, os, subprocess, sys, tarfile, zipfile, datetime
 
 repo, commit, branch, outdir = sys.argv[1:5]
 contents = sys.argv[5] if len(sys.argv) > 5 else 'Cumulative dashboard redesign, phase 1 and phase 2 slices 2-4 (Slices 1-4), on top of 1.7.3-rc.8'
 previous = sys.argv[6] if len(sys.argv) > 6 else 'Slice 3, commit a890189'
 doc = sys.argv[7] if len(sys.argv) > 7 else 'docs/dashboard-redesign-phase2-slice4.md'
+verification = sys.argv[8] if len(sys.argv) > 8 else ('Synthetic only (stand-in WordPress, synthetic data, Chromium). Not verified on\n                  staging or with real WordPress, LearnDash, BuddyBoss, Elementor, FluentCRM or Jotform.')
 ROOT = 'Gridhouse-admin-compliance-dashboard-plugin-main'
 PATHS = ['gridhouse-admin-compliance-dashboard.php', 'includes', 'assets', 'README.md', 'TESTING.md']
 git = lambda *a: subprocess.check_output(['git', '-C', repo, *a])
@@ -59,8 +61,7 @@ Excluded:         tests/, docs/, design-references/ and dotfiles (kept in the re
                   as in earlier packages)
 Runtime files:    {len(files)} from git (all byte-identical to the commit), plus this BUILD.txt
 
-Verification:     Synthetic only (stand-in WordPress, synthetic data, Chromium). Not verified on
-                  staging or with real WordPress, LearnDash, BuddyBoss, Elementor, FluentCRM or Jotform.
+Verification:     {verification}
                   See {doc} in the repository at this commit.
 
 SHA-256 of every packaged runtime file:
