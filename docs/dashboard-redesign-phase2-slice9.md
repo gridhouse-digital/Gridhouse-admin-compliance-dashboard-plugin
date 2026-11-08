@@ -237,13 +237,13 @@ All three are fixed as described under "Deletion outcomes" and "Database errors"
 
 | | |
 | --- | --- |
-| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-70e1d6b.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
-| Commit | `70e1d6b28db0c5749ca34a8788e2aca8212a317b` |
-| Size | 736,962 bytes |
-| SHA-256 | `35e23f2838517b1d2b399e572cb294928a490acd36a0ca3e103b27080bf174ff` |
-| External BUILD.txt SHA-256 | `ebf2c012c2db9180e93291e705bb97d0f17049c1cfdad5d5968cd7d0a48a3741` |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-3ce13be.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `3ce13be2920391bb20f4750272733c1c845b16e7` |
+| Size | 738,214 bytes |
+| SHA-256 | `ca4490f978e26647952807deb4cc3a0d6eec12021d89b73bc8f83bcd7097ea7c` |
+| External BUILD.txt SHA-256 | `2d3d125c727d8f99fca3249b35b05afa6b00d9d9b36ffc4d6c2c0a5c4d2f8f90` |
 | Manifest | `BUILD.txt`, inside the archive and alongside it: all 145 runtime files with their SHA-256 |
-| Supersedes | `84e9985` and `a67c01d` (both prepared, never installed). Do not install either. |
+| Supersedes | `70e1d6b`, `84e9985` and `a67c01d` (all prepared, never installed). Do not install them. |
 | Previous staging | `dea0da8`, installed by the site owner on November 7, 2026 at approximately 10:48 PM Toronto time, replacing `94b612d` |
 
 **Verification:**
@@ -254,11 +254,10 @@ All three are fixed as described under "Deletion outcomes" and "Database errors"
 - The extracted package was installed on the disposable site, where it passed:
   - `integration-slice9` (90 checks) and `integration-slice8` (36 checks);
   - `integration-packet-ready` (29), `integration-bulk-recovery` (29) and the other integration suites;
-  - `browser-real-site9` (23 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
-- Before packaging, at the working tree that became this commit:
-  - all 82 unit test files pass;
-  - `browser-slice9` (104), `browser-redesign-lists` (51) and `browser-slice8` (182) pass.
-  - The page script is unchanged since `84e9985`, where every synthetic browser suite passed.
+  - `browser-real-site9` (32 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
+- At this commit:
+  - every synthetic browser suite passes, including `browser-slice9` (112, with the real Chromium PDF viewer section), `browser-slice8` (182) and `browser-slice7` (150);
+  - all 82 unit test files pass.
 - `GHCA_ACD_Redesign_Certs::deactivate()` has no test of its own.
 
 **Not installed on staging.**
