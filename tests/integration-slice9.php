@@ -38,6 +38,55 @@ function ajax( callable $handler, array $request ): array {
 	try { $handler(); } catch ( Ghca_S9_Stop $e ) {} // phpcs:ignore
 	return (array) json_decode( (string) ob_get_clean(), true );
 }
+// Archives that fail in the ways ZipArchive can: a refused entry, a refused close, a silently missing entry, wrong bytes.
+class Ghca_S9_Zip_FailAdd extends ZipArchive {
+	private int $n = 0;
+	public function addFromString( string $name, string $content, int $flags = ZipArchive::FL_OVERWRITE ): bool { return 2 === ++$this->n ? false : parent::addFromString( $name, $content, $flags ); }
+}
+class Ghca_S9_Zip_FailClose extends ZipArchive {
+	public function close(): bool { parent::close(); return false; }
+}
+class Ghca_S9_Zip_Drop extends ZipArchive {
+	private int $n = 0;
+	public function addFromString( string $name, string $content, int $flags = ZipArchive::FL_OVERWRITE ): bool { return 2 === ++$this->n ? true : parent::addFromString( $name, $content, $flags ); }
+}
+class Ghca_S9_Zip_Tamper extends ZipArchive {
+	public function addFromString( string $name, string $content, int $flags = ZipArchive::FL_OVERWRITE ): bool { return parent::addFromString( $name, $content . ' ', $flags ); }
+}
+/** Runs $fn in $n forked processes that each open their own database connection and start at the same instant. */
+function race( int $n, callable $fn ): array {
+	global $wpdb;
+	$start = microtime( true ) + 0.4;
+	$pipes = array();
+	for ( $i = 0; $i < $n; $i++ ) {
+		$pair = stream_socket_pair( STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP );
+		$pid  = pcntl_fork();
+		if ( 0 === $pid ) {
+			fclose( $pair[0] );
+			$wpdb->close();
+			$wpdb->db_connect( false );
+			wp_cache_flush();
+			$wait = $start - microtime( true );
+			if ( $wait > 0 ) { usleep( (int) ( $wait * 1e6 ) ); }
+			$out = $fn( $i );
+			fwrite( $pair[1], json_encode( $out ) );
+			fclose( $pair[1] );
+			posix_kill( getmypid(), SIGKILL ); // skip shutdown hooks and destructors in the child
+		}
+		fclose( $pair[1] );
+		$pipes[ $pid ] = $pair[0];
+	}
+	$results = array();
+	foreach ( $pipes as $pid => $pipe ) {
+		$results[] = json_decode( (string) stream_get_contents( $pipe ), true );
+		fclose( $pipe );
+		pcntl_waitpid( $pid, $status );
+	}
+	$wpdb->close();
+	$wpdb->db_connect( false );
+	wp_cache_flush();
+	return $results;
+}
 $pdf = static function ( string $tag ): string { return "%PDF-1.4\n% synthetic " . $tag . "\n1 0 obj << /Type /Page >> endobj\n%%EOF\n"; };
 
 $admin  = get_user_by( 'login', 'synthetic-admin' );
@@ -57,6 +106,13 @@ $c2 = $course( 'FATAL FIVE' );
 $fetch_ok = static function ( int $u, int $c ) use ( $pdf ): array { return array( 'status' => 200, 'body' => $pdf( $u . ':' . $c ) ); };
 $dir = GHCA_Audit_PDF_Jobs::private_subdir( 'cert_zips' );
 $zips = static function () use ( $dir ): int { return count( (array) glob( $dir . '/*.zip' ) ); };
+// Every ZIP-related file in the folder, temporary ones included.
+$all_zip_files = static function () use ( $dir ): array { clearstatcache(); return array_values( array_filter( array_map( 'basename', (array) glob( $dir . '/*' ) ), static function ( $b ) { return 1 === preg_match( '/^[a-f0-9]{32}\.zip/', $b ); } ) ); };
+$records = static function (): int { global $wpdb; return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name <> %s", $wpdb->esc_like( GHCA_ACD_Redesign_Certs::ZIP_RECORD ) . '%', GHCA_ACD_Redesign_Certs::CLEANUP_DUE_OPTION ) ); };
+// Change fields of a stored record directly in the database (to move it in time).
+$set_job = static function ( string $token, array $fields ): void { global $wpdb; $j = GHCA_ACD_Redesign_Certs::job( $token )['job']; $wpdb->update( $wpdb->options, array( 'option_value' => wp_json_encode( array_merge( $j, $fields ) ) ), array( 'option_name' => GHCA_ACD_Redesign_Certs::ZIP_RECORD . $token ) ); };
+$drop = static function ( string $token ): void { global $wpdb; $j = GHCA_ACD_Redesign_Certs::job( $token ); if ( $j ) { @unlink( (string) $j['job']['path'] ); } $wpdb->delete( $wpdb->options, array( 'option_name' => GHCA_ACD_Redesign_Certs::ZIP_RECORD . $token ) ); }; // phpcs:ignore
+
 
 // ---- Global admin: a ZIP of three, privately stored, single use.
 wp_set_current_user( $admin->ID );
@@ -66,7 +122,7 @@ check( 3 === count( $items ), 'repeated selections are counted once' );
 $before = $zips();
 $r = GHCA_ACD_Redesign_Certs::build_zip( $items, $admin->ID, $fetch_ok );
 check( $r['ok'] && 3 === $r['count'] && $zips() === $before + 1, 'a ZIP of 3 is built' );
-$job  = get_transient( GHCA_ACD_Redesign_Certs::ZIP_TRANSIENT . $r['token'] );
+$job  = GHCA_ACD_Redesign_Certs::job( $r['token'] )['job'];
 $path = (string) $job['path'];
 clearstatcache();
 check( 0 !== strpos( wp_normalize_path( $path ), wp_normalize_path( ABSPATH ) ) && 0600 === ( fileperms( $path ) & 0777 ) && 0700 === ( fileperms( dirname( $path ) ) & 0777 ), 'stored outside the web root, file 0600, folder 0700 (' . dirname( $path ) . ')' );
@@ -82,13 +138,13 @@ check( 1 === preg_match( '/^certificates-\d{4}-\d{2}-\d{2}-\d{6}-3\.zip$/', (str
 // Two certificates with the same employee and course title get distinct names.
 $c3 = $course( 'Fatal Five' );
 $r2 = GHCA_ACD_Redesign_Certs::build_zip( array( array( $morgan->ID, $c2 ), array( $morgan->ID, $c3 ) ), $admin->ID, $fetch_ok );
-$j2 = get_transient( GHCA_ACD_Redesign_Certs::ZIP_TRANSIENT . $r2['token'] );
+$j2 = GHCA_ACD_Redesign_Certs::job( $r2['token'] )['job'];
 $z->open( (string) $j2['path'] );
 $n2 = array( $z->getNameIndex( 0 ), $z->getNameIndex( 1 ) );
 $z->close();
 sort( $n2 );
 check( array( 'morgan-lee_fatal-five-2.pdf', 'morgan-lee_fatal-five.pdf' ) === $n2, 'same employee and course title: distinct names (' . implode( ', ', $n2 ) . ')' );
-@unlink( (string) $j2['path'] ); delete_transient( GHCA_ACD_Redesign_Certs::ZIP_TRANSIENT . $r2['token'] ); // phpcs:ignore
+$drop( $r2['token'] );
 
 // Download: owner only, nonce, single use.
 wp_set_current_user( $viewer->ID );
@@ -101,7 +157,7 @@ $d = GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => 'not-a-token', 'no
 check( 410 === $d['status'], 'a malformed token is answered as unavailable' );
 $d = GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => $r['token'], 'nonce' => wp_create_nonce( 'ghca_acd_table' ) ) );
 check( 200 === $d['status'] && 'application/zip' === $d['headers']['Content-Type'] && 0 === strpos( $d['body'], 'PK' ) && false !== strpos( $d['headers']['Content-Disposition'], $r['name'] ), 'the owner downloads it (application/zip, attachment, its name)' );
-check( ! is_file( $path ) && false === get_transient( GHCA_ACD_Redesign_Certs::ZIP_TRANSIENT . $r['token'] ), 'served once: file and record removed' );
+check( ! is_file( $path ) && null === GHCA_ACD_Redesign_Certs::job( $r['token'] ), 'served once: file and record removed' );
 $d = GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => $r['token'], 'nonce' => wp_create_nonce( 'ghca_acd_table' ) ) );
 check( 410 === $d['status'] && false !== strpos( $d['body'], 'no longer available' ), 'a second download is refused clearly' );
 // Another admin cannot use someone else's ZIP.
@@ -110,19 +166,136 @@ $other = get_user_by( 'login', 'synthetic-admin2' );
 if ( ! $other ) { $other = get_user_by( 'id', wp_insert_user( array( 'user_login' => 'synthetic-admin2', 'user_email' => 'admin2@example.test', 'user_pass' => wp_generate_password(), 'role' => 'administrator' ) ) ); }
 wp_set_current_user( $other->ID );
 $d = GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => $r3['token'], 'nonce' => wp_create_nonce( 'ghca_acd_table' ) ) );
-$j3 = get_transient( GHCA_ACD_Redesign_Certs::ZIP_TRANSIENT . $r3['token'] );
-check( 410 === $d['status'] && is_array( $j3 ) && is_file( (string) $j3['path'] ), 'another administrator cannot download someone else\'s ZIP (answered as unavailable; the owner\'s copy stays)' );
+$j3 = GHCA_ACD_Redesign_Certs::job( $r3['token'] );
+check( 410 === $d['status'] && is_array( $j3 ) && empty( $j3['job']['claimed_at'] ) && is_file( (string) $j3['job']['path'] ), 'another administrator cannot download someone else\'s ZIP (answered as unavailable; not claimed; the owner\'s copy stays)' );
+$j3 = $j3['job'];
 // Expiry.
 wp_set_current_user( $admin->ID );
-$j3['created'] = time() - GHCA_ACD_Redesign_Certs::ZIP_TTL - 5;
-set_transient( GHCA_ACD_Redesign_Certs::ZIP_TRANSIENT . $r3['token'], $j3, 60 );
+$set_job( $r3['token'], array( 'expires' => time() - 5 ) );
 $d = GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => $r3['token'], 'nonce' => wp_create_nonce( 'ghca_acd_table' ) ) );
-check( 410 === $d['status'] && ! is_file( (string) $j3['path'] ), 'an expired ZIP is refused and deleted' );
-// Sweep of abandoned files.
-$old = $dir . '/' . str_repeat( 'b', 32 ) . '.zip';
-file_put_contents( $old, 'PK' );
-touch( $old, time() - GHCA_ACD_Redesign_Certs::ZIP_TTL - 60 );
-check( GHCA_ACD_Redesign_Certs::sweep( $dir, time() ) >= 1 && ! is_file( $old ), 'abandoned ZIPs older than 15 minutes are swept when the next ZIP is built' );
+check( 410 === $d['status'] && ! is_file( (string) $j3['path'] ) && null === GHCA_ACD_Redesign_Certs::job( $r3['token'] ), 'an expired ZIP is refused at download (access expiry does not depend on cron), and deleted' );
+// ================= Archive writing: every entry, the close and the result are checked =================
+$two = array( array( $jordan->ID, $c1 ), array( $avery->ID, $c1 ) );
+$no_trace = static function () use ( $all_zip_files, $records ): array { return array( count( $all_zip_files() ), $records() ); };
+$base = $no_trace();
+GHCA_ACD_Redesign_Certs::use_archive_factory( static function () { return new Ghca_S9_Zip_FailAdd(); } );
+$r = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+check( ! $r['ok'] && false !== strpos( $r['message'], 'could not be written' ) && $no_trace() === $base, 'a failed entry write: error, no archive or temporary file left, no record (nothing to download)' );
+GHCA_ACD_Redesign_Certs::use_archive_factory( static function () { return new Ghca_S9_Zip_FailClose(); } );
+$r = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+check( ! $r['ok'] && false !== strpos( $r['message'], 'could not be written' ) && $no_trace() === $base, 'a failed close (the file was half-written): error, the file is deleted, no record' );
+GHCA_ACD_Redesign_Certs::use_archive_factory( static function () { return new Ghca_S9_Zip_Drop(); } );
+$r = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+check( ! $r['ok'] && false !== strpos( $r['message'], 'failed its check' ) && $no_trace() === $base, 'an entry silently missing from the written archive is caught by the entry-count check; deleted, no record' );
+GHCA_ACD_Redesign_Certs::use_archive_factory( static function () { return new Ghca_S9_Zip_Tamper(); } );
+$r = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+check( ! $r['ok'] && false !== strpos( $r['message'], 'failed its check' ) && $no_trace() === $base, 'an entry with different bytes is caught by the content check; deleted, no record' );
+GHCA_ACD_Redesign_Certs::use_archive_factory( null );
+$r = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+check( $r['ok'] && 2 === $r['count'], 'with the real ZipArchive again, the same selection builds and verifies' );
+$drop( $r['token'] );
+
+// ================= Download: failed reads are errors, never an empty 200 =================
+$nonce = wp_create_nonce( 'ghca_acd_table' );
+foreach ( array(
+	'read returns false' => static function () { return false; },
+	'short read'         => static function ( string $p ) { return substr( (string) file_get_contents( $p ), 0, 10 ); },
+	'empty read'         => static function () { return ''; },
+) as $label => $reader ) {
+	$r  = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+	$jp = (string) GHCA_ACD_Redesign_Certs::job( $r['token'] )['job']['path'];
+	$d  = GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => $r['token'], 'nonce' => $nonce ), 0, $reader );
+	check( 500 === $d['status'] && 0 === strpos( $d['headers']['Content-Type'], 'application/json' ) && false !== strpos( $d['body'], 'could not be read' ) && 0 !== strpos( $d['body'], 'PK' ), 'download, ' . $label . ': 500 with a clear JSON message, not a 200' );
+	$d2 = GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => $r['token'], 'nonce' => $nonce ) );
+	check( ! is_file( $jp ) && null === GHCA_ACD_Redesign_Certs::job( $r['token'] ) && 410 === $d2['status'], 'download, ' . $label . ': the claimed file and record are removed; a retry says to prepare the ZIP again' );
+}
+
+// ================= Cleanup independent of later builds =================
+$r = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+$jx = GHCA_ACD_Redesign_Certs::job( $r['token'] )['job'];
+$px = (string) $jx['path'];
+$ev = wp_next_scheduled( GHCA_ACD_Redesign_Certs::CLEANUP_HOOK, array( $r['token'] ) );
+check( true === $r['cleanup_scheduled'] && (int) $ev === $jx['expires'] + GHCA_ACD_Redesign_Certs::ZIP_DELETE_GRACE && false !== wp_next_scheduled( GHCA_ACD_Redesign_Certs::CLEANUP_HOOK ) && (int) get_option( GHCA_ACD_Redesign_Certs::CLEANUP_DUE_OPTION ) > 0, 'building schedules this ZIP\'s own cleanup (5 minutes after access expiry), an hourly backstop and the fallback due time' );
+$c = GHCA_ACD_Redesign_Certs::cleanup( '', $jx['expires'] + 1 );
+check( is_file( $px ) && null !== GHCA_ACD_Redesign_Certs::job( $r['token'] ) && $c['remaining'] >= 1, 'access expiry is not deletion: just after expiry cleanup keeps the file (its deletion is due later)' );
+$d = GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => $r['token'], 'nonce' => $nonce ), $jx['expires'] + 1 );
+check( 410 === $d['status'], '…but the download is already refused' );
+$r = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+$jx = GHCA_ACD_Redesign_Certs::job( $r['token'] )['job'];
+$set_job( $r['token'], array( 'expires' => time() - GHCA_ACD_Redesign_Certs::ZIP_DELETE_GRACE - 1 ) );
+do_action( GHCA_ACD_Redesign_Certs::CLEANUP_HOOK, $r['token'] ); // what WP-Cron runs when the event is due
+check( ! is_file( (string) $jx['path'] ) && null === GHCA_ACD_Redesign_Certs::job( $r['token'] ), 'the scheduled cleanup event removes an expired, never-downloaded ZIP and its record, with no later build or download' );
+// Abandoned files with no record: old archives and ZipArchive temporary files go; young ones and the deny files stay.
+$old_zip  = $dir . '/' . str_repeat( 'c', 32 ) . '.zip';
+$old_tmp  = $dir . '/' . str_repeat( 'd', 32 ) . '.zip.Ab12Cd';
+$young    = $dir . '/' . str_repeat( 'e', 32 ) . '.zip';
+$stranger = $dir . '/notes.txt';
+foreach ( array( $old_zip, $old_tmp, $young, $stranger ) as $f ) { file_put_contents( $f, 'PK' ); }
+$long_ago = time() - GHCA_ACD_Redesign_Certs::ZIP_TTL - GHCA_ACD_Redesign_Certs::ZIP_DELETE_GRACE - 60;
+touch( $old_zip, $long_ago ); touch( $old_tmp, $long_ago ); touch( $stranger, $long_ago );
+$deny = array_values( array_filter( (array) glob( $dir . '/{.htaccess,index.php,web.config}', GLOB_BRACE ), 'is_file' ) );
+// A record whose download was claimed but never finished (the request died), long ago.
+$r = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+$jc = GHCA_ACD_Redesign_Certs::job( $r['token'] )['job'];
+$set_job( $r['token'], array( 'claimed_by' => $admin->ID, 'claimed_at' => time() - GHCA_ACD_Redesign_Certs::ZIP_DELETE_GRACE - 1 ) );
+GHCA_ACD_Redesign_Certs::cleanup();
+clearstatcache();
+check( ! is_file( $old_zip ) && ! is_file( $old_tmp ), 'abandoned files with no record (an old archive and an old ZipArchive temporary file) are deleted by age' );
+check( is_file( $young ) && is_file( $stranger ) && count( $deny ) >= 1 && count( array_filter( $deny, 'is_file' ) ) === count( $deny ), 'a young file (possibly being written) is kept; the deny files and unrelated files are never touched' );
+check( ! is_file( (string) $jc['path'] ) && null === GHCA_ACD_Redesign_Certs::job( $r['token'] ), 'a claimed download that never finished is cleaned up after the grace period' );
+@unlink( $young ); @unlink( $stranger ); // phpcs:ignore
+// Scheduling fails entirely: the request-end fallback takes over.
+GHCA_ACD_Redesign_Certs::cleanup();
+$block = static function ( $pre, $event ) { return GHCA_ACD_Redesign_Certs::CLEANUP_HOOK === $event->hook ? new WP_Error( 'blocked', 'test: scheduling refused' ) : $pre; };
+add_filter( 'pre_schedule_event', $block, 10, 2 );
+$r = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+remove_filter( 'pre_schedule_event', $block, 10 );
+$jf = GHCA_ACD_Redesign_Certs::job( $r['token'] )['job'];
+check( $r['ok'] && false === $r['cleanup_scheduled'] && false === wp_next_scheduled( GHCA_ACD_Redesign_Certs::CLEANUP_HOOK, array( $r['token'] ) ) && (int) get_option( GHCA_ACD_Redesign_Certs::CLEANUP_DUE_OPTION ) === $jf['expires'] + GHCA_ACD_Redesign_Certs::ZIP_DELETE_GRACE, 'when WP-Cron refuses both events the ZIP is still offered, and the fallback due time is recorded' );
+GHCA_ACD_Redesign_Certs::fallback_cleanup();
+check( is_file( (string) $jf['path'] ), 'the fallback does nothing before a cleanup is overdue' );
+$set_job( $r['token'], array( 'expires' => time() - GHCA_ACD_Redesign_Certs::ZIP_DELETE_GRACE - GHCA_ACD_Redesign_Certs::ZIP_FALLBACK_LAG - 1 ) );
+update_option( GHCA_ACD_Redesign_Certs::CLEANUP_DUE_OPTION, time() - GHCA_ACD_Redesign_Certs::ZIP_FALLBACK_LAG - 1, true );
+GHCA_ACD_Redesign_Certs::fallback_cleanup(); // runs on 'shutdown' of any request
+check( ! is_file( (string) $jf['path'] ) && null === GHCA_ACD_Redesign_Certs::job( $r['token'] ), 'once overdue, the request-end fallback deletes it without cron' );
+check( false === get_option( GHCA_ACD_Redesign_Certs::CLEANUP_DUE_OPTION ) && false === wp_next_scheduled( GHCA_ACD_Redesign_Certs::CLEANUP_HOOK ) && 0 === $records() && array() === $all_zip_files(), 'with nothing left, the due time and every cleanup event are removed' );
+
+// ================= Concurrency: separate processes, separate database connections =================
+check( function_exists( 'pcntl_fork' ), 'setup: pcntl is available for the concurrency checks' );
+for ( $round = 1; $round <= 5; $round++ ) {
+	wp_set_current_user( $admin->ID );
+	$r    = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+	$jr   = GHCA_ACD_Redesign_Certs::job( $r['token'] )['job'];
+	$want = sha1( (string) file_get_contents( (string) $jr['path'] ) );
+	$tok  = $r['token'];
+	$res  = race( 8, static function ( int $i ) use ( $tok, $admin, $other ): array {
+		$u = $i % 2 ? $other->ID : $admin->ID; // half the requests are another administrator
+		wp_set_current_user( $u );
+		$d = GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => $tok, 'nonce' => wp_create_nonce( 'ghca_acd_table' ) ) );
+		return array( 'u' => $u, 'status' => $d['status'], 'sha' => 200 === $d['status'] ? sha1( $d['body'] ) : '' );
+	} );
+	$ok200 = array_values( array_filter( $res, static function ( $x ) { return 200 === $x['status']; } ) );
+	$rest  = array_filter( $res, static function ( $x ) { return 200 !== $x['status']; } );
+	$all_410 = array() === array_filter( $rest, static function ( $x ) { return 410 !== $x['status']; } );
+	check( 8 === count( $res ) && 1 === count( $ok200 ) && $admin->ID === $ok200[0]['u'] && $want === $ok200[0]['sha'] && $all_410, 'round ' . $round . ': 8 simultaneous downloads (4 by the owner, 4 by another admin) → exactly one 200, by the owner, with the complete archive; the other 7 get 410' );
+	clearstatcache();
+	$left = GHCA_ACD_Redesign_Certs::job( $tok );
+	check( null === $left && ! is_file( (string) $jr['path'] ), 'round ' . $round . ': afterwards the file and record are gone' . ( null === $left ? '' : ' [record: ' . $left['raw'] . ']' ) . ( is_file( (string) $jr['path'] ) ? ' [file still there]' : '' ) );
+}
+// Only another administrator racing: nobody is served, and the owner's ZIP is untouched (not claimed).
+wp_set_current_user( $admin->ID );
+$r   = GHCA_ACD_Redesign_Certs::build_zip( $two, $admin->ID, $fetch_ok );
+$tok = $r['token'];
+$res = race( 6, static function () use ( $tok, $other ): array {
+	wp_set_current_user( $other->ID );
+	return array( 'status' => GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => $tok, 'nonce' => wp_create_nonce( 'ghca_acd_table' ) ) )['status'] );
+} );
+$jr = GHCA_ACD_Redesign_Certs::job( $tok );
+check( 6 === count( $res ) && array( 410 ) === array_values( array_unique( array_column( $res, 'status' ) ) ) && null !== $jr && empty( $jr['job']['claimed_at'] ) && is_file( (string) $jr['job']['path'] ), '6 simultaneous downloads by another administrator: all 410, the claim stays with the creator, the file stays' );
+wp_set_current_user( $admin->ID );
+$d = GHCA_ACD_Redesign_Certs::zip_download( array( 'token' => $tok, 'nonce' => wp_create_nonce( 'ghca_acd_table' ) ) );
+check( 200 === $d['status'], '…and the owner can still download it afterwards' );
+
 
 // ---- Failures: no partial archive.
 $before = $zips();
@@ -153,8 +326,7 @@ check( ! $r['ok'] && 0 === $calls && $zips() === $before, 'a selection with an o
 check( false !== strpos( $r['message'], '1 selected certificate is not available to you' ) && false === strpos( $r['message'], 'Morgan' ) && false === strpos( $r['message'], 'Fatal' ), 'the refusal gives a count only: no employee or course name leaks' );
 $r = GHCA_ACD_Redesign_Certs::build_zip( array( array( $jordan->ID, $c1 ) ), $leader->ID, $counting );
 check( $r['ok'] && 1 === $calls, 'the leader can ZIP their own group\'s certificate' );
-$j = get_transient( GHCA_ACD_Redesign_Certs::ZIP_TRANSIENT . $r['token'] );
-@unlink( (string) $j['path'] ); delete_transient( GHCA_ACD_Redesign_Certs::ZIP_TRANSIENT . $r['token'] ); // phpcs:ignore
+$drop( $r['token'] );
 // The authorized single-certificate endpoint (preview and download) refuses the out-of-scope employee too.
 $p = GHCA_ACD_Certificate_Download::process( array( 'user_id' => $morgan->ID, 'course_id' => $c2, 'nonce' => wp_create_nonce( 'ghca_acd_table' ) ) );
 check( 403 === $p['status'] && 0 !== strpos( $p['body'], '%PDF' ), 'preview/download endpoint: an out-of-scope employee is refused (403)' );

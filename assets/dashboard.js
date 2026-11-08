@@ -779,11 +779,14 @@
    * in (Reports, Overview, KPI) shows the full authorized list, so an earlier employee filter is not left behind.
    * The list refreshes through the existing filter form; the server checks the employee again.
    */
+  // Sets the Certificates employee filter for an entry point. Employee-specific links pass their employee; general
+  // entry points (Overview "View all", the Reports card and the Certificates tab itself, by click or keyboard) pass ''
+  // so a filter left over from an earlier employee link never carries over.
   function ghcaCertScope(jump) {
     var form = document.querySelector('.ghca-ui form[data-ghca-table="certificates"]');
     var field = form && form.querySelector('[data-ghca-cert-user-field]');
     if (!field) return;
-    var want = jump.getAttribute('data-ghca-cert-user') || '';
+    var want = (jump && jump.getAttribute && jump.getAttribute('data-ghca-cert-user')) || '';
     if (field.value === want) return;
     field.value = want;
     var page = form.querySelector('[data-ghca-page-input]');
@@ -812,6 +815,7 @@
       var targetId = tabBtn.getAttribute('data-ghca-tab-target');
       if (!targetId) return;
 
+      if (targetId === 'ghca-tab-certificates') { ghcaCertScope(null); }
       activateTab(targetId);
       if (window.history && window.history.replaceState) {
         window.history.replaceState(null, '', '#' + targetId);
@@ -839,6 +843,7 @@
         else return;
         e.preventDefault();
         var nextTarget = btns[next].getAttribute('data-ghca-tab-target');
+        if (nextTarget === 'ghca-tab-certificates') { ghcaCertScope(null); }
         activateTab(nextTarget, true);
         if (window.history && window.history.replaceState) {
           window.history.replaceState(null, '', '#' + nextTarget);

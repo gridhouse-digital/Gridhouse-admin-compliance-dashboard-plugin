@@ -65,10 +65,25 @@ How it works:
   - each PDF is fetched through the same broker as the viewer, and only verified PDFs are added;
   - if any certificate cannot be fetched, no archive is made, and the failed items are named. A partial archive is never produced;
   - limits: 20 certificates per archive and 100 MB in total.
-- **Archive storage:**
-  - stored in the plugin's private folder (`cert_zips`), outside the web root: folder 0700, file 0600;
-  - the download (`ghca_acd_cert_zip_download`) is single use, bound to the user who built it, and needs a nonce;
-  - archives expire after 15 minutes, and abandoned ones are swept the next time a ZIP is built.
+- **Archive writing (corrected build):** every `addFromString()` result and the `close()` result are checked. The finished archive is then reopened with ZipArchive's consistency check; its entry count must match, and every entry must hold exactly the bytes that were added. On any failure the incomplete archive and any temporary file are deleted, no download record is stored, and the user gets an error ("could not be written" or "failed its check… try again").
+- **Archive storage:** stored in the plugin's private folder (`cert_zips`), outside the web root: folder 0700, file 0600.
+- **Download claim (corrected build):** single use, owner only, and nonce-checked.
+  - **Where the record lives:** each ZIP has its own row in the options table, not autoloaded. It is read and written with `$wpdb` directly, not as a transient: a transient never reaches the database when a persistent object cache is installed, and neither offers an atomic claim.
+  - **Claiming:** the download claims the row with a compare-and-swap `UPDATE … WHERE option_value = <the unclaimed value>`. The database lets exactly one simultaneous request change it; every other request gets "no longer available" (410).
+  - **Owner binding:** the claim happens only after checking that the requester built the ZIP. A request by anyone else is answered like a missing ZIP and leaves it unclaimed for its owner. The claimed record stores who claimed it and when.
+  - **Database errors:** if the database cannot answer the claim, the user gets "try the download again" (503) and the ZIP is not consumed.
+- **Failed reads (corrected build):** after the claim, the file must be read completely: the length must equal the file size and the content must start as a ZIP. Otherwise the answer is 500 with a JSON message ("could not be read… prepare it again"), never an empty or partial 200. The claimed file and record are deleted. The page shows that message.
+- **Expiry and cleanup (corrected build):** access expiry and physical deletion are separate.
+  - **Access expiry:** a ZIP can be downloaded for 15 minutes after it is built. This is checked at download time, whatever cron has or has not done.
+  - **Physical deletion:**
+    - immediately after a download, or a failed read;
+    - by a WP-Cron single event per ZIP, due 5 minutes after its access expiry;
+    - by an hourly WP-Cron backstop, scheduled while any ZIP exists and removed when none remain;
+    - by a fallback at the end of any request (`shutdown`) once a cleanup is more than 10 minutes overdue. This covers failed scheduling (logged to the PHP error log), `DISABLE_WP_CRON` without a system cron, and late cron;
+    - before every new ZIP is built;
+    - when the plugin is deactivated (everything).
+  - **What cleanup removes:** expired records and their files, and claims that never finished after 5 minutes. It also removes ZIP and ZipArchive temporary files with no record once they are older than 20 minutes, judged by age, so a ZIP being written is never touched. It never touches the folder's deny files or anything else.
+  - **WP-Cron timing:** WP-Cron is not a clock. Events run only when someone loads a page, or when a system cron calls `wp-cron.php`, so "due at" means "no earlier than". On a quiet site, or with `DISABLE_WP_CRON` and no system cron, files can stay on disk longer, until the next request runs the fallback. They are unreachable meanwhile: the private folder's deny rules block them, and the download refuses expired ZIPs. For predictable deletion, staging should call `wp-cron.php` from a system cron (every 5 minutes is plenty).
 - **File names:** readable and distinct, `employee_course.pdf`, with `-2` and so on for clashes. The archive is named `certificates-YYYY-MM-DD-HHMMSS-N.zip`.
 - **PHP zip extension:** if it is missing, selection is disabled and a note says ZIP downloads are not available on this site, so there are no decorative controls.
 - **Row actions:** PDF opens the viewer; the download icon next to it downloads (unchanged endpoint).
@@ -103,7 +118,7 @@ How it behaves:
 - **Employee-specific actions** open the same tab filtered to that employee, with an "Employee: Name" chip. This covers the report's **Certificates (N)**.
   - The filter is the `ghca_cert_user` field. The server ignores an employee outside the viewer's scope.
   - A direct link (`?ghca_cert_user=ID#ghca-tab-certificates`) works without scripts.
-- **General entry points** show the full list with no stale employee filter. These are Overview "View all", the Reports card and the tab itself. Removing the chip also clears the filter.
+- **General entry points** show the full list with no stale employee filter. These are Overview "View all", the Reports card, and the Certificates tab itself, chosen by click (also when it is already showing one employee's certificates) or with the arrow keys. Removing the chip also clears the filter.
 - The employee `/cert-download/` page was not implemented or changed.
 
 ## 7. Overview and container
@@ -139,9 +154,20 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 
 | Test | Result | Covers |
 | --- | --- | --- |
-| `tests/integration-slice9.php` (new) | 32 checks | ZIP building and private storage. Duplicate selections. Distinct and clashing file names. Archive name. Download refused without document access, with a bad nonce, with a malformed token, and for another administrator. Single use, expiry and sweep. A fetch failure means no archive, with the failed items named. A non-PDF answer is a failure. The 20-item limit. Malformed selections. A real `group_leader` is refused for a selection with an out-of-scope certificate before any fetch, with a count only and no names, and can ZIP their own group's certificate. The preview endpoint refuses out-of-scope employees (403) and answers 404, never a file, when no certificate exists. The Certificates employee filter ignores out-of-scope ids. |
-| `tests/browser-real-site9.cjs` under **Twenty Twenty-Four** | 20 checks | Container width at 1920. Overview columns at 1440 and 1280, and stacking at 1100, 834 and 390, with a long announcement (created and deleted again). Certificates routing and the employee filter (report action, Overview "View all", chip removal, direct link). Report picker icons at 1440 and 390. |
-| Same under **Twenty Twenty-Two** | 20 checks | Same |
+| `tests/integration-slice9.php` (new) | 66 checks | ZIP building and private storage. Duplicate selections. Distinct and clashing file names. Archive name. Download refused without document access, with a bad nonce, with a malformed token, and for another administrator. Single use, owner-only. A fetch failure means no archive, with the failed items named. A non-PDF answer is a failure. The 20-item limit. Malformed selections. A real `group_leader` is refused for a selection with an out-of-scope certificate before any fetch, with a count only and no names, and can ZIP their own group's certificate. The preview endpoint refuses out-of-scope employees (403) and answers 404, never a file, when no certificate exists. The Certificates employee filter ignores out-of-scope ids. **Corrected build adds:**
+  - **Archive failures:** a refused entry write, a refused close (half-written file), an entry silently missing and an entry with different bytes. Each gives an error, leaves no file (temporary files included) and no record, and is simulated with ZipArchive subclasses injected through a test-only seam.
+  - **Read failures:** the read returns false, a short read and an empty read. Each gives a 500 JSON answer, never a 200; the file and record are removed and a retry gets 410. Simulated with an injected reader; a real disk read error was not produced.
+  - **Expiry and cleanup:**
+    - access expiry is not deletion;
+    - the scheduled cleanup event removes an expired ZIP with no later build or download;
+    - old abandoned archives and ZipArchive temporary files go, while young files, deny files and unrelated files stay;
+    - an unfinished claim is cleaned up;
+    - if WP-Cron refuses both events, the ZIP is still offered and the request-end fallback deletes it once overdue (not before);
+    - with nothing left, the due time and every event are removed.
+  - **Concurrency:** separate forked processes, each with its own database connection, start at the same instant. In each of 5 rounds, 8 simultaneous downloads (4 by the owner, 4 by another administrator) give exactly one 200, from the owner and with the complete archive; the other 7 get 410, and nothing is left afterwards. Six simultaneous requests by another administrator all get 410 and leave the ZIP unclaimed, and the owner can download it afterwards.
+  - **Negative control:** with the claim made non-atomic on the test site's copy only, the concurrency checks fail in every round (several 200s). The test therefore detects the race it is meant to. |
+| `tests/browser-real-site9.cjs` under **Twenty Twenty-Four** | 23 checks | Container width at 1920. Overview columns at 1440 and 1280, and stacking at 1100, 834 and 390, with a long announcement (created and deleted again). Certificates routing and the employee filter: report action, Overview "View all", chip removal, the Certificates tab by click (also while filtered) and by arrow key (corrected build), direct link. Report picker icons at 1440 and 390. |
+| Same under **Twenty Twenty-Two** | 23 checks | Same |
 | `browser-real-site.cjs` (Slice 8) under both themes | 67 checks each | Regression |
 | Other `integration-*.php` (slice8 36, packet-ready 29, bulk-recovery 29, …) | pass | Regression |
 | Redesign off (legacy) on the real site | pass | Legacy dashboard loads with no viewer, selection bar or listbox, and no script errors |
@@ -153,6 +179,18 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 - **Inline PDF display:** not verified in any browser (see Simulated).
 - **Browsers:** Chromium only. Safari and Firefox page/zoom fragments, and print, were not checked.
 - **PHP zip on staging:** the extension's presence on staging is unknown.
+- **Cron on staging:** whether staging runs WP-Cron from traffic or from a system cron is unknown; the fallback covers both, but deletion times depend on it.
+- **Object cache:** no persistent object cache was installed on the test site. The claim uses the database directly and never the object cache, so it should not depend on one, but no test ran with one.
+- **Database engines:** the concurrency test ran on MariaDB 10.11 with InnoDB only.
+
+## Corrections after `a67c01d`
+
+`a67c01d` was prepared and never installed. Review found these problems, fixed in the corrected build:
+- **ZIP downloads were not atomically single use.** The record was a transient: read, then deleted. Two simultaneous requests could both pass the read and both be served.
+- **Cleanup depended on a later ZIP build.** Abandoned files stayed until someone built another ZIP, and access expiry and deletion were the same step.
+- **Archive results were not checked.** `addFromString()` results were ignored, and the archive was not checked after closing.
+- **A failed file read could become an empty 200 download.** `(string) file_get_contents()` turned `false` into `''`.
+- **Clicking the Certificates tab itself did not clear an employee filter**, although this document said it did.
 
 ## Package
 
@@ -180,4 +218,9 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 
 ## Rollback
 
-Install `dea0da8`. Slice 9 adds no options, post meta or schema. Temporary ZIPs live in the private folder and expire after 15 minutes; an older build simply leaves any remaining ones, which the private folder's deny rules keep unreachable.
+Install `dea0da8`. The ZIP feature adds no schema or post meta. While ZIPs exist it uses:
+- one options row per ZIP (`ghca_acd_cert_zip_<token>`);
+- the autoloaded `ghca_acd_certzip_cleanup_due` option;
+- the `ghca_acd_cert_zip_cleanup` cron events.
+
+All of these are removed when no ZIP remains, and by deactivation. An older build leaves any remaining rows and files untouched. Its own code ignores the rows, and the files are unreachable behind the private folder's deny rules. To remove them, deactivate this build before installing the older one.

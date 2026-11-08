@@ -138,6 +138,33 @@ const cols = (page) => page.evaluate(() => {
     await page.click('[data-ghca-chips="certificates"] [data-ghca-filter-clear="ghca_cert_user"]');
     await page.waitForFunction(() => !/Employee:/.test(document.querySelector('[data-ghca-chips="certificates"]').innerText));
     assert.equal(await page.inputValue('[data-ghca-cert-user-field]'), ''); ok(THEME + ': removing the employee chip clears the filter');
+    // The Certificates tab itself is a general entry point: clicking it clears the employee filter.
+    const filterFor = async () => {
+      await page.click('#ghca-tab-reports-tab');
+      await page.click('.gh-urpt-acts a[data-ghca-cert-user]');
+      await page.waitForFunction(() => /Employee: Jordan Ellis/.test(document.querySelector('[data-ghca-chips="certificates"]').innerText));
+    };
+    await filterFor();
+    await page.click('#ghca-tab-overview-tab');
+    await page.click('#ghca-tab-certificates-tab');
+    await page.waitForSelector('#ghca-tab-certificates.is-active');
+    await page.waitForFunction(() => !/Employee:/.test(document.querySelector('[data-ghca-chips="certificates"]').innerText));
+    assert.equal(await page.inputValue('[data-ghca-cert-user-field]'), '');
+    ok(THEME + ': clicking the Certificates tab shows the full list again (employee filter cleared)');
+    // Clicking it again while it is already showing an employee's certificates also clears it.
+    await filterFor();
+    await page.click('#ghca-tab-certificates-tab');
+    await page.waitForFunction(() => !/Employee:/.test(document.querySelector('[data-ghca-chips="certificates"]').innerText));
+    ok(THEME + ': clicking the Certificates tab while it is filtered clears the filter too');
+    // Keyboard: arrowing onto the Certificates tab behaves like clicking it.
+    await filterFor();
+    const prev = await page.evaluate(() => { const b = document.querySelector('#ghca-tab-certificates-tab'); const all = Array.from(b.closest('[role="tablist"]').querySelectorAll('[role="tab"]')); return all[all.indexOf(b) - 1].id; });
+    await page.click('#' + prev);
+    await page.focus('#' + prev);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForSelector('#ghca-tab-certificates.is-active');
+    await page.waitForFunction(() => !/Employee:/.test(document.querySelector('[data-ghca-chips="certificates"]').innerText));
+    assert.equal(await page.inputValue('[data-ghca-cert-user-field]'), ''); ok(THEME + ': choosing the Certificates tab with the arrow keys clears the filter as well');
     // A direct link (no script involved) keeps the employee filter on first load.
     await dash(page, '&ghca_cert_user=' + jordan, '#ghca-tab-certificates');
     assert.match(await page.locator('[data-ghca-chips="certificates"]').innerText(), /Employee: Jordan Ellis/); ok(THEME + ': a direct employee link renders the tab already filtered');

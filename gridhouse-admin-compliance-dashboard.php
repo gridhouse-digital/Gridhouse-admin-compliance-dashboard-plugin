@@ -257,4 +257,5 @@ register_deactivation_hook( __FILE__, static function (): void {
   GHCA_ACD_Messaging_Worker::clear_schedules();
   GHCA_ACD_Jotform_Sync::clear_schedule();
   GHCA_ODP_Bulletins::deactivate();
+  GHCA_ACD_Redesign_Certs::deactivate();
 } );
