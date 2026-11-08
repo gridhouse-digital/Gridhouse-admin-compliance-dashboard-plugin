@@ -173,6 +173,29 @@ The site is prepared by `tests/real-site/setup.php`. Its LearnDash stand-ins (`t
 - **Printing:** Print report was not printed to paper or PDF in a browser.
 - **Employee dashboard:** the announcement audience has no visible effect there yet (separate plugin).
 
+## Package
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-1cde2ca.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `1cde2ca4526084ee08bf3049bcaef37cf904c62f` |
+| Size | 707,932 bytes |
+| SHA-256 | `d682555c1b873035fbb6a934c612ca76f492ec326e45be578ea1a1da695a25db` |
+| Manifest | `BUILD.txt`, inside the archive and alongside it: all 143 runtime files with their SHA-256 |
+
+**Verification:**
+- `unzip -t` reports no errors.
+- Every packaged file matches the commit byte for byte, and its hash is in the manifest.
+- `php -l` passes on every PHP file.
+- Tests and the test-only LearnDash stand-ins are not in the package.
+- The extracted package was installed on the disposable site, where it passed:
+  - `integration-packet-ready` (29 checks);
+  - `integration-slice8` (20 checks);
+  - `integration-bulk-recovery` (29 checks);
+  - `browser-real-site` under Twenty Twenty-Four (67 checks).
+
+**Not installed on staging.**
+
 ## Rollback
 
 Install `94b612d`. Slice 8 adds two post-meta keys on announcements (`ghca_announce_audience`, `ghca_announce_group`); older builds ignore them. There are no schema or option changes.
