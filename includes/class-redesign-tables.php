@@ -361,7 +361,8 @@ final class GHCA_ACD_Redesign_Tables {
 
 		$orderby = (string) ( $filters['orderby'] ?? '' );
 		$order   = (string) ( $filters['order'] ?? 'asc' );
-		$h       = '<div class="gh-table-wrap gh-table-wrap--tall gh-tbl" tabindex="0" role="group" aria-label="' . esc_attr( $inactive ? __( 'Inactive employees table', 'ghca-acd' ) : __( 'Employees table', 'ghca-acd' ) ) . '"><table class="gh-table"><thead><tr>';
+		// Slice 8: the table grows with the page (no inner scroll box); below 1024px the cards below replace it.
+		$h       = '<div class="gh-table-wrap gh-tbl gh-tbl--emp" role="group" aria-label="' . esc_attr( $inactive ? __( 'Inactive employees table', 'ghca-acd' ) : __( 'Employees table', 'ghca-acd' ) ) . '"><table class="gh-table"><thead><tr>';
 		if ( ! $inactive && self::selectable() ) {
 			$h .= GHCA_ACD_Redesign_Bulk::head_cell();
 		}

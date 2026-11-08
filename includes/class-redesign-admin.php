@@ -116,16 +116,21 @@ final class GHCA_ACD_Redesign_Admin {
 		if ( ! GHCA_ACD_Shortcodes::can_view_dashboard() ) {
 			return self::denied();
 		}
-		$h  = '<div class="gh-toolbar"><div><h2 class="gh-h3">' . esc_html__( 'Reports & exports', 'ghca-acd' ) . '</h2><span class="gh-small gh-muted">' . esc_html__( 'Exports cover the employees in your current view.', 'ghca-acd' ) . '</span></div></div>';
+		$inline = class_exists( 'GHCA_ACD_Redesign_Report' ) && GHCA_ACD_Redesign_Report::available();
+		$h  = '<div class="gh-rpt-home" data-ghca-report-home>';
+		$h .= '<div class="gh-toolbar"><div><h2 class="gh-h3">' . esc_html__( 'Reports & exports', 'ghca-acd' ) . '</h2><span class="gh-small gh-muted">' . esc_html__( 'Exports cover the employees in your current view.', 'ghca-acd' ) . '</span></div></div>';
 		$h .= '<ul class="gh-grid gh-grid--4 gh-rpt" role="list">';
 		foreach ( self::report_cards( GHCA_ACD_Data_Provider::get_aggregate() ) as $card ) {
 			$id = 'gh-rpt-' . $card['key'];
 			$h .= '<li class="gh-card gh-rpt-card" aria-labelledby="' . esc_attr( $id ) . '"><span class="gh-stat-ico gh-rpt-ico">' . self::icon( $card['icon'], 'lg' ) . '</span>';
 			$h .= '<h3 class="gh-h4" id="' . esc_attr( $id ) . '">' . esc_html( $card['title'] ) . '</h3><p class="gh-p gh-secondary gh-rpt-desc">' . esc_html( $card['desc'] ) . '</p>';
 			$h .= '<span class="gh-small gh-muted">' . esc_html( $card['meta'] ) . '</span>';
-			$h .= '<a class="gh-btn ' . esc_attr( $card['btn'] ) . '" href="' . esc_url( $card['url'] ) . '">' . self::icon( $card['cicon'] ) . esc_html( $card['cta'] ) . '<span class="gh-sr">: ' . esc_html( $card['title'] ) . '</span></a></li>';
+			// The user report opens inside this tab (slice 8); its link stays as the no-script fallback.
+			$open = $inline && 'user-report' === $card['key'] ? ' data-ghca-report-open' : '';
+			$h .= '<a class="gh-btn ' . esc_attr( $card['btn'] ) . '" href="' . esc_url( $card['url'] ) . '"' . $open . '>' . self::icon( $card['cicon'] ) . esc_html( $card['cta'] ) . '<span class="gh-sr">: ' . esc_html( $card['title'] ) . '</span></a></li>';
 		}
-		return $h . '</ul>';
+		$h .= '</ul></div>';
+		return $h . ( $inline ? GHCA_ACD_Redesign_Report::view_html() : '' );
 	}
 
 	/* ---------------------------------------------------------------------

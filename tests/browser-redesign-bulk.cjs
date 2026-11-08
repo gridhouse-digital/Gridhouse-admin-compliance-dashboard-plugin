@@ -300,7 +300,8 @@ async function waitRefresh(page) { await page.waitForFunction(() => !document.qu
   for (const [width, hostile] of [[1023, false], [834, false], [390, false], [390, true]]) {
     const { context, page, errors } = await open(browser, width, { hostile });
     const L = '@' + width + (hostile ? ' hostile' : '');
-    if (width < 720) {
+    // Slice 8: below 1024px the cards replace the table, so selection is on the cards.
+    if (width < 1024) {
       const box = page.locator(T + ' .gh-mcard [data-ghca-select][value="100"]');
       const lab = await page.locator(T + ' .gh-mcard-sel').first().boundingBox();
       assert.ok(lab.width >= 43.5 && lab.height >= 43.5, 'card select target ' + JSON.stringify(lab));

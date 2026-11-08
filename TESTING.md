@@ -215,3 +215,37 @@ Report the tested page, action, expected result, actual result and a redacted sc
 `tests/integration-packet-ready.php` builds real Annual and Orientation packets through the plugin's own AJAX handlers for a synthetic employee and compares the merge result (pages, flagged items, expiry, packet type) with the stored PDF and its job. It also checks private storage, authorization, single use, expiry and replacement. Same requirements as above, plus `pcntl` and TCPDF at `wp-content/plugins/sfwd-lms/includes/lib/tcpdf/tcpdf.php` (LearnDash's path; the test stubs LearnDash's course functions). Run `php wp-content/plugins/<plugin folder>/tests/integration-packet-ready.php`. Nothing is sent and no training record is changed. Never point it at staging or live.
 
 `tests/browser-slice7.cjs` covers the slice 7 browser behaviour (row reminders, Communications and history, packet header, packet-ready notice) on synthetic pages with canned answers: `node tests/browser-slice7.cjs [screenshot-dir]`.
+
+## Slice 8 real-site checks (disposable WordPress, real theme)
+
+1. Copy `tests/real-site/ghca-real-site-stubs.php` into the disposable site's `wp-content/mu-plugins/`. It is tests only: LearnDash stand-ins with synthetic groups. It loads only when `GHCA_DISPOSABLE_TEST_SITE` is defined; never put it on staging or live.
+2. Run the setup:
+
+   ```bash
+   php tests/real-site/setup.php <wp-root> http://127.0.0.1:8099 [theme]
+   ```
+
+   It refuses anything but a `ghca_test*` database. It sets the site URL, turns the redesign on, creates synthetic groups, people and the dashboard pages, and sets a known password for `synthetic-admin`.
+3. Serve the site:
+
+   ```bash
+   php -S 127.0.0.1:8099 -t <wp-root>
+   ```
+
+4. Run the browser checks:
+
+   ```bash
+   GHCA_REAL_SITE=http://127.0.0.1:8099 GHCA_REAL_THEME="Twenty Twenty-Four" node tests/browser-real-site.cjs
+   ```
+
+5. With the plugin copied into the site, run the integration checks:
+
+   ```bash
+   php wp-content/plugins/<plugin folder>/tests/integration-slice8.php
+   ```
+
+The synthetic browser checks run without a site:
+
+```bash
+node tests/browser-slice8.cjs [screenshot-dir]
+```

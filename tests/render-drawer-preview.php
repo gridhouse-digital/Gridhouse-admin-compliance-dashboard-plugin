@@ -8,6 +8,8 @@
  *   php tests/render-drawer-preview.php ajax '{"user_id":"42","ghca_ui":"board"}' ['{"can_docs":false}']
  */
 require __DIR__ . '/fixtures/redesign-drawer-env.php';
+require_once __DIR__ . '/../includes/class-redesign-admin.php';
+require_once __DIR__ . '/../includes/class-redesign-report.php';
 
 $mode = $argv[1] ?? 'page';
 
@@ -25,6 +27,18 @@ if ( 'edit' === $mode ) {
 	$_POST = array_merge( array( 'nonce' => 'n' ), json_decode( $argv[2] ?? '{}', true ) ?: array() );
 	try {
 		GHCA_ACD_AJAX::ajax_get_edit_records_form();
+	} catch ( Ghca_Env_Json $e ) {
+		echo json_encode( $e->payload );
+	}
+	exit( 0 );
+}
+
+if ( 'report' === $mode ) {
+	// The inline User training report: the plugin's real handler, synthetic records (slice 8).
+	ghca_env_reset( array_merge( array( 'base' => 'https://preview.test' ), json_decode( $argv[3] ?? '{}', true ) ?: array() ) );
+	$_POST = array_merge( array( 'nonce' => 'n' ), json_decode( $argv[2] ?? '{}', true ) ?: array() );
+	try {
+		GHCA_ACD_Redesign_Report::ajax_report();
 	} catch ( Ghca_Env_Json $e ) {
 		echo json_encode( $e->payload );
 	}
@@ -83,13 +97,14 @@ $page   = GHCA_ACD_Redesign::render_from_model( array(
 	'tabs'            => array(
 		array( 'id' => 'ghca-tab-overview', 'label' => 'Overview', 'badge' => null, 'active' => true ),
 		array( 'id' => 'ghca-tab-employees', 'label' => 'Employees', 'badge' => 10, 'active' => false ),
+		array( 'id' => 'ghca-tab-reports', 'label' => 'Reports', 'badge' => null, 'active' => false ),
 	),
 	'kpis'            => GHCA_ACD_Redesign::kpis_from_aggregate( $agg, 6 ),
 	'health'          => GHCA_ACD_Redesign::health_from_aggregate( $agg ),
 	'groups'          => array(),
 	'certificates'    => array( 'issued' => 8, 'recent' => 4, 'missing' => 1 ),
-	'panels'          => array( 'ghca-tab-employees' => $panel ),
-	'board_panels'    => array( 'ghca-tab-employees' ),
+	'panels'          => array( 'ghca-tab-employees' => $panel, 'ghca-tab-reports' => GHCA_ACD_Redesign_Admin::render_reports() ),
+	'board_panels'    => array( 'ghca-tab-employees', 'ghca-tab-reports' ),
 	'employee_drawer' => true,
 	'flash'           => array(),
 ) );
@@ -104,6 +119,9 @@ $tabs_css  = '.ghca-acd__tab-content{display:none}.ghca-acd__tab-content.is-acti
 $legacy_css = '<link rel="stylesheet" href="' . $assets . '/dashboard.css">';
 $theme_css  = $tabs_css . ( $hostile
 	? 'body{font-family:Georgia,serif;font-size:18px;line-height:1.7;color:#333;margin:0}a{color:#0645ad!important;text-decoration:underline!important}a:hover{background:#cfe!important}button:hover{background:#00f!important;color:#fff!important}h1,h2,h3,h4{font-family:Georgia,serif!important;text-transform:uppercase!important;letter-spacing:.1em}table,dl,dt,dd{margin:20px}th,td{border:2px solid #f0f!important}label{text-transform:uppercase}summary{font-size:30px;list-style:square}'
+		// BuddyBoss-like rules (slice 8): body copy colour on every p and span, link colour, filled buttons, and a
+		// translucent hover. Stand-in only; the staging theme itself is not available here.
+		. 'p,span,li,small{color:#4d5c6d}button{background-color:#385dff;color:#fff;border-radius:100px}button:focus{outline:2px solid #385dff}div[role=status],div[role=alert]{color:#122b46}.toast,[class*=toast]{opacity:.96}'
 	: 'body{font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#333;margin:0}' );
 
 file_put_contents( $out . '/drawer.html', '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Synthetic drawer preview</title>'

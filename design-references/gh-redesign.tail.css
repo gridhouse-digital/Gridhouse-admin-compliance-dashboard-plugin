@@ -747,3 +747,189 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
 @media (max-width: 719px) {
   :is(.ghca-ui, #ghca-ui-scope) .gh-pkr-tray { left: 12px; right: 12px; width: auto; bottom: 12px; }
 }
+
+/* ---- Slice 8: Employees and Inactive tables grow with the page ----------------------------------------------- */
+/* No inner scroll box: the wrapper is not a scroll container, so there are no inner scrollbars and nothing is clipped. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp { overflow: visible; max-height: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp .gh-table { width: 100%; }
+/* Sticky headers would stick to the page (and under a theme's fixed header) once the box no longer scrolls. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp .gh-table th { position: static; }
+/* Narrow desktop (1024–1365px): text wraps at word boundaries instead of widening the table past the page. */
+@media (max-width: 1365px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp .gh-table th, :is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp .gh-table td { padding-left: 10px; padding-right: 10px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp .gh-person { min-width: 150px; gap: 10px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp .gh-prog-cell, :is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp .gh-table th[data-ghca-sort="progress_pct"] { min-width: 112px; }
+  /* Dates break between "October 25," and "2026" rather than widening the column. */
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp .gh-table .gh-nowrap { white-space: normal; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp .gh-table td .gh-st { white-space: normal; line-height: 1.25; padding-top: 4px; padding-bottom: 4px; height: auto; text-align: left; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp .gh-person-s { overflow-wrap: break-word; word-break: break-word; }
+}
+/* Below desktop the existing responsive cards replace the table. */
+@media (max-width: 1023px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp { display: none; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-tbl--emp + .gh-cards { display: flex; }
+}
+/* Slice 8 (requested): a wider page so the table and cards have room. The board caps content at 1320px; the
+   dashboard now uses up to 1600px, with 24px side gutters on narrower desktops and the board's 16px on phones. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-container { max-width: 1600px; }
+@media (min-width: 720px) and (max-width: 1365px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-container { padding-left: 24px; padding-right: 24px; }
+}
+
+/* ---- Slice 8: drawer header spacing ------------------------------------------------------------------------- */
+/* Room under the employee identity: 18px before the tabs, and 20px to the header's bottom edge when the tabs are
+   hidden (Edit Records, error and loading states). The close button keeps its own corner. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-drawer--emp .gh-drh-top { padding-bottom: 18px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drawer--emp .gh-drh-tabs { margin-top: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-drawer--emp.is-subpage .gh-drh-top { padding-bottom: 20px; }
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drawer--emp .gh-drh-top { padding-bottom: 14px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drawer--emp .gh-drh-tabs { margin-top: 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-drawer--emp.is-subpage .gh-drh-top { padding-bottom: 16px; }
+}
+
+/* ---- Slice 8: packet-ready notice, readable in every state and under theme rules ------------------------------- */
+/* One dark surface for every state (the board's toast), with the state on the left edge and icon. Every part has an
+   explicit colour, so theme rules on p, span, a or button, inherited colours and opacity cannot hide it. The old
+   "downloaded" state switched to a white surface while its text and close button stayed white. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr { background: var(--gh-neutral-900) !important; color: var(--gh-toast-fg) !important; opacity: 1 !important; border: 0 !important; border-left: 4px solid var(--gh-toast-ok) !important; box-shadow: var(--gh-shadow-3) !important; filter: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr.gh-toast--error { border-left-color: var(--gh-toast-err) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr.gh-toast--neutral { border-left-color: var(--gh-toast-neutral) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr div, :is(.ghca-ui, #ghca-ui-scope) .gh-pkr p, :is(.ghca-ui, #ghca-ui-scope) .gh-pkr span, :is(.ghca-ui, #ghca-ui-scope) .gh-pkr strong, :is(.ghca-ui, #ghca-ui-scope) .gh-pkr small, :is(.ghca-ui, #ghca-ui-scope) .gh-pkr time { color: inherit !important; opacity: 1 !important; background-color: transparent; visibility: inherit; text-shadow: none !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-toast-t { color: var(--gh-toast-fg) !important; font-weight: 700; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-pkr-p, :is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-pkr-msg { color: var(--gh-toast-fg-2) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-pkr-p span { color: var(--gh-toast-fg-2) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-pkr a[data-ghca-packet-download], :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-pkr a[data-ghca-packet-download]:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-pkr a[data-ghca-packet-download]:focus, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-pkr a[data-ghca-packet-download]:visited, :is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-pkr a[data-ghca-packet-download]:active { color: var(--gh-toast-fg) !important; background: transparent !important; opacity: 1 !important; text-decoration: underline !important; text-underline-offset: 2px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-app .gh-pkr a[data-ghca-packet-download]:focus-visible { outline: 2px solid var(--gh-toast-fg) !important; outline-offset: 2px; border-radius: 4px; }
+/* Icons are masks painted in background-color. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-i { background-color: currentColor !important; opacity: 1 !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr > .gh-pkr-ico { color: var(--gh-toast-ok-ico) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr.gh-toast--error > .gh-pkr-ico { color: var(--gh-toast-err-ico) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr.gh-toast--neutral > .gh-pkr-ico { color: var(--gh-toast-neutral-ico) !important; }
+/* Close and Show details: transparent controls with white marks, a visible hover and a visible focus ring. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-toast-x, :is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-pkr-more { background: transparent !important; background-color: transparent !important; color: var(--gh-toast-fg) !important; opacity: 1 !important; border: 0 !important; box-shadow: none !important; text-transform: none !important; letter-spacing: normal !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-toast-x:hover, :is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-pkr-more:hover { background: var(--gh-toast-hover) !important; color: var(--gh-toast-fg) !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-toast-x:focus-visible, :is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-pkr-more:focus-visible { outline: 2px solid var(--gh-toast-fg) !important; outline-offset: 1px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-toast-x { width: 32px; height: 32px; border-radius: 6px !important; display: grid; place-items: center; flex: none; padding: 0 !important; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-pkr-more { display: none; margin-top: 4px; padding: 4px 6px !important; border-radius: 6px !important; font: inherit; font-size: 13px; font-weight: 600; text-decoration: underline; cursor: pointer; min-height: 28px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-pkr.is-compact .gh-pkr-more { display: inline-flex; align-items: center; }
+@media (max-width: 1023px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-toast-x, :is(.ghca-ui, #ghca-ui-scope) .gh-pkr .gh-pkr-more { min-height: var(--gh-touch, 44px); min-width: var(--gh-touch, 44px); }
+}
+/* While the tray holds a notice, the page gets room at the bottom so its last content can scroll clear of the tray. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-app:has([data-ghca-packet-tray] > *) .gh-main { padding-bottom: 200px; }
+
+/* ---- Slice 8: inline User training report (Admin-UserReport board) ------------------------------------------- */
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt { display: flex; flex-direction: column; gap: 18px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt[hidden], :is(.ghca-ui, #ghca-ui-scope) .gh-rpt-home[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-bar { flex-wrap: wrap; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-pick { position: relative; width: 360px; max-width: 100%; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-pick .gh-input { padding-right: 36px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-pick .gh-input-wrap > .gh-i:last-child { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--gh-text-muted); }
+/* The suggestion list is a dropdown, so it scrolls within itself like any listbox. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-list { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px); max-height: 320px; overflow-y: auto; list-style: none; margin: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-list[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-list .gh-menu-i { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; cursor: pointer; min-height: 40px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-list .gh-menu-i.is-active { background: var(--gh-surface-brand-subtle); outline: 2px solid var(--gh-focus-ring, var(--gh-border-focus)); outline-offset: -2px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-list .gh-menu-i[hidden], :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-none[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-opt-n { font-weight: 600; color: var(--gh-text); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-none { padding: 10px 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-body { display: flex; flex-direction: column; gap: 18px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-body[aria-busy="true"] { opacity: .6; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-r { display: flex; flex-direction: column; gap: 18px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-hd-bd { display: flex; flex-direction: column; gap: 18px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-id { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-who { flex: 1; min-width: 260px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-meta { margin-top: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-dl dd.gh-urpt-big { font-size: 24px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-dl dd.gh-urpt-mid { font-size: 18px; padding-top: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table { width: 100%; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table td { white-space: normal; vertical-align: middle; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-prog { display: flex; gap: 8px; align-items: center; min-width: 140px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-prog .gh-bar { flex: 1; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-urpt-prog .gh-num { width: 40px; text-align: right; }
+@media (max-width: 1023px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-acts .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-bar .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-pick .gh-input, :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table .gh-btn { min-height: var(--gh-touch, 44px); }
+}
+/* Below 720px each course becomes a stacked card; the column names come from data-label. */
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-pick { width: 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-who { min-width: 0; flex-basis: 180px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-acts .gh-btn { flex: 1 1 calc(50% - 8px); justify-content: center; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table, :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table tbody, :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table tr, :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table td { display: block; width: auto; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table tr { padding: 12px 16px; border-bottom: 1px solid var(--gh-border); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table td { border: 0; padding: 4px 0; height: auto; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table td[data-label]:not(:first-child) { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table td[data-label]:not(:first-child)::before { content: attr(data-label); font-size: 12px; color: var(--gh-text-muted); font-weight: 500; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table td .gh-urpt-prog { flex: 1; max-width: 220px; min-width: 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-urpt-table .gh-row-acts { justify-content: flex-start; flex-wrap: wrap; padding-top: 6px; }
+}
+
+/* ---- Slice 8: Manage users (ManageUsers board) ---------------------------------------------------------------- */
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu .gh-pagehead-main { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-back { margin-left: -10px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-main { padding-top: 20px; padding-bottom: 48px; display: flex; flex-direction: column; gap: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-bar { flex-wrap: wrap; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-search { width: 340px; max-width: 100%; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-tbl { overflow: visible; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-tbl .gh-table { width: 100%; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-tbl .gh-table th { position: static; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-tbl .gh-table td { white-space: normal; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu [data-ghca-mu-row][hidden], :is(.ghca-ui, #ghca-ui-scope) .gh-mu-none[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-phone { display: block; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-groups { display: flex; flex-wrap: wrap; gap: 4px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-card .gh-mcard-top { justify-content: space-between; }
+@media (max-width: 1023px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mu-tbl { display: none; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mu-cards { display: flex; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mu .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-mu .gh-input, :is(.ghca-ui, #ghca-ui-scope) .gh-mu .gh-select, :is(.ghca-ui, #ghca-ui-scope) .gh-mu .gh-subtab { min-height: var(--gh-touch, 44px); }
+}
+/* The drawer: 520px on the board; full screen on phones. The form spans header to footer so the body scrolls. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-layer .gh-drawer { width: min(520px, 100%); display: flex; flex-direction: column; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-hd { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 16px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-hd-t { flex: 1; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-bd { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-groups-fs { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-glist { border: 1px solid var(--gh-border-strong); border-radius: 10px; padding: 6px 12px; display: flex; flex-direction: column; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-g { min-height: 40px; align-items: center; border-bottom: 1px solid var(--gh-border); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-g:last-child { border-bottom: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-g[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-gn { flex: 1; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu .gh-err[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-mu-ft { justify-content: flex-end; }
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mu-2 { grid-template-columns: 1fr; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mu-layer .gh-drawer-hd { padding: 16px; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mu-search { width: 100%; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-mu-ft .gh-btn { flex: 1; }
+}
+
+/* ---- Slice 8: announcements (Modal-Announcement board) -------------------------------------------------------- */
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-layer .gh-modal { position: relative; left: auto; top: auto; transform: none; z-index: 1; display: flex; flex-direction: column; max-height: calc(100vh - 32px); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-layer .gh-an-modal { width: min(520px, 100%); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-layer .gh-an-confirm { width: min(400px, 100%); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-modal form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-hd-t { flex: 1; min-width: 0; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-hd-t p { margin: 2px 0 0; font-size: 13px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-bd .gh-textarea { min-height: 80px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-layer .gh-err[hidden], :is(.ghca-ui, #ghca-ui-scope) .gh-an-layer [hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-draft { margin: 0; padding: 10px 12px; font-size: 13px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-confirm-bd { padding-top: 24px; gap: 12px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-an-confirm-ico { width: 44px; height: 44px; }
+/* The ⋯ menu beside each announcement. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-acts { position: relative; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 180px; display: flex; flex-direction: column; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-menu[hidden] { display: none; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-menu .gh-menu-i { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-menu .gh-menu-i--danger { color: var(--gh-status-danger-fg); }
+@media (max-width: 719px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-an-2 { grid-template-columns: 1fr; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-an-layer .gh-modal { width: 100%; max-height: 100vh; border-radius: var(--gh-radius-lg) var(--gh-radius-lg) 0 0; }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-an-layer .gh-btn, :is(.ghca-ui, #ghca-ui-scope) .gh-an-layer .gh-input, :is(.ghca-ui, #ghca-ui-scope) .gh-an-layer .gh-select, :is(.ghca-ui, #ghca-ui-scope) .gh-an-layer .gh-seg button, :is(.ghca-ui, #ghca-ui-scope) .gh-ann-menu .gh-menu-i, :is(.ghca-ui, #ghca-ui-scope) .gh-ann-acts .gh-btn { min-height: var(--gh-touch, 44px); }
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ann-acts .gh-btn--icon { min-width: var(--gh-touch, 44px); }
+}

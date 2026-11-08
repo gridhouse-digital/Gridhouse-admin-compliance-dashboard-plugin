@@ -68,6 +68,10 @@ function get_option( $k, $d = false ) {
 	}
 	return $d;
 }
+function current_user_can( $cap ) { return in_array( $cap, $GLOBALS['ghca_env']['caps'] ?? array(), true ); }
+function get_edit_user_link( $id ) { return 'https://example.test/wp-admin/user-edit.php?user_id=' . (int) $id; }
+function wp_nonce_url( $url, $action = -1 ) { return $url . ( false === strpos( $url, '?' ) ? '?' : '&' ) . '_wpnonce=n'; }
+function get_the_title( $id = 0 ) { return 7 === (int) $id ? 'DSP — New Hire' : 'Group ' . (int) $id; }
 function get_userdata( $id ) { if ( (int) $id <= 0 ) { return false; } return (object) array( 'ID' => $id, 'roles' => array( 'subscriber' ), 'user_registered' => '2026-10-14 21:11:00', 'display_name' => 42 === (int) $id ? 'Jordan Ellis' : 'Synthetic Admin ' . $id ); }
 function wp_roles() { return new class() { public function get_names() { return array( 'subscriber' => 'Direct Support Professional (DSP)' ); } }; }
 function get_user_meta( $id, $key, $single = false ) {
@@ -133,9 +137,20 @@ final class GHCA_ACD_Roles {
 	public static function user_can_edit_records(): bool { return $GLOBALS['ghca_env']['can_admin']; }
 	public static function user_can_send_reminders(): bool { return $GLOBALS['ghca_env']['can_remind']; }
 	public static function user_can_review_external_training(): bool { return $GLOBALS['ghca_env']['can_review_ext']; }
+	public static function user_can_manage_users(): bool { return ! empty( $GLOBALS['ghca_env']['can_manage'] ); }
+	public static function user_can_manage_announcements(): bool { return ! empty( $GLOBALS['ghca_env']['can_announce'] ); }
 }
 final class GHCA_ACD_User_Report {
-	public static function can_view_user( int $id ): bool { return $GLOBALS['ghca_env']['can_view_user']; }
+	// Out-of-scope people (slice 8 report tests) are listed in 'out_of_scope'; the check is the server's, per request.
+	public static function can_view_user( int $id ): bool { return $GLOBALS['ghca_env']['can_view_user'] && ! in_array( $id, $GLOBALS['ghca_env']['out_of_scope'] ?? array(), true ); }
+}
+final class GHCA_ACD_Shortcodes {
+	public static function can_view_dashboard(): bool { return $GLOBALS['ghca_env']['can_view']; }
+	public static function build_mailto_reminder( string $email, string $course = '' ): string { return 'mailto:' . rawurlencode( $email ) . '?subject=Compliance%20training%20reminder'; }
+}
+final class GHCA_ACD_FluentCRM {
+	public static function build_reminder_url( int $id, string $email, string $course = '' ): string { return 'https://example.test/wp-admin/admin-post.php?action=ghca_acd_log_reminder&user_id=' . $id; }
+	public static function get_contact_admin_url( string $email ): string { return $GLOBALS['ghca_env']['crm'] ?? false ? 'https://example.test/wp-admin/admin.php?page=fluentcrm-admin#/subscribers/9' : ''; }
 }
 final class GHCA_Audit_Mapping {
 	const OPTION_NAME = 'ghca_audit_mapping';
@@ -203,6 +218,7 @@ final class GHCA_ACD_Messaging_Repository {
 		$rows = $GLOBALS['ghca_env']['history'] ?? array();
 		return array( 'total' => count( array_unique( array_column( $rows, 'communication_id' ) ) ), 'email' => count( array_filter( $rows, static function ( $r ) { return 'email' === $r['channel']; } ) ), 'sms' => count( array_filter( $rows, static function ( $r ) { return 'sms' === $r['channel']; } ) ), 'failed' => count( array_filter( $rows, static function ( $r ) { return 'failed' === $r['delivery_state']; } ) ) );
 	}
+	public static function mask_email( string $email ): string { $p = explode( '@', $email, 2 ); return 2 === count( $p ) && '' !== $p[0] ? mb_substr( $p[0], 0, 1 ) . '***@' . $p[1] : '***'; }
 	public static function get_template( int $id, bool $active = true ) { return 7 === $id ? array( 'id' => 7, 'name' => 'Course due soon' ) : null; }
 }
 final class GHCA_ACD_Message_Template_Renderer {
@@ -222,11 +238,24 @@ final class GHCA_ACD_OLTL_UI {
 
 /** Synthetic provider: only the calls the drawer makes. */
 final class GHCA_ACD_Data_Provider {
-	public static function get_employee_record( int $user_id ): array { return $GLOBALS['ghca_env']['employee'] ?? array(); }
+	public static function get_employee_record( int $user_id ): array {
+		// Slice 8 report: a record per synthetic person when the test names people; otherwise the drawer's employee.
+		if ( isset( $GLOBALS['ghca_env']['people'][ $user_id ] ) ) {
+			$p = $GLOBALS['ghca_env']['people'][ $user_id ];
+			return array_merge( ghca_env_drawer_employee(), array( 'user_id' => $user_id, 'name' => $p[0], 'email' => $p[1], 'group' => $p[2], 'progress_label' => '40%', 'last_activity_label' => 'Oct 29, 2026', 'new_hire' => $p[3] ?? array() ) );
+		}
+		return $GLOBALS['ghca_env']['employee'] ?? array();
+	}
+	public static function get_page_url( string $slug, string $fallback ): string { return ( $GLOBALS['ghca_env']['base'] ?? 'https://example.test' ) . $fallback; }
+	public static function get_employee_user_ids(): array { return array_keys( $GLOBALS['ghca_env']['people'] ?? array( 42 => 1 ) ); }
+	public static function get_active_employee_user_ids(): array { return array_values( array_filter( self::get_employee_user_ids(), static function ( $id ) { return empty( $GLOBALS['ghca_env']['people'][ $id ][4] ); } ) ); }
+	public static function get_user_primary_group_id( int $user_id ): int { return 7; }
+	public static function format_activity_label( int $ts ): string { return $ts > 0 ? gmdate( 'M j, Y', $ts ) : 'No activity'; }
+	public static function get_aggregate(): array { return array( 'total_employees' => count( self::get_active_employee_user_ids() ), 'certificates_issued' => 8, 'certificates_missing' => 1, 'total_inactive_employees' => 1 ); }
 	public static function is_user_suspended( int $user_id ): bool { return $GLOBALS['ghca_env']['suspended']; }
 	public static function employment_type_label( int $user_id ): string { return $GLOBALS['ghca_env']['employment'] ?: 'Not set'; }
 	public static function get_user_report_url( int $user_id ): string { return 'https://example.test/user-report?user_id=' . $user_id; }
-	public static function get_user_full_name( int $id ): string { return 'Synthetic Admin'; }
+	public static function get_user_full_name( int $id ): string { return $GLOBALS['ghca_env']['people'][ $id ][0] ?? 'Synthetic Admin'; }
 	public static function employment_type( int $user_id ): string { return $GLOBALS['ghca_env']['employment_key'] ?? ''; }
 	public static function employment_type_options( string $current = '', string $label = '' ): array { return array( 'full_time' => 'Full-time', 'part_time' => 'Part-time', 'per_diem' => 'Per <diem>' ); }
 }

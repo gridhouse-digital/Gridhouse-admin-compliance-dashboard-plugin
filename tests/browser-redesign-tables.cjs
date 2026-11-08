@@ -247,12 +247,13 @@ const settle = (page) => page.waitForFunction(() => !document.querySelector('.gh
     await context.close();
   }
 
-  // ---------- Tablet: the table scrolls inside its box ----------
+  // ---------- Tablet: cards (slice 8: no inner scroll box; the cards replace the table below 1024px) ----------
   {
     const url = build(path.join(dir, 'd'), { count: 10 });
     const { context, page } = await open(browser, url, { width: 834, height: 1194 }, 10);
-    assert.equal(await page.locator('#ghca-tab-employees .gh-table-wrap').isVisible(), true);
-    const m = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, win: window.innerWidth, wrapScroll: document.querySelector('#ghca-tab-employees .gh-table-wrap').scrollWidth > document.querySelector('#ghca-tab-employees .gh-table-wrap').clientWidth }));
+    assert.equal(await page.locator('#ghca-tab-employees .gh-table-wrap').isVisible(), false);
+    assert.equal(await page.locator('#ghca-tab-employees .gh-mcard').count(), 10); ok('tablet: the cards replace the table');
+    const m = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, win: window.innerWidth }));
     assert.ok(m.doc <= m.win + 1, 'page does not scroll sideways at 834'); ok('tablet: the page does not scroll sideways');
     if (shots) { await page.screenshot({ path: path.join(shots, 'employees-834.png'), fullPage: true }); }
     await context.close();

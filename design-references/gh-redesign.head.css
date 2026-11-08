@@ -29,3 +29,6 @@
 :is(.ghca-ui, #ghca-ui-scope) .gh-app :where(svg):where(:not(.gh-legacy *)) { display: inline-block; max-width: none; }
 
 /* Design board CSS (scoped). */
+
+/* Toast colours from the board's .gh-toast (gh-components.css), named so later adapter rules can use tokens. */
+:is(.ghca-ui, #ghca-ui-scope) { --gh-toast-fg: #FFFFFF; --gh-toast-fg-2: #ECEAE6; --gh-toast-ok: #5BC27A; --gh-toast-ok-ico: #7FD69A; --gh-toast-err: #F26B6B; --gh-toast-err-ico: #FF9A9A; --gh-toast-neutral: #B9B4AC; --gh-toast-neutral-ico: #D9D5CE; --gh-toast-hover: rgba(255, 255, 255, .14); }

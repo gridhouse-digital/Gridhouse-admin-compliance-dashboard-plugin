@@ -12,6 +12,13 @@ final class GHCA_ACD_Redesign {
 	/** True once the redesigned dashboard has printed its wrapper, so wp_footer does not print a second drawer. */
 	private static $rendered = false;
 
+	/** Whether the board announcement modal was rendered on this page (the legacy footer modal then skips itself). */
+	private static $announce_board = false;
+
+	public static function announcements_rendered(): bool {
+		return self::$announce_board;
+	}
+
 	public static function dashboard_rendered(): bool {
 		return self::$rendered;
 	}
@@ -316,6 +323,13 @@ final class GHCA_ACD_Redesign {
 			$html           .= GHCA_ACD_Redesign_Reminder::history_modal_html();
 			$html           .= class_exists( 'GHCA_ACD_Redesign_Bulk' ) ? GHCA_ACD_Redesign_Bulk::modal_html() : '';
 			self::$rendered = true;
+		}
+		if ( ! empty( $model['announcements_html'] ) && class_exists( 'GHCA_ACD_Announcements' ) ) {
+			$modal = GHCA_ACD_Announcements::board_modal_html();
+			if ( '' !== $modal ) {
+				$html                .= $modal;
+				self::$announce_board = true;
+			}
 		}
 		$html .= self::toasts_html( (array) ( $model['flash'] ?? array() ) );
 		// Packet-ready notices that are not inside an open Edit Records card. Filled by the packet script; kept until

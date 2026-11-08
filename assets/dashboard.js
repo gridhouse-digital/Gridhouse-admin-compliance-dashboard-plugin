@@ -1418,39 +1418,216 @@
     if (target && release && typeof release.setRestoreTarget === 'function') release.setRestoreTarget(target);
   }
 
+  /*
+   * Inline User training report (slice 8, Admin-UserReport board). "Open report" on the Reports tab shows the
+   * report view in place of the report cards; choosing an employee asks the server for that employee's report
+   * (the same permission checks as the /user-report/ page, every time). "Back to reports" returns to the cards.
+   * Responses are kept only if they are for the employee most recently chosen.
+   */
+  function initInlineReport() {
+    var view = document.querySelector('.ghca-ui [data-ghca-report]');
+    var home = document.querySelector('.ghca-ui [data-ghca-report-home]');
+    if (!view || !home) return;
+    var input = view.querySelector('[data-ghca-report-input]');
+    var list = view.querySelector('[data-ghca-report-list]');
+    var none = view.querySelector('[data-ghca-report-none]');
+    var body = view.querySelector('[data-ghca-report-body]');
+    var status = view.querySelector('[data-ghca-report-status]');
+    var options = Array.prototype.slice.call(list.querySelectorAll('[data-ghca-report-option]'));
+    var active = -1;
+    var current = '';
+    var request = 0;
+    var opener = null;
+    var emptyHtml = body.innerHTML;
+
+    function visible() { return options.filter(function (o) { return !o.hidden; }); }
+    function setActive(i) {
+      var vis = visible();
+      options.forEach(function (o) { o.classList.remove('is-active'); o.setAttribute('aria-selected', 'false'); });
+      active = vis.length ? Math.max(0, Math.min(i, vis.length - 1)) : -1;
+      if (active >= 0) {
+        vis[active].classList.add('is-active');
+        vis[active].setAttribute('aria-selected', 'true');
+        input.setAttribute('aria-activedescendant', vis[active].id);
+        vis[active].scrollIntoView({ block: 'nearest' });
+      } else {
+        input.removeAttribute('aria-activedescendant');
+      }
+    }
+    function openList() { list.hidden = false; input.setAttribute('aria-expanded', 'true'); }
+    function closeList() { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; }
+    function filter() {
+      var q = input.value.trim().toLowerCase();
+      var shown = 0;
+      options.forEach(function (o) { var hit = !q || o.getAttribute('data-label').toLowerCase().indexOf(q) !== -1; o.hidden = !hit; if (hit) shown++; });
+      if (none) none.hidden = shown > 0;
+      openList();
+      setActive(0);
+    }
+    function show(on, from) {
+      view.hidden = !on;
+      home.hidden = on;
+      if (on) { opener = from || opener; input.focus(); }
+      else if (opener) { opener.focus(); }
+    }
+    function load(id, label) {
+      current = String(id);
+      var mine = ++request;
+      input.value = label;
+      closeList();
+      body.setAttribute('aria-busy', 'true');
+      status.textContent = 'Loading the report for ' + label + '…';
+      var p = new URLSearchParams();
+      p.append('action', 'ghca_acd_user_report');
+      p.append('user_id', current);
+      p.append('nonce', window.ghcaAcd.nonce);
+      fetch(window.ghcaAcd.ajaxUrl, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: p.toString() })
+        .then(ghcaReadJson)
+        .then(function (json) {
+          if (mine !== request) return;
+          body.removeAttribute('aria-busy');
+          if (json && json.success && json.data && typeof json.data.html === 'string' && String(json.data.user_id) === current) {
+            body.innerHTML = json.data.html;
+            status.textContent = 'Showing the training report for ' + (json.data.name || label) + '.';
+            return;
+          }
+          body.innerHTML = '<div class="gh-alert gh-alert--danger" role="alert"><div class="gh-alert-body"><span class="gh-alert-t"></span></div></div>';
+          body.querySelector('.gh-alert-t').textContent = (json && json.data && json.data.message) || 'The report could not be loaded.';
+          status.textContent = '';
+        })
+        .catch(function (err) {
+          if (mine !== request) return;
+          body.removeAttribute('aria-busy');
+          body.innerHTML = '<div class="gh-alert gh-alert--danger" role="alert"><div class="gh-alert-body"><span class="gh-alert-t"></span></div></div>';
+          body.querySelector('.gh-alert-t').textContent = err && err.ghcaSession ? GHCA_SESSION_MSG : 'Network error. Choose the employee again to retry.';
+          status.textContent = '';
+        });
+    }
+    function choose(o) { if (o) load(o.getAttribute('data-ghca-report-option'), o.getAttribute('data-label')); }
+
+    document.addEventListener('click', function (e) {
+      var open = e.target.closest('.ghca-ui [data-ghca-report-open]');
+      if (open) { e.preventDefault(); show(true, open); return; }
+      if (e.target.closest('[data-ghca-report-back]')) { e.preventDefault(); show(false); return; }
+      if (e.target.closest('[data-ghca-report-print]')) {
+        e.preventDefault();
+        document.documentElement.classList.add('ghca-print-report');
+        window.print();
+        window.setTimeout(function () { document.documentElement.classList.remove('ghca-print-report'); }, 0);
+        return;
+      }
+      var opt = e.target.closest('[data-ghca-report-option]');
+      if (opt && list.contains(opt)) { e.preventDefault(); choose(opt); input.focus(); return; }
+      if (!e.target.closest('[data-ghca-report-picker]')) closeList();
+    });
+    input.addEventListener('input', filter);
+    input.addEventListener('focus', function () { if (!input.value) filter(); });
+    input.addEventListener('keydown', function (e) {
+      var vis = visible();
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (list.hidden) { filter(); } else { setActive(active + 1); } }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(active - 1); }
+      else if (e.key === 'Home' && !list.hidden) { e.preventDefault(); setActive(0); }
+      else if (e.key === 'End' && !list.hidden) { e.preventDefault(); setActive(vis.length - 1); }
+      else if (e.key === 'Enter') { if (!list.hidden && active >= 0) { e.preventDefault(); choose(vis[active]); } }
+      else if (e.key === 'Escape') { if (!list.hidden) { e.preventDefault(); e.stopPropagation(); closeList(); } }
+    });
+    // Leaving the Reports tab and coming back starts from the cards again; a chosen report stays loaded.
+    view.addEventListener('ghca-report-reset', function () { body.innerHTML = emptyHtml; input.value = ''; current = ''; });
+  }
+
   function initAnnouncements() {
     var modal = document.getElementById('ghca-acd-announce-modal');
     var listEl = document.querySelector('[data-ghca-announce-list]');
     if (!modal || !listEl) return;
 
-    var dialog = modal.querySelector('.ghca-acd__edit-modal-dialog');
+    // Slice 8: the Modal-Announcement board (inside the themed wrapper) or the legacy footer modal.
+    var isBoard = modal.getAttribute('data-ghca-ui') === 'board';
+    var dialog = modal.querySelector('[data-ghca-announce-dialog], .ghca-acd__edit-modal-dialog');
     var form = modal.querySelector('[data-ghca-announce-form]');
     var titleEl = document.getElementById('ghca-acd-announce-modal-title');
-    var saveBtn = modal.querySelector('.ghca-acd__edit-btn--save');
+    var saveBtn = modal.querySelector('[data-ghca-announce-save], .ghca-acd__edit-btn--save');
+    var confirmLayer = document.getElementById('ghca-acd-announce-confirm');
     var release = null;
+    var confirmRelease = null;
+    var opener = null;
+    var pendingDelete = null;
+    var DRAFT = 'ghca_acd_announce_draft';
+    var FIELDS = ['announce_id', 'title', 'body', 'type', 'url', 'audience', 'audience_group'];
 
+    function field(name) { return form.elements[name]; }
     function setField(name, value) {
-      var el = form.elements[name];
+      var el = field(name);
       if (el) el.value = value || '';
     }
+    function setType(slug) {
+      slug = slug || 'update';
+      setField('type', slug);
+      var seg = modal.querySelector('[data-ghca-announce-types]');
+      if (!seg) return;
+      var tmp = seg.querySelector('[data-ghca-announce-temp]');
+      if (tmp) tmp.remove();
+      var hit = false;
+      seg.querySelectorAll('[data-ghca-announce-type]').forEach(function (b) { var on = b.getAttribute('data-ghca-announce-type') === slug; b.setAttribute('aria-pressed', on ? 'true' : 'false'); hit = hit || on; });
+      if (!hit) {
+        // An announcement saved with a type the board does not offer (System) keeps it while edited.
+        var b = document.createElement('button');
+        b.type = 'button'; b.setAttribute('aria-pressed', 'true'); b.setAttribute('data-ghca-announce-type', slug); b.setAttribute('data-ghca-announce-temp', '1');
+        b.textContent = slug.charAt(0).toUpperCase() + slug.slice(1);
+        seg.appendChild(b);
+      }
+    }
+    function syncAudience() {
+      var wrap = modal.querySelector('[data-ghca-announce-group-field]');
+      if (!wrap || !field('audience')) return;
+      var on = field('audience').value === 'group';
+      wrap.hidden = !on;
+      if (field('audience_group')) field('audience_group').required = on;
+    }
+    function errs(show) {
+      var t = modal.querySelector('[data-ghca-announce-title-err]');
+      var u = modal.querySelector('[data-ghca-announce-url-err]');
+      if (t) { t.hidden = !show.title; field('title').toggleAttribute('aria-invalid', !!show.title); }
+      if (u) { u.hidden = !show.url; field('url').toggleAttribute('aria-invalid', !!show.url); }
+    }
+    function readDraft() { try { return JSON.parse(window.localStorage.getItem(DRAFT) || 'null'); } catch (e) { return null; } }
+    function saveDraft() {
+      var d = {};
+      FIELDS.forEach(function (n) { var el = field(n); if (el) d[n] = el.value; });
+      try { window.localStorage.setItem(DRAFT, JSON.stringify(d)); } catch (e) { /* storage unavailable: the open form still holds the text */ }
+    }
+    function clearDraft() { try { window.localStorage.removeItem(DRAFT); } catch (e) { /* nothing stored */ } }
 
-    function openModal(mode, data) {
+    function openModal(mode, data, from) {
       data = data || {};
+      opener = from || document.activeElement;
       form.reset();
       setField('announce_id', mode === 'edit' ? data.id : '0');
+      var note = modal.querySelector('[data-ghca-announce-draft-note]');
+      if (note) note.hidden = true;
       if (mode === 'edit') {
         setField('title', data.title);
         setField('body', data.body);
-        setField('type', data.type || 'update');
         setField('url', data.url);
+        setField('audience', data.audience || 'all');
+        setField('audience_group', data.group && data.group !== '0' ? data.group : '');
+        setType(data.type || 'update');
+      } else {
+        setType('update');
+        var draft = isBoard ? readDraft() : null;
+        if (draft && draft.announce_id === '0') {
+          FIELDS.forEach(function (n) { if (n !== 'type' && draft[n] !== undefined) setField(n, draft[n]); });
+          setType(draft.type);
+          if (note) note.hidden = false;
+        }
       }
-      if (titleEl) titleEl.textContent = mode === 'edit' ? 'Edit Announcement' : 'Add Announcement';
-      if (saveBtn) saveBtn.textContent = mode === 'edit' ? 'Save' : 'Publish';
-
+      syncAudience();
+      errs({});
+      if (titleEl) titleEl.textContent = mode === 'edit' ? (isBoard ? 'Edit announcement' : 'Edit Announcement') : (isBoard ? 'Add announcement' : 'Add Announcement');
+      if (saveBtn) saveBtn.textContent = mode === 'edit' ? (isBoard ? 'Save changes' : 'Save') : 'Publish';
       modal.hidden = false;
       modal.setAttribute('aria-hidden', 'false');
       document.documentElement.classList.add('ghca-acd--edit-open');
-      release = ghcaFocusTrap(dialog, form.elements['title']);
+      release = ghcaFocusTrap(dialog, field('title'));
     }
 
     function closeModal() {
@@ -1458,6 +1635,7 @@
       modal.setAttribute('aria-hidden', 'true');
       document.documentElement.classList.remove('ghca-acd--edit-open');
       if (release) { release(); release = null; }
+      if (isBoard && opener && opener.isConnected && opener.focus) opener.focus();
     }
 
     function post(extra, onDone) {
@@ -1468,79 +1646,207 @@
       Object.keys(extra).forEach(function (k) { params.append(k, extra[k]); });
       fetch(window.ghcaAcd.ajaxUrl, {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
         body: params.toString()
       })
-      .then(function (res) { return res.json(); })
-      .then(onDone)
-      .catch(function () { onDone(null); });
+      .then(ghcaReadJson)
+      .then(function (json) { onDone(json, null); })
+      .catch(function (err) { onDone(null, err || {}); });
+    }
+
+    // ⋯ menu on each announcement (board).
+    function closeMenus(except) {
+      document.querySelectorAll('[data-ghca-ann-menu]').forEach(function (m) {
+        if (m === except) return;
+        m.hidden = true;
+        var b = m.parentNode.querySelector('[data-ghca-ann-menu-btn]');
+        if (b) b.setAttribute('aria-expanded', 'false');
+      });
+    }
+    function menuItems(m) { return Array.prototype.slice.call(m.querySelectorAll('[role="menuitem"]')); }
+
+    function openConfirm(id, title, from) {
+      pendingDelete = { id: id, from: from };
+      confirmLayer.querySelector('[data-ghca-announce-confirm-title]').textContent = '“' + title + '”';
+      confirmLayer.hidden = false;
+      confirmLayer.setAttribute('aria-hidden', 'false');
+      document.documentElement.classList.add('ghca-acd--edit-open');
+      confirmRelease = ghcaFocusTrap(confirmLayer.querySelector('[data-ghca-announce-confirm-dialog]'), confirmLayer.querySelector('[data-ghca-announce-keep].gh-btn'));
+    }
+    function closeConfirm(refocus) {
+      confirmLayer.hidden = true;
+      confirmLayer.setAttribute('aria-hidden', 'true');
+      document.documentElement.classList.remove('ghca-acd--edit-open');
+      if (confirmRelease) { confirmRelease(); confirmRelease = null; }
+      if (refocus && pendingDelete && pendingDelete.from && pendingDelete.from.isConnected) pendingDelete.from.focus();
+      pendingDelete = null;
+    }
+    function doDelete(id, btn) {
+      if (btn) btn.disabled = true;
+      post({ action: 'ghca_acd_delete_announcement', announce_id: id }, function (json, err) {
+        if (btn) btn.disabled = false;
+        if (json && json.success && json.data) {
+          listEl.innerHTML = json.data.html;
+          if (confirmLayer) closeConfirm(false);
+          var add = document.querySelector('[data-ghca-announce-add]');
+          if (add) add.focus();
+          ghcaToast(isBoard ? 'Announcement deleted. Removed from the dashboard.' : (json.data.message || 'Announcement deleted.'), false);
+        } else {
+          ghcaToast(err && err.ghcaSession ? 'Couldn’t delete. Your session timed out. Nothing was deleted — sign in again and try again.' : ((json && json.data && json.data.message) || 'Could not delete announcement.'), true);
+        }
+      });
     }
 
     document.addEventListener('click', function (e) {
+      var menuBtn = e.target.closest('[data-ghca-ann-menu-btn]');
+      if (menuBtn) {
+        e.preventDefault();
+        var menu = menuBtn.parentNode.querySelector('[data-ghca-ann-menu]');
+        var open = menu.hidden;
+        closeMenus(menu);
+        menu.hidden = !open;
+        menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) { var first = menuItems(menu)[0]; if (first) first.focus(); }
+        return;
+      }
+      if (!e.target.closest('[data-ghca-ann-menu]')) closeMenus(null);
+
       var addBtn = e.target.closest('[data-ghca-announce-add]');
-      if (addBtn) { e.preventDefault(); openModal('create'); return; }
+      if (addBtn) { e.preventDefault(); openModal('create', null, addBtn); return; }
 
       var editBtn = e.target.closest('[data-ghca-announce-edit]');
       if (editBtn) {
         e.preventDefault();
         var item = editBtn.closest('[data-announce-id]');
         if (!item) return;
+        closeMenus(null);
         openModal('edit', {
           id: item.getAttribute('data-announce-id'),
           title: item.getAttribute('data-announce-title'),
           body: item.getAttribute('data-announce-body'),
           type: item.getAttribute('data-announce-type'),
-          url: item.getAttribute('data-announce-url')
-        });
+          url: item.getAttribute('data-announce-url'),
+          audience: item.getAttribute('data-announce-audience'),
+          group: item.getAttribute('data-announce-group')
+        }, item.querySelector('[data-ghca-ann-menu-btn]') || editBtn);
         return;
       }
 
       var delBtn = e.target.closest('[data-ghca-announce-delete]');
       if (delBtn) {
         e.preventDefault();
+        var row = delBtn.closest('[data-announce-id]');
+        closeMenus(null);
+        if (confirmLayer) {
+          openConfirm(delBtn.getAttribute('data-ghca-announce-delete'), row ? row.getAttribute('data-announce-title') : '', row ? row.querySelector('[data-ghca-ann-menu-btn]') : delBtn);
+          return;
+        }
         if (!window.confirm('Delete this announcement? This cannot be undone.')) return;
-        delBtn.disabled = true;
-        post({ action: 'ghca_acd_delete_announcement', announce_id: delBtn.getAttribute('data-ghca-announce-delete') }, function (json) {
-          if (json && json.success && json.data) {
-            listEl.innerHTML = json.data.html;
-            ghcaToast(json.data.message || 'Announcement deleted.', false);
-          } else {
-            delBtn.disabled = false;
-            ghcaToast((json && json.data && json.data.message) || 'Could not delete announcement.', true);
-          }
-        });
+        doDelete(delBtn.getAttribute('data-ghca-announce-delete'), delBtn);
         return;
       }
+      if (confirmLayer && e.target.closest('[data-ghca-announce-keep]')) { e.preventDefault(); closeConfirm(true); return; }
+      var really = e.target.closest('[data-ghca-announce-confirm-delete]');
+      if (really && pendingDelete) { e.preventDefault(); doDelete(pendingDelete.id, really); return; }
+
+      var typeBtn = e.target.closest('[data-ghca-announce-type]');
+      if (typeBtn && modal.contains(typeBtn)) { e.preventDefault(); setType(typeBtn.getAttribute('data-ghca-announce-type')); return; }
 
       if (e.target.closest('[data-ghca-announce-close]')) { e.preventDefault(); closeModal(); }
     });
 
+    if (field('audience')) field('audience').addEventListener('change', syncAudience);
+
+    document.addEventListener('keydown', function (e) {
+      var menu = e.target.closest && e.target.closest('[data-ghca-ann-menu]');
+      if (menu) {
+        var items = menuItems(menu);
+        var i = items.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); return; }
+        if (e.key === 'Home') { e.preventDefault(); items[0].focus(); return; }
+        if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); return; }
+        if (e.key === 'Escape' || e.key === 'Tab') {
+          var b = menu.parentNode.querySelector('[data-ghca-ann-menu-btn]');
+          closeMenus(null);
+          if (e.key === 'Escape') { e.preventDefault(); if (b) b.focus(); }
+          return;
+        }
+      }
+      if (e.key !== 'Escape') return;
+      if (confirmLayer && !confirmLayer.hidden) { closeConfirm(true); return; }
+      if (!modal.hidden) closeModal();
+    });
+
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      if (isBoard) {
+        var bad = { title: !field('title').value.trim(), url: field('url').value.trim() !== '' && !field('url').checkValidity() };
+        errs(bad);
+        if (bad.title) { field('title').focus(); return; }
+        if (bad.url) { field('url').focus(); return; }
+        if (field('audience_group') && field('audience_group').required && !field('audience_group').value) { field('audience_group').reportValidity(); return; }
+      }
       var prev = saveBtn ? saveBtn.textContent : '';
       if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = (window.ghcaAcd && window.ghcaAcd.loading) || 'Saving…'; }
 
       var data = { action: 'ghca_acd_save_announcement' };
-      ['announce_id', 'title', 'body', 'type', 'url'].forEach(function (name) {
-        var el = form.elements[name];
-        data[name] = el ? el.value : '';
+      FIELDS.forEach(function (name) {
+        var el = field(name);
+        if (el) data[name] = el.value;
       });
+      if (data.audience !== 'group') delete data.audience_group;
 
-      post(data, function (json) {
+      post(data, function (json, err) {
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = prev; }
         if (json && json.success && json.data) {
           listEl.innerHTML = json.data.html;
-          ghcaToast(json.data.message || 'Saved.', false);
+          if (isBoard && data.announce_id === '0') clearDraft();
           closeModal();
-        } else {
-          ghcaToast((json && json.data && json.data.message) || 'Could not save announcement.', true);
+          var who = json.data.audience ? ' Who sees it: ' + json.data.audience + '.' : '';
+          ghcaToast((json.data.message || 'Saved.') + who, false);
+          return;
         }
+        if (isBoard && err && err.ghcaSession) {
+          // Keep the text: the form stays open, and a new announcement's text is also kept for the next visit.
+          if (data.announce_id === '0') saveDraft();
+          ghcaToast('Couldn’t publish. Your session timed out. Nothing was published — sign in again and your text will still be here.', true);
+          return;
+        }
+        ghcaToast((json && json.data && json.data.message) || (err ? 'Network error. Nothing was published; your text is still here.' : 'Could not save announcement.'), true);
       });
     });
+  }
 
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !modal.hidden) closeModal();
+  // Slice 8: search and Active/Inactive on the ManageUsers board. Rows and cards carry their own status and text.
+  function initManageUsersList() {
+    var search = document.querySelector('[data-ghca-mu-search]');
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('[data-ghca-mu-status]'));
+    var items = Array.prototype.slice.call(document.querySelectorAll('[data-ghca-mu-row]'));
+    var none = document.querySelector('[data-ghca-mu-none]');
+    var count = document.querySelector('[data-ghca-mu-count]');
+    if (!tabs.length) return;
+    var status = 'active';
+    function apply() {
+      var q = search ? search.value.trim().toLowerCase() : '';
+      var shown = 0;
+      items.forEach(function (el) {
+        var hit = el.getAttribute('data-status') === status && (!q || el.getAttribute('data-search').indexOf(q) !== -1);
+        el.hidden = !hit;
+        if (hit && el.tagName === 'TR') shown++;
+      });
+      if (none) none.hidden = shown > 0;
+      if (count) count.textContent = shown + (shown === 1 ? ' employee shown' : ' employees shown');
+    }
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () {
+        status = t.getAttribute('data-ghca-mu-status');
+        tabs.forEach(function (x) { x.setAttribute('aria-pressed', x === t ? 'true' : 'false'); });
+        apply();
+      });
     });
+    if (search) search.addEventListener('input', apply);
   }
 
   function initManageUsers() {
@@ -1556,6 +1862,16 @@
     var btnText = submitBtn ? submitBtn.querySelector('.ghca-acd-btn-text') : null;
     var spinner = submitBtn ? submitBtn.querySelector('.ghca-acd-spinner') : null;
     var titleEl = document.getElementById('ghca-acd-user-modal-title');
+    // Slice 8: the ManageUsers board (a side drawer inside the themed wrapper). Same form, fields and action.
+    var isBoard = modal.getAttribute('data-ghca-ui') === 'board';
+    var boardDialog = isBoard ? modal.querySelector('[data-ghca-mu-dialog]') : null;
+    var boardSub = isBoard ? modal.querySelector('[data-ghca-mu-sub]') : null;
+    var emailErr = isBoard ? modal.querySelector('[data-ghca-mu-email-err]') : null;
+    var boardRelease = null;
+    var boardOpener = null;
+    var labels = isBoard
+      ? { add: 'Add employee', edit: 'Edit employee', addBtn: 'Add employee', editBtn: 'Save changes', addSub: 'Creates a WordPress account and enrols them in LearnDash groups.', editSub: 'Changes the account, role, employment type and LearnDash groups.' }
+      : { add: 'Add Employee', edit: 'Edit Employee' };
 
     // The shared pickers list active values only. A removed custom Employment Type / role
     // is added just for the employee who still holds it, and dropped again afterwards.
@@ -1576,32 +1892,84 @@
       select.appendChild(opt);
     }
 
-    function openModal() {
+    function setMode(edit) {
+      titleEl.textContent = edit ? labels.edit : labels.add;
+      if (isBoard) {
+        if (btnText) btnText.textContent = edit ? labels.editBtn : labels.addBtn;
+        if (boardSub) boardSub.textContent = edit ? labels.editSub : labels.addSub;
+      }
+    }
+
+    function showEmailError(on) {
+      if (!emailErr) return;
+      emailErr.hidden = !on;
+      if (on) { form.elements['email'].setAttribute('aria-invalid', 'true'); form.elements['email'].classList.add('is-invalid'); }
+      else { form.elements['email'].removeAttribute('aria-invalid'); form.elements['email'].classList.remove('is-invalid'); }
+    }
+
+    function openModal(opener) {
+      if (isBoard) {
+        boardOpener = opener || document.activeElement;
+        modal.hidden = false;
+        modal.setAttribute('aria-hidden', 'false');
+        document.documentElement.classList.add('ghca-acd--drawer-open');
+        boardRelease = ghcaFocusTrap(boardDialog, form.elements['first_name']);
+        return;
+      }
       modal.style.display = 'flex';
       document.body.style.overflow = 'hidden';
     }
 
     function closeModal() {
-      modal.style.display = 'none';
-      document.body.style.overflow = '';
+      if (isBoard) {
+        modal.hidden = true;
+        modal.setAttribute('aria-hidden', 'true');
+        document.documentElement.classList.remove('ghca-acd--drawer-open');
+        if (boardRelease) { boardRelease(); boardRelease = null; }
+        showEmailError(false);
+        var filter = modal.querySelector('[data-ghca-mu-group-filter]');
+        if (filter) { filter.value = ''; Array.prototype.forEach.call(modal.querySelectorAll('.gh-mu-g'), function (g) { g.hidden = false; }); }
+        if (boardOpener && boardOpener.focus) boardOpener.focus();
+      } else {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+      }
       form.reset();
       document.getElementById('ghca-acd-user-id').value = '';
       clearTempOptions();
     }
 
-    if (closeBtn) closeBtn.addEventListener('click', closeModal);
-    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    if (isBoard) {
+      modal.addEventListener('click', function (e) {
+        if (e.target.closest('[data-ghca-mu-close]')) { e.preventDefault(); closeModal(); }
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !modal.hidden) { e.preventDefault(); closeModal(); }
+      });
+      form.elements['email'].addEventListener('input', function () { if (emailErr && !emailErr.hidden && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.elements['email'].value.trim())) showEmailError(false); });
+      var gfilter = modal.querySelector('[data-ghca-mu-group-filter]');
+      if (gfilter) {
+        gfilter.addEventListener('input', function () {
+          var q = gfilter.value.trim().toLowerCase();
+          Array.prototype.forEach.call(modal.querySelectorAll('.gh-mu-g'), function (g) { g.hidden = !!q && g.getAttribute('data-name').indexOf(q) === -1; });
+        });
+      }
+      initManageUsersList();
+    }
+
+    if (!isBoard && closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (!isBoard && cancelBtn) cancelBtn.addEventListener('click', closeModal);
     if (addBtn) {
       addBtn.addEventListener('click', function () {
-        titleEl.textContent = 'Add Employee';
+        setMode(false);
         clearTempOptions();
-        openModal();
+        openModal(addBtn);
       });
     }
 
     Array.prototype.forEach.call(editBtns, function (btn) {
       btn.addEventListener('click', function () {
-        titleEl.textContent = 'Edit Employee';
+        setMode(true);
         form.elements['user_id'].value = btn.getAttribute('data-user_id');
         form.elements['first_name'].value = btn.getAttribute('data-first_name');
         form.elements['last_name'].value = btn.getAttribute('data-last_name');
@@ -1625,13 +1993,21 @@
           cb.checked = groups.indexOf(parseInt(cb.value, 10)) > -1;
         });
         
-        openModal();
+        openModal(btn);
       });
     });
 
     if (form) {
       form.addEventListener('submit', function (e) {
         e.preventDefault();
+        if (isBoard) {
+          // novalidate: the board shows its own email message; other required fields use the browser's.
+          var email = form.elements['email'];
+          // Same rule as the server's is_email(): the domain needs a dot (name@example.org).
+          if (!email.checkValidity() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) { showEmailError(true); email.focus(); return; }
+          showEmailError(false);
+          if (!form.reportValidity()) return;
+        }
         if (submitBtn) submitBtn.disabled = true;
         if (btnText) {
           btnText.dataset.original = btnText.textContent;
@@ -1685,7 +2061,7 @@
     ghcaPacketNotices.forEach(function (n) {
       if (n.el.parentNode === tray) return;
       if (!n.el.isConnected || n.el.offsetParent === null || n.el.closest('[hidden]')) {
-        n.el.classList.add('is-compact');
+        if (n.state === 'ready') ghcaPacketCompact(n, true);
         tray.appendChild(n.el);
       }
     });
@@ -1700,15 +2076,32 @@
   }
   function ghcaPacketSetState(n, state, text) {
     n.state = state;
-    n.el.classList.remove('gh-toast--success', 'gh-toast--error', 'gh-toast--neutral');
+    n.el.classList.remove('gh-toast--success', 'gh-toast--error', 'gh-toast--neutral', 'is-compact');
     n.el.classList.add(state === 'ready' ? 'gh-toast--success' : (state === 'done' ? 'gh-toast--neutral' : 'gh-toast--error'));
+    n.el.setAttribute('data-ghca-packet-state', state);
+    var ico = n.el.querySelector('.gh-pkr-ico');
+    if (ico && state !== 'ready') { ico.className = 'gh-i gh-pkr-ico ' + (state === 'done' ? 'i-check-circle' : 'i-alert'); }
+    var title = n.el.querySelector('.gh-toast-t');
+    if (title && state === 'done') { title.textContent = n.label + ' downloaded'; }
+    if (title && state !== 'ready' && state !== 'done') { title.textContent = n.label + ' link ' + (state === 'replaced' ? 'replaced' : 'no longer available'); }
+    var dismiss = n.el.querySelector('[data-ghca-packet-dismiss]');
+    if (dismiss && state !== 'ready') { dismiss.setAttribute('aria-label', 'Close notice'); }
     var link = n.el.querySelector('[data-ghca-packet-download]');
     if (link && state !== 'ready') { link.remove(); }
+    // A used, expired or replaced link has no expiry worth showing.
+    var exp = n.el.querySelector('[data-ghca-packet-exp]');
+    if (exp && state !== 'ready') { exp.textContent = ''; }
     var msg = n.el.querySelector('[data-ghca-packet-msg]');
     msg.textContent = text || '';
     msg.hidden = !text;
     if (state !== 'ready') { n.el.setAttribute('role', state === 'done' ? 'status' : 'alert'); }
     if (n.timer) { clearTimeout(n.timer); n.timer = null; }
+  }
+  // Compact keeps the title and the link; "Show details" brings the rest back.
+  function ghcaPacketCompact(n, on) {
+    n.el.classList.toggle('is-compact', !!on);
+    var more = n.el.querySelector('[data-ghca-packet-expand]');
+    if (more) more.setAttribute('aria-expanded', on ? 'false' : 'true');
   }
   function ghcaPacketReplaced() {
     ghcaPacketNotices.forEach(function (n) {
@@ -1728,7 +2121,7 @@
     if (typeof data.pages === 'number' && data.pages > 0) { details.push(data.pages + (data.pages === 1 ? ' page' : ' pages')); }
     if (typeof data.flagged === 'number') { details.push(data.flagged > 0 ? data.flagged + (data.flagged === 1 ? ' item' : ' items') + ' flagged for evidence review' : 'nothing flagged for evidence review'); }
     var expires = typeof data.expires === 'number' && data.expires > 0 ? data.expires * 1000 : 0;
-    el.innerHTML = '<span class="gh-i i-check-circle" aria-hidden="true"></span><div class="gh-pkr-body"><div class="gh-toast-t"></div><p class="gh-pkr-p"><span data-ghca-packet-details></span><a href="#" data-ghca-packet-download></a><span data-ghca-packet-exp></span></p><p class="gh-small gh-pkr-msg" data-ghca-packet-msg hidden></p></div><button type="button" class="gh-toast-x" data-ghca-packet-dismiss aria-label="Dismiss notice (the download link stays available)"><span class="gh-i gh-i--sm i-x" aria-hidden="true"></span></button>';
+    el.innerHTML = '<span class="gh-i i-check-circle gh-pkr-ico" aria-hidden="true"></span><div class="gh-pkr-body"><div class="gh-toast-t"></div><p class="gh-pkr-p"><span data-ghca-packet-details></span><a href="#" data-ghca-packet-download></a><span data-ghca-packet-exp></span></p><p class="gh-small gh-pkr-msg" data-ghca-packet-msg hidden></p><button type="button" class="gh-pkr-more" data-ghca-packet-expand aria-expanded="false">Show details</button></div><button type="button" class="gh-toast-x" data-ghca-packet-dismiss aria-label="Collapse notice (the download link stays available)"><span class="gh-i gh-i--sm i-x" aria-hidden="true"></span></button>';
     el.querySelector('.gh-toast-t').textContent = label + ' ready';
     el.querySelector('[data-ghca-packet-details]').textContent = details.length ? details.join(' · ') + '. ' : '';
     var link = el.querySelector('[data-ghca-packet-download]');
@@ -1737,17 +2130,24 @@
     link.setAttribute('aria-label', 'Download ' + label + ' (PDF)');
     el.querySelector('[data-ghca-packet-exp]').textContent = expires ? ' · link expires ' + new Date(expires).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
     host.appendChild(el);
-    var n = { el: el, state: 'ready', url: data.download_url, expires: expires, timer: null };
+    var n = { el: el, state: 'ready', url: data.download_url, expires: expires, timer: null, label: label };
+    el.setAttribute('data-ghca-packet-state', 'ready');
     ghcaPacketNotices.push(n);
     if (slot) { ghcaPacketWatchSlots(); }
     // Time-out collapses the notice to its title and link; it never removes the link.
-    n.timer = window.setTimeout(function () { if (n.state === 'ready') { el.classList.add('is-compact'); } }, 12000);
+    n.timer = window.setTimeout(function () { if (n.state === 'ready') { ghcaPacketCompact(n, true); } }, 12000);
     if (expires) {
       window.setTimeout(function () { if (n.state === 'ready') { ghcaPacketSetState(n, 'expired', 'This download link has expired and the private copy was deleted. Generate the packet again.'); } }, Math.max(0, expires - Date.now()));
     }
     el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-ghca-packet-expand]')) {
+        ghcaPacketCompact(n, false);
+        var dl = el.querySelector('[data-ghca-packet-download]');
+        if (dl) dl.focus();
+        return;
+      }
       if (e.target.closest('[data-ghca-packet-dismiss]')) {
-        if (n.state === 'ready') { el.classList.add('is-compact'); var a = el.querySelector('[data-ghca-packet-download]'); if (a) a.focus(); }
+        if (n.state === 'ready') { ghcaPacketCompact(n, true); var a = el.querySelector('[data-ghca-packet-download]'); if (a) a.focus(); }
         else { el.remove(); ghcaPacketNotices = ghcaPacketNotices.filter(function (x) { return x !== n; }); }
         return;
       }
@@ -1771,7 +2171,7 @@
           save.href = url; save.download = m ? m[1] : 'compliance-packet.pdf';
           document.body.appendChild(save); save.click(); save.remove();
           window.setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
-          ghcaPacketSetState(n, 'done', 'Downloaded. The private copy on the server has been deleted; generate the packet again for another copy.');
+          ghcaPacketSetState(n, 'done', 'Link used. The PDF was saved and the private copy on the server was deleted, so this link no longer works. To download again, generate a new packet.');
           return;
         }
         var text = '';
@@ -3183,6 +3583,7 @@
   initEmployeeDrawer();
   initEditRecordsSubpage();
   initAnnouncements();
+  initInlineReport();
   initManageUsers();
   initPdfPacket();
   initReminderMessaging();

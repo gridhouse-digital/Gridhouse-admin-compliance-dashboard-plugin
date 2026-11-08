@@ -36,6 +36,7 @@ require_once __DIR__ . '/includes/class-redesign-reminder.php';
 require_once __DIR__ . '/includes/class-redesign-lists.php';
 require_once __DIR__ . '/includes/class-redesign-admin.php';
 require_once __DIR__ . '/includes/class-redesign-bulk.php';
+require_once __DIR__ . '/includes/class-redesign-report.php';
 require_once __DIR__ . '/includes/odp/class-odp-bulletins.php';
 require_once __DIR__ . '/includes/class-export.php';
 require_once __DIR__ . '/includes/class-fluentcrm.php';
@@ -110,6 +111,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     GHCA_ACD_Twilio_Webhooks::init();
     GHCA_ACD_Messaging_UI::init();
     GHCA_ACD_Bulk_Messaging::init();
+    GHCA_ACD_Redesign_Report::init();
     GHCA_ACD_Jotform_Schema::init();
     GHCA_ACD_Jotform_Sync::init();
     GHCA_ACD_Jotform_UI::init();
