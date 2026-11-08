@@ -220,12 +220,13 @@ All three are fixed as described under "Deletion outcomes" and "Database errors"
 
 | | |
 | --- | --- |
-| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-84e9985.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
-| Commit | `84e9985d61e8a3b611c26cac59fb6d6c1c35cfd1` |
-| Size | 735,052 bytes |
-| SHA-256 | `fdcbb3f24743b0ae677c7bdd1d02a2d1e231984c2f7de5a66e6ee458cc074600` |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-70e1d6b.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `70e1d6b28db0c5749ca34a8788e2aca8212a317b` |
+| Size | 736,962 bytes |
+| SHA-256 | `35e23f2838517b1d2b399e572cb294928a490acd36a0ca3e103b27080bf174ff` |
+| External BUILD.txt SHA-256 | `ebf2c012c2db9180e93291e705bb97d0f17049c1cfdad5d5968cd7d0a48a3741` |
 | Manifest | `BUILD.txt`, inside the archive and alongside it: all 145 runtime files with their SHA-256 |
-| Supersedes | `a67c01d` (prepared, never installed; 730,422 bytes, SHA-256 `d3cf5938…026fa`). Do not install it. |
+| Supersedes | `84e9985` and `a67c01d` (both prepared, never installed). Do not install either. |
 | Previous staging | `dea0da8`, installed by the site owner on November 7, 2026 at approximately 10:48 PM Toronto time, replacing `94b612d` |
 
 **Verification:**
@@ -234,11 +235,14 @@ All three are fixed as described under "Deletion outcomes" and "Database errors"
 - `php -l` passes on every PHP file.
 - No tests or test stubs are in the package.
 - The extracted package was installed on the disposable site, where it passed:
-  - `integration-slice9` (66 checks) and `integration-slice8` (36 checks);
+  - `integration-slice9` (90 checks) and `integration-slice8` (36 checks);
   - `integration-packet-ready` (29), `integration-bulk-recovery` (29) and the other integration suites;
   - `browser-real-site9` (23 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
-- At this commit, all synthetic browser suites pass, including `browser-slice9` (104), `browser-slice8` (182) and `browser-slice7` (150). All 82 unit test files pass.
-- `GHCA_ACD_Redesign_Certs::deactivate()` (removes all ZIPs on plugin deactivation) has no test of its own.
+- Before packaging, at the working tree that became this commit:
+  - all 82 unit test files pass;
+  - `browser-slice9` (104), `browser-redesign-lists` (51) and `browser-slice8` (182) pass.
+  - The page script is unchanged since `84e9985`, where every synthetic browser suite passed.
+- `GHCA_ACD_Redesign_Certs::deactivate()` has no test of its own.
 
 **Not installed on staging.**
 
