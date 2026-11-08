@@ -41,6 +41,8 @@ async function login(browser, viewport) {
 }
 const dash = (page, q = '', hash = '') => page.goto(SITE + '/?pagename=compliance-dashboard' + q + hash).then(() => page.waitForSelector('.ghca-ui .gh-tabs'));
 const shot = async (page, name) => { if (shots) { await page.screenshot({ path: path.join(shots, 'real9-' + name + '.png'), fullPage: false }); } };
+// The reference board's Overview grid: minmax(280px, 320px) minmax(0, 1fr) minmax(300px, 360px).
+const refCols = (c) => c.length === 3 && c[0].w >= 280 && c[0].w <= 320 && c[2].w >= 300 && c[2].w <= 360 && c[1].w > c[2].w;
 const cols = (page) => page.evaluate(() => {
   const grid = document.querySelector('.gh-ovp--3');
   return Array.from(grid.children).map((c) => { const r = c.getBoundingClientRect(); return { w: Math.round(r.width), x: Math.round(r.left), y: Math.round(r.top) }; });
@@ -56,6 +58,84 @@ const cols = (page) => page.evaluate(() => {
     const w = await page.evaluate(() => Math.round(document.querySelector('.ghca-ui .gh-main').getBoundingClientRect().width));
     assert.ok(w <= 1480 && w > 1320, 'container ' + w); ok(THEME + ' 1920: the dashboard is ' + w + 'px wide (was up to 1600px; the board is 1320px)');
     await ctx.close();
+  }
+
+  // ---------- Overview: list caps (6 groups, 3 announcements), fixed headings, themed scrollbars; KPI height ----------
+  if (WPROOT) {
+    const fixture = (mode) => execFileSync('php', [path.join(__dirname, 'real-site', 'overview-overflow.php'), WPROOT, mode]).toString();
+    fixture('add');
+    try {
+      const { ctx, page, errors } = await login(browser, { width: 1440, height: 900 });
+      await dash(page);
+      for (const w of [1920, 1440, 1280, 1100, 834, 390]) {
+        await page.setViewportSize({ width: w, height: 900 });
+        await page.waitForTimeout(150);
+        const r = await page.evaluate(() => {
+          const out = {};
+          for (const [key, sel] of [['groups', '.gh-grp > li'], ['ann', '.gh-ann']]) {
+            const body = document.querySelector(key === 'groups' ? '.gh-ovp [data-ghca-ovp-items=".gh-grp li"]' : '.gh-ovp [data-ghca-announce-list]');
+            const card = body.closest('.gh-card');
+            const hd = card.querySelector('.gh-card-hd');
+            const items = Array.from(body.querySelectorAll(sel));
+            const b = body.getBoundingClientRect();
+            const shown = () => items.filter((i) => { const x = i.getBoundingClientRect(); return x.top >= b.top - 1 && x.bottom <= b.bottom + 1; }).length;
+            const first = shown();
+            const hdTop = hd.getBoundingClientRect().top;
+            body.scrollTop = body.scrollHeight;
+            const last = items[items.length - 1].getBoundingClientRect();
+            const lastIn = last.bottom <= body.getBoundingClientRect().bottom + 1 && last.top >= body.getBoundingClientRect().top - 1;
+            const hdSame = Math.abs(hd.getBoundingClientRect().top - hdTop) < 1 && hd.getBoundingClientRect().bottom <= body.getBoundingClientRect().top + 1;
+            body.scrollTop = 0;
+            const cs = getComputedStyle(body);
+            out[key] = { n: items.length, shown: first, scrolls: body.scrollHeight > body.clientHeight + 1, lastIn, hdSame, overflowY: cs.overflowY, sbColor: cs.scrollbarColor, sbWidth: cs.scrollbarWidth, tab: body.getAttribute('tabindex'), role: body.getAttribute('role'), label: body.getAttribute('aria-label') };
+          }
+          const kpi = document.querySelector('.gh-kpi--overview > .gh-stat');
+          out.kpi = { h: Math.round(kpi.getBoundingClientRect().height), pt: getComputedStyle(kpi).paddingTop };
+          out.page = document.documentElement.scrollWidth > window.innerWidth;
+          return out;
+        });
+        for (const [key, n, cap, name] of [['groups', 8, 6, 'group rows'], ['ann', 5, 3, 'announcements']]) {
+          const x = r[key];
+          assert.ok(x.n >= n, key + ' items ' + x.n);
+          assert.equal(x.shown, cap, key + ' ' + JSON.stringify(x));
+          assert.ok(x.scrolls && x.lastIn && x.hdSame && x.overflowY === 'auto', key + ' ' + JSON.stringify(x));
+          assert.ok(x.sbWidth === 'thin' && /color-mix|rgba|\d%/.test(x.sbColor) && x.sbColor !== 'auto', key + ' ' + JSON.stringify(x));
+          assert.ok(x.tab === '0' && x.role === 'region' && /scrollable list/.test(x.label), key + ' ' + JSON.stringify(x));
+        }
+        assert.equal(r.page, false);
+        ok(THEME + ' ' + w + ': ' + r.groups.n + ' groups and ' + r.ann.n + ' announcements: exactly 6 group rows and 3 announcements visible; only the list body scrolls (to the last item), the card headings stay fixed; thin semi-transparent theme-coloured scrollbars; keyboard-scrollable region; no sideways page scroll');
+        if (w >= 1241) {
+          const c = await cols(page);
+          assert.ok(refCols(c), JSON.stringify(c)); ok(THEME + ' ' + w + ': columns ' + c.map((x) => x.w).join(' / ') + ' px: the reference proportions');
+        }
+        if (w >= 720) { assert.equal(r.kpi.pt, '22px'); } else { assert.equal(r.kpi.pt, '12px'); }
+        ok(THEME + ' ' + w + ': KPI tiles ' + r.kpi.h + ' px tall (' + (w >= 720 ? 'taller on desktop and tablet' : 'phone keeps its compact tiles') + ')');
+        if (shots && [1440, 834, 390].includes(w)) {
+          await page.locator('.gh-ovp').screenshot({ path: path.join(shots, 'real9-overview-caps-' + w + '.png') });
+          if (w === 1440) { await page.locator('.gh-kpi--overview').screenshot({ path: path.join(shots, 'real9-kpi-1440.png') }); }
+        }
+      }
+      // The ⋯ menu of the third (last visible) announcement is not cut off by the scrolling list.
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.waitForTimeout(150);
+      const btn = page.locator('.gh-ovp [data-ghca-announce-list] .gh-ann').nth(2).locator('[data-ghca-ann-menu-btn]');
+      await btn.click();
+      const m = await page.evaluate(() => { const menu = Array.from(document.querySelectorAll('[data-ghca-ann-menu]')).find((x) => !x.hidden); const b = menu.closest('.gh-ovp-scroll').getBoundingClientRect(); const r = menu.getBoundingClientRect(); return { inside: r.top >= b.top - 1 && r.bottom <= b.bottom + 1, up: menu.classList.contains('gh-ann-menu--up') }; });
+      assert.ok(m.inside, JSON.stringify(m)); ok(THEME + ': the ⋯ menu of the last visible announcement opens ' + (m.up ? 'upward' : 'downward') + ' and is fully visible inside the scrolling list');
+      await page.keyboard.press('Escape');
+      assert.equal(errors.length, 0, errors.join(' | '));
+      await ctx.close();
+    } finally {
+      fixture('remove');
+    }
+    // With short lists nothing is capped.
+    const { ctx, page } = await login(browser, { width: 1440, height: 900 });
+    await dash(page);
+    const plain = await page.evaluate(() => Array.from(document.querySelectorAll('.gh-ovp [data-ghca-ovp-cap]')).map((b) => ({ s: b.classList.contains('gh-ovp-scroll'), h: b.style.maxHeight, t: b.getAttribute('tabindex') })));
+    assert.ok(plain.length === 2 && plain.every((x) => !x.s && !x.h && x.t === null), JSON.stringify(plain)); ok(THEME + ': with 3 groups and few announcements the lists are not capped and not scroll regions');
+    await ctx.close();
+  } else {
+    process.stdout.write('skip - Overview list caps: set GHCA_REAL_WP to the disposable site\'s WordPress folder\n');
   }
 
   // ---------- Overview: a long group name wraps instead of being cut off ----------
@@ -79,12 +159,12 @@ const cols = (page) => page.evaluate(() => {
         assert.ok(g, 'the long group name is on the Overview');
         assert.equal(g.clipped, false); assert.notEqual(g.ellipsis, 'ellipsis'); assert.notEqual(g.nowrap, 'nowrap');
         assert.ok(g.inside && g.pct && !g.page, JSON.stringify(g));
-        assert.ok(g.lines >= 2 && g.lines <= 4, JSON.stringify(g)); // wrapped, but not into a tall narrow block
+        assert.ok(g.lines >= 2, JSON.stringify(g));
         ok(THEME + ' ' + w + ': the long group name is shown in full, wrapped on ' + g.lines + ' line' + (g.lines === 1 ? '' : 's') + ' (no ellipsis); bar, % and status stay inside the card; no sideways scrolling');
         if (layout === 'three') {
           const c = await cols(page);
-          assert.ok(c[0].w >= 280 && c[0].w <= 320 && c[1].w < c[2].w, JSON.stringify(c));
-          ok(THEME + ' ' + w + ': columns ' + c.map((x) => x.w).join(' / ') + ' px with the long name: Announcements still wider than Compliance by group');
+          assert.ok(refCols(c), JSON.stringify(c));
+          ok(THEME + ' ' + w + ': columns ' + c.map((x) => x.w).join(' / ') + ' px with the long name: the reference proportions hold');
         }
         if (shots && [1440, 1280, 834, 390].includes(w)) { await page.locator('.gh-ovp .gh-card', { has: page.locator('#gh-groups-h') }).screenshot({ path: path.join(shots, 'real9-overview-longgroup-' + w + '.png') }); }
       }
@@ -113,10 +193,9 @@ const cols = (page) => page.evaluate(() => {
       const c = await cols(page);
       assert.equal(c.length, 3);
       assert.ok(c[0].w >= 280 && c[0].w <= 320, 'left ' + c[0].w);
-      assert.ok(c[1].w < c[2].w, 'middle ' + c[1].w + ' vs announcements ' + c[2].w);
-      assert.ok(c[1].w >= 360, 'middle min ' + c[1].w);
+      assert.ok(refCols(c), JSON.stringify(c));
       assert.ok(c[0].y === c[1].y && c[1].y === c[2].y);
-      ok(THEME + ' ' + w + ': Overview columns ' + c.map((x) => x.w).join(' / ') + ' px: left unchanged (280–320), Compliance by group narrower than Announcements');
+      ok(THEME + ' ' + w + ': Overview columns ' + c.map((x) => x.w).join(' / ') + ' px: the reference proportions (left 280–320, Compliance by group flexible, Announcements 300–360)');
       const wrap = await page.evaluate((t) => { const card = document.querySelector('[data-announce-title="' + t + '"]').closest('.gh-card'); const cr = card.getBoundingClientRect(); return { over: Array.from(card.querySelectorAll('*')).filter((e) => e.getBoundingClientRect().right > cr.right + 1).length, page: document.documentElement.scrollWidth > window.innerWidth }; }, LONG);
       assert.equal(wrap.over, 0); assert.equal(wrap.page, false); ok(THEME + ' ' + w + ': a long announcement wraps inside its card; nothing overflows');
       const acts = await page.evaluate((t) => { const b = document.querySelector('[data-announce-title="' + t + '"] [data-ghca-ann-menu-btn]').getBoundingClientRect(); return b.width >= 24 && b.right <= window.innerWidth; }, LONG);

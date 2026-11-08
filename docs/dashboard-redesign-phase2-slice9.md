@@ -136,20 +136,32 @@ How it behaves:
 
 ## 7. Overview and container
 
-- At 1241px and wider the Overview grid is `minmax(280px, 320px) minmax(360px, 1fr) minmax(360px, 1.15fr)`. The left column is unchanged; Compliance by group is narrower and Announcements gets the width.
-  - Measured: 320 / 476 / 548 px at 1440, and 320 / 409 / 471 px at 1280.
-- Stacking is unchanged: two columns with Announcements full width below at 1100, and one column at 834 and 390. Long announcements wrap inside the card, and the ⋯ control stays usable.
-- **Long group names (corrected after `70e1d6b`):** group names wrap in full instead of being cut off with an ellipsis. Long unbroken words break only as a last resort.
-  - **Row layout in three columns:** at 1241px and wider, the middle column is narrow and the board's one-line row left a name only 100–140px. Rows there use the board's own narrow pattern: the name on its own line, with bar, % and status beneath.
-  - **Measured on the real site** with a 112-character name: 2 lines at 1920 and 1440, and 3 lines at 1280, 1100, 834 and 390. Announcements stays wider: 320 / 476 / 548 px at 1440, and 320 / 409 / 471 px at 1280.
-- **Container:** reduced from 1600px to 1480px, as requested mid-slice ("too wide, reduce it a bit"). It is still wider than the board's 1320px.
+- **Card sizes and proportions are the reference board's again (corrected after `3ce13be`, requested).** The Slice 9 widening of Announcements was reverted. The grid is the board's `minmax(280px, 320px) minmax(0, 1fr) minmax(300px, 360px)`, with the board's stacking at 1240px and 900px.
+  - Measured on the real site: 320 / 704 / 360 px at 1920, 320 / 664 / 360 at 1440, and 320 / 520 / 360 at 1280.
+  - Two columns at 1100 (Announcements full width below), one column at 834 and 390.
+  - The stacked group-row layout added for the narrow column is gone. Rows use the board's one-line layout.
+- **List caps (requested):**
+  - **What is visible:** Compliance by group shows 6 rows and Announcements shows 3 notes. Longer lists scroll inside the card body; the card headings (title, subtitle, Course detail, Add note) stay fixed.
+  - **How the cap is set:** `dashboard.js` measures the items and sets the body's height, so exactly 6 rows or 3 notes are visible even when names or messages wrap.
+  - **When it is re-measured:** when the width changes, the layout switches or the Overview tab becomes visible, and when the announcements list is re-rendered after an add, edit or delete.
+  - **Short lists** are not capped and are not scroll regions.
+  - **Nothing is dropped:** all groups and up to 10 announcements are still rendered (unchanged).
+  - **Scrollbars:** thin and semi-transparent in the agency colour (`--gh-agency`, falling back to the theme primary): 45% opacity, 70% on hover. `scrollbar-color` covers Chromium and Firefox; `::-webkit-scrollbar` covers Safari.
+  - **Keyboard and screen readers:** a capped list is a keyboard-focusable region with a label ("Compliance by group, scrollable list"), with a visible focus outline.
+  - **The ⋯ menu** of an announcement opens upward when it would be cut off at the bottom of the list.
+  - The phone layout keeps the same caps.
+- **KPI strip (requested: "a little height"):** on desktop and tablet the tiles have 22px top and 24px bottom padding and an 8px gap, up from 16px, 18px and 4px. At 1440 they are 133px tall. The phone keeps its compact 12px tiles.
+- **Long group names:** names wrap in full instead of being cut off with an ellipsis. Long unbroken words break only as a last resort. In the reference layout, a 112-character name takes 3 lines at 1920, 4 at 1440 and 5 at 1280. Bar, % and status stay inside the card.
+- **Long announcements** wrap inside the card, and the ⋯ control stays usable.
+- **Container:** 1480px wide, as requested mid-slice; unchanged.
+- **Certificate viewer:** unchanged by this adjustment.
 
 ## Decisions and dependencies to report
 
 1. **Outside certificates:** approved outside certificates live in the external-evidence store, not in this list. Showing them here (with Source "Outside" and a source filter) needs a decision on scope and on whether they belong in ZIPs. Until then Source is LearnDash only.
 2. **Board extras not built:** "Download all (ZIP)", Rotate and Certificate ID. Download all needs a decision on limits; there is no certificate ID in the data.
 3. **ZIP limit and dependency:** the 20-per-archive limit can be raised if needed. It needs the PHP `zip` extension on staging; if it is missing, the note appears instead of the controls.
-4. **Overview proportions:** these are my judgment from the description, because the annotated screenshot was not visible.
+4. **Overview proportions:** restored to the reference board on request (the earlier Slice 9 widening of Announcements was my judgment from a description; the annotated screenshot was not visible).
 
 ## Tests
 
@@ -198,8 +210,8 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
     - **Download served, file deletion refused:** the complete archive is still served. The claimed record stays, the retry is kept, and a second download is refused. Cleanup removes the ZIP after the grace period.
     - **Download served, record deletion refused:** the claimed record stays and the retry is kept. The retry deletes it.
   - **Second negative control:** with file deletion made to report success without checking, on the test site's copy only, 12 of these checks fail. |
-| `tests/browser-real-site9.cjs` under **Twenty Twenty-Four** | 32 checks | A temporarily renamed group with a 112-character name, at 1920, 1440, 1280, 1100, 834 and 390. At each width it is shown in full on 2–4 lines, with no ellipsis and no clipping, and bar, % and status stay inside the card with no sideways scrolling. Announcements stays wider in three columns. The name is restored afterwards; this needs `GHCA_REAL_WP`. Container width at 1920. Overview columns at 1440 and 1280, and stacking at 1100, 834 and 390, with a long announcement (created and deleted again). Certificates routing and the employee filter: report action, Overview "View all", chip removal, the Certificates tab by click (also while filtered) and by arrow key (corrected build), direct link. Report picker icons at 1440 and 390. |
-| Same under **Twenty Twenty-Two** | 32 checks | Same |
+| `tests/browser-real-site9.cjs` under **Twenty Twenty-Four** | 53 checks | **Overview caps** (with `tests/real-site/overview-overflow.php`, which adds 5 synthetic groups and 5 announcements and removes them afterwards), at 1920, 1440, 1280, 1100, 834 and 390: exactly 6 group rows and 3 announcements visible; only the list body scrolls, to the last item; headings stay fixed; thin themed scrollbars; keyboard region; no sideways scrolling; reference column widths; KPI tile padding. The ⋯ menu of the last visible note is fully visible. Short lists are not capped. **Long group name:** a temporarily renamed group with a 112-character name, at 1920, 1440, 1280, 1100, 834 and 390. At each width it is shown in full on 3–5 lines, with no ellipsis and no clipping, and bar, % and status stay inside the card with no sideways scrolling. The reference column widths hold. The name is restored afterwards; this needs `GHCA_REAL_WP`. Container width at 1920. Overview columns at 1440 and 1280, and stacking at 1100, 834 and 390, with a long announcement (created and deleted again). Certificates routing and the employee filter: report action, Overview "View all", chip removal, the Certificates tab by click (also while filtered) and by arrow key (corrected build), direct link. Report picker icons at 1440 and 390. |
+| Same under **Twenty Twenty-Two** | 53 checks | Same |
 | `browser-real-site.cjs` (Slice 8) under both themes | 67 checks each | Regression |
 | Other `integration-*.php` (slice8 36, packet-ready 29, bulk-recovery 29, …) | pass | Regression |
 | Redesign off (legacy) on the real site | pass | Legacy dashboard loads with no viewer, selection bar or listbox, and no script errors |

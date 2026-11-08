@@ -937,26 +937,29 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
   :is(.ghca-ui, #ghca-ui-scope) .gh-ann-acts .gh-btn--icon { min-width: var(--gh-touch, 44px); }
 }
 
-/* ---- Slice 9: Overview columns ------------------------------------------------------------------------------- */
-/* Compliance by group was the flexible middle column and took most of the width; Announcements was fixed at
-   300-360px. The left column keeps the board's 280-320px; the middle is now capped and Announcements takes the
-   rest. Below 1240px the board's own stacking applies unchanged. */
-@media (min-width: 1241px) {
-  :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 { grid-template-columns: minmax(280px, 320px) minmax(360px, 1fr) minmax(360px, 1.15fr); }
-  /* In this narrower middle column the board's one-line row leaves a group name only 100-140px, so a long name
-     became a tall, narrow block. Use the board's own narrow pattern here: the name on its own full-width line,
-     with bar, % and status beneath it. */
-  :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp li { grid-template-columns: minmax(0, 1fr) 40px auto; row-gap: 6px; align-items: center; }
-  :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp-n { grid-column: 1 / -1; }
-  :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp li > .gh-bar { margin-top: 0; }
+/* ---- Slice 9: Overview cards ---------------------------------------------------------------------------------- */
+/* Card sizes and proportions are the reference board's (.gh-ovp--3: 280-320px, flexible, 300-360px; stacking at
+   1240px and 900px). Only the list bodies of Compliance by group (6 rows) and Announcements (3 notes) are capped:
+   dashboard.js measures the items and sets the body's max-height, so longer lists scroll inside the card while the
+   heading stays fixed. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-ovp .gh-ovp-scroll { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--gh-agency, var(--gh-color-primary)) 45%, transparent) transparent; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ovp .gh-ovp-scroll:hover { scrollbar-color: color-mix(in srgb, var(--gh-agency, var(--gh-color-primary)) 70%, transparent) transparent; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ovp .gh-ovp-scroll::-webkit-scrollbar { width: 8px; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ovp .gh-ovp-scroll::-webkit-scrollbar-track { background: transparent; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ovp .gh-ovp-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--gh-agency, var(--gh-color-primary)) 45%, transparent); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ovp .gh-ovp-scroll::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--gh-agency, var(--gh-color-primary)) 70%, transparent); }
+:is(.ghca-ui, #ghca-ui-scope) .gh-ovp .gh-ovp-scroll:focus-visible { outline: 2px solid var(--gh-agency-ink, var(--gh-focus)); outline-offset: -2px; }
+/* KPI strip: a little more height on desktop and tablet so the wide strip does not look slim (requested); the phone
+   strip keeps its compact two-column tiles. */
+@media (min-width: 720px) {
+  :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-kpi--overview > .gh-stat { padding-top: 22px; padding-bottom: 24px; gap: 8px; }
 }
+/* An announcement's menu opens upward when it would be cut off at the bottom of the scrolling list. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-ann-menu.gh-ann-menu--up { top: auto; bottom: calc(100% + 4px); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp-n, :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-ann-t, :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-ann-m { overflow-wrap: anywhere; }
 /* Group names wrap in full instead of being cut off with an ellipsis (the board truncates them to one line). Long
-   unbroken words break as a last resort so a name never widens the column. */
+   unbroken words break as a last resort so a name never widens the column. The row layout is the board's. */
 :is(.ghca-ui, #ghca-ui-scope) .gh-grp-n a, :is(.ghca-ui, #ghca-ui-scope) .gh-grp-n a > span { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; word-break: normal; hyphens: manual; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grp li { align-items: start; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grp li > .gh-bar { margin-top: 7px; }
-:is(.ghca-ui, #ghca-ui-scope) .gh-grp li > .gh-grp-pct { line-height: 19px; }
 
 /* ---- Slice 9: certificate viewer (Modal-CertViewer, Modal-CertViewer-States; gh-components v2.4.2 .gh-cv) ------ */
 :is(.ghca-ui, #ghca-ui-scope) .i-zoom-out{--i:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='black'><path d='M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128Z'/></svg>")}

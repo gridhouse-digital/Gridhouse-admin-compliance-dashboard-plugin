@@ -482,7 +482,7 @@ final class GHCA_ACD_Redesign {
 	private static function groups_html( array $groups ): string {
 		$html  = '<div class="gh-card" aria-labelledby="gh-groups-h"><div class="gh-card-hd gh-card-hd--rule"><div><h2 class="gh-h3" id="gh-groups-h">' . esc_html__( 'Compliance by group', 'ghca-acd' ) . '</h2>';
 		$html .= '<span class="gh-small gh-muted">' . esc_html__( 'Sorted by risk · completion of required courses', 'ghca-acd' ) . '</span></div>';
-		$html .= '<a class="gh-btn gh-btn--ghost gh-btn--sm" href="#ghca-tab-courses" data-ghca-tab-jump="ghca-tab-courses">' . esc_html__( 'Course detail', 'ghca-acd' ) . self::icon( 'arrow-right', 'sm' ) . '</a></div><div class="gh-ovp-bd">';
+		$html .= '<a class="gh-btn gh-btn--ghost gh-btn--sm" href="#ghca-tab-courses" data-ghca-tab-jump="ghca-tab-courses">' . esc_html__( 'Course detail', 'ghca-acd' ) . self::icon( 'arrow-right', 'sm' ) . '</a></div><div class="gh-ovp-bd" data-ghca-ovp-cap="6" data-ghca-ovp-items=".gh-grp li" data-ghca-ovp-label="' . esc_attr__( 'Compliance by group, scrollable list', 'ghca-acd' ) . '">';
 		if ( ! $groups ) {
 			return $html . '<p class="gh-ovp-empty">' . esc_html__( 'No groups in this view.', 'ghca-acd' ) . '</p></div></div>';
 		}

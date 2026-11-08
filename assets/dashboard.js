@@ -2115,6 +2115,48 @@
     view.addEventListener('ghca-report-reset', function () { body.innerHTML = emptyHtml; input.value = ''; current = ''; });
   }
 
+  // Overview lists (Compliance by group, Announcements): show a fixed number of items and scroll only the list body
+  // beyond that; the card heading stays put. The height is measured from the items themselves, because rows grow
+  // when a long group name or announcement wraps, so exactly N items are visible at any width.
+  function ghcaOvpCap(body) {
+    var n = parseInt(body.getAttribute('data-ghca-ovp-cap'), 10) || 0;
+    var items = body.querySelectorAll(body.getAttribute('data-ghca-ovp-items') || ':scope > *');
+    body.style.maxHeight = '';
+    if (!n || items.length <= n || !body.clientWidth) {
+      body.classList.remove('gh-ovp-scroll');
+      body.removeAttribute('tabindex');
+      body.removeAttribute('role');
+      body.removeAttribute('aria-label');
+      return;
+    }
+    var top = body.getBoundingClientRect().top;
+    var last = items[n - 1].getBoundingClientRect().bottom;
+    var padBottom = parseFloat(getComputedStyle(body).paddingBottom) || 0;
+    body.style.maxHeight = Math.ceil(last - top + padBottom) + 'px';
+    body.classList.add('gh-ovp-scroll');
+    // Keyboard users can scroll it even when the list has nothing focusable (read-only announcements).
+    body.setAttribute('tabindex', '0');
+    body.setAttribute('role', 'region');
+    body.setAttribute('aria-label', body.getAttribute('data-ghca-ovp-label') || 'Scrollable list');
+  }
+  function initOverviewCaps() {
+    document.querySelectorAll('.ghca-ui [data-ghca-ovp-cap]').forEach(function (body) {
+      var lastW = -1;
+      var measure = function () { lastW = body.clientWidth; ghcaOvpCap(body); };
+      measure();
+      // Re-measure when the width changes (resize, layout switch, the Overview tab becoming visible) or when the
+      // list is re-rendered (an announcement added, edited or deleted).
+      if (window.ResizeObserver) {
+        new ResizeObserver(function () { if (body.clientWidth !== lastW) { measure(); } }).observe(body);
+      } else {
+        window.addEventListener('resize', measure);
+      }
+      if (window.MutationObserver) {
+        new MutationObserver(function () { measure(); }).observe(body, { childList: true, subtree: true, characterData: true });
+      }
+    });
+  }
+
   function initAnnouncements() {
     var modal = document.getElementById('ghca-acd-announce-modal');
     var listEl = document.querySelector('[data-ghca-announce-list]');
@@ -2287,6 +2329,13 @@
         closeMenus(menu);
         menu.hidden = !open;
         menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        // Inside the scrolling announcements list, open upward when the menu would be cut off at the bottom.
+        menu.classList.remove('gh-ann-menu--up');
+        var box = open && menu.closest('.gh-ovp-scroll');
+        if (box) {
+          var b = box.getBoundingClientRect(), m = menu.getBoundingClientRect(), t = menuBtn.getBoundingClientRect();
+          if (m.bottom > b.bottom && t.top - b.top >= m.height + 4) { menu.classList.add('gh-ann-menu--up'); }
+        }
         if (open) { var first = menuItems(menu)[0]; if (first) first.focus(); }
         return;
       }
@@ -4163,6 +4212,7 @@
   initEmployeeDrawer();
   initEditRecordsSubpage();
   initAnnouncements();
+  initOverviewCaps();
   initInlineReport();
   initCertViewer();
   initCertSelection();

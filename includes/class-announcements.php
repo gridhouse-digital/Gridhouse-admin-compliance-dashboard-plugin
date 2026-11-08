@@ -196,7 +196,7 @@ final class GHCA_ACD_Announcements {
     if ( self::can_manage_announcements() ) {
       $html .= '<button type="button" class="gh-btn gh-btn--secondary gh-btn--sm" data-ghca-announce-add><span class="gh-i gh-i--sm i-plus" aria-hidden="true"></span>' . esc_html__( 'Add note', 'ghca-acd' ) . '</button>';
     }
-    $html .= '</div><div class="gh-ovp-bd" id="ghca-acd-announcement-list" data-ghca-announce-list data-ghca-announce-format="v2">';
+    $html .= '</div><div class="gh-ovp-bd" id="ghca-acd-announcement-list" data-ghca-announce-list data-ghca-announce-format="v2" data-ghca-ovp-cap="3" data-ghca-ovp-items=".gh-ann" data-ghca-ovp-label="' . esc_attr__( 'Announcements, scrollable list', 'ghca-acd' ) . '">';
     $html .= self::render_announcement_list_html( 'v2' );
     return $html . '</div></div>';
   }
