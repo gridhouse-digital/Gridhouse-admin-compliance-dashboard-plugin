@@ -249,28 +249,27 @@ All three are fixed as described under "Deletion outcomes" and "Database errors"
 
 | | |
 | --- | --- |
-| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-3ce13be.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
-| Commit | `3ce13be2920391bb20f4750272733c1c845b16e7` |
-| Size | 738,214 bytes |
-| SHA-256 | `ca4490f978e26647952807deb4cc3a0d6eec12021d89b73bc8f83bcd7097ea7c` |
-| External BUILD.txt SHA-256 | `2d3d125c727d8f99fca3249b35b05afa6b00d9d9b36ffc4d6c2c0a5c4d2f8f90` |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-10161f1.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `10161f16de1a7bdcc4a160e7e5a0902d91681289` (runtime files identical to `54bcc15`) |
+| Size | 739,415 bytes |
+| SHA-256 | `23cf0af9e21e18e82d16d26b287ae25f13faa5329f494242bd6212b5a89600a3` |
+| External BUILD.txt SHA-256 | `092112db02635e9f7d12d578996bfdb8278480b7775bf2c09974e6eccb935528` |
 | Manifest | `BUILD.txt`, inside the archive and alongside it: all 145 runtime files with their SHA-256 |
-| Supersedes | `70e1d6b`, `84e9985` and `a67c01d` (all prepared, never installed). Do not install them. |
+| Supersedes | `3ce13be`, `70e1d6b`, `84e9985` and `a67c01d` (all prepared, never installed). `54bcc15` was built but never delivered: its BUILD.txt said 53 real-site checks before the run measured 49. Do not install any of them. |
 | Previous staging | `dea0da8`, installed by the site owner on November 7, 2026 at approximately 10:48 PM Toronto time, replacing `94b612d` |
 
 **Verification:**
 - `unzip -t` reports no errors.
-- Every packaged file matches the commit byte for byte, and its hash is in the manifest. The BUILD.txt inside matches the one alongside.
+- Every packaged file matches the commit byte for byte and is identical to the `54bcc15` package that was installed and tested. Every hash is in the manifest. The BUILD.txt inside matches the one alongside.
 - `php -l` passes on every PHP file.
 - No tests or test stubs are in the package.
-- The extracted package was installed on the disposable site, where it passed:
+- On the disposable site, the identical runtime files passed:
   - `integration-slice9` (90 checks) and `integration-slice8` (36 checks);
   - `integration-packet-ready` (29), `integration-bulk-recovery` (29) and the other integration suites;
-  - `browser-real-site9` (32 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
+  - `browser-real-site9` (49 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
 - At this commit:
-  - every synthetic browser suite passes, including `browser-slice9` (112, with the real Chromium PDF viewer section), `browser-slice8` (182) and `browser-slice7` (150);
+  - every synthetic browser suite passes, including `browser-slice9` (112, with the real Chromium PDF viewer section);
   - all 82 unit test files pass.
-- `GHCA_ACD_Redesign_Certs::deactivate()` has no test of its own.
 
 **Not installed on staging.**
 
