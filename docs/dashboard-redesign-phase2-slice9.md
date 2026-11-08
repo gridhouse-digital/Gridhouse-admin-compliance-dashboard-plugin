@@ -156,7 +156,27 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 
 ## Package
 
-Recorded below after the build.
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-a67c01d.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `a67c01db737943f86f5c4df3d8758ddc25b9fc53` |
+| Size | 730,422 bytes |
+| SHA-256 | `d3cf59386a110e6532fe2c1b6b6768b76900b91a293fa84840e49c37061026fa` |
+| Manifest | `BUILD.txt`, inside the archive and alongside it: all 145 runtime files with their SHA-256 |
+| Previous staging | `dea0da8`, installed by the site owner on November 7, 2026 at approximately 10:48 PM Toronto time, replacing `94b612d` |
+
+**Verification:**
+- `unzip -t` reports no errors.
+- Every packaged file matches the commit byte for byte, and its hash is in the manifest. The BUILD.txt inside matches the one alongside.
+- `php -l` passes on every PHP file.
+- No tests or test stubs are in the package.
+- The extracted package was installed on the disposable site, where it passed:
+  - `integration-slice9` (32 checks) and `integration-slice8` (36 checks);
+  - `integration-packet-ready` (29), `integration-bulk-recovery` (29) and the other integration suites;
+  - `browser-real-site9` (20 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
+- `browser-slice9` (104), `browser-slice8` (182) and `browser-slice7` (150) pass at this commit.
+
+**Not installed on staging.**
 
 ## Rollback
 

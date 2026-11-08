@@ -6,7 +6,7 @@ One place for what each staging site runs. Update it whenever a build is install
 
 | Build | Status | Date | Notes |
 | --- | --- | --- | --- |
-| `1.7.3-rc.8-SLICE9` | Prepared, not installed | | Slice 9, cumulative (Slices 1–9): certificate viewer, certificate selection and ZIP, course listbox, Title Case, certificate routing, Overview columns, 1480px container. `docs/dashboard-redesign-phase2-slice9.md`. |
+| `1.7.3-rc.8-a67c01d` | Prepared, not installed | | Slice 9, cumulative (Slices 1–9): certificate viewer, certificate selection and ZIP, course listbox, Title Case, certificate routing, Overview columns, 1480px container. `docs/dashboard-redesign-phase2-slice9.md`. |
 | `1.7.3-rc.8-dea0da8` | **Installed** | November 7, 2026, approximately 10:48 PM (Toronto) | Slice 8 with the announcement group-scope check on edit and delete, and a corrected BUILD.txt. Replaced `94b612d`. Installed by the site owner; the assistant did not install it, and its staging checks are reported by the site owner. `docs/dashboard-redesign-phase2-slice8.md`. |
 | `1.7.3-rc.8-1cde2ca` | Prepared, not installed | | Slice 8 first build. Superseded by `dea0da8`; its BUILD.txt understated testing and gave the wrong staging history. Do not install. |
 | `1.7.3-rc.8-94b612d` | Previously installed; replaced by `dea0da8` | November 7, 2026, 8:50 PM (Toronto) | Slice 7, cumulative (Slices 1–7). Replaced `826d342`. Installed by the site owner; the assistant did not install it. Its staging checks are reported by the site owner, not by the assistant. `docs/dashboard-redesign-phase2-slice7.md`. |
