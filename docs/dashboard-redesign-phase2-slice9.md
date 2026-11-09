@@ -243,8 +243,8 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
     - **Download served, file deletion refused:** the complete archive is still served. The claimed record stays, the retry is kept, and a second download is refused. Cleanup removes the ZIP after the grace period.
     - **Download served, record deletion refused:** the claimed record stays and the retry is kept. The retry deletes it.
   - **Second negative control:** with file deletion made to report success without checking, on the test site's copy only, 12 of these checks fail. |
-| `tests/browser-real-site9.cjs` under **Twenty Twenty-Four** | 49 checks | **Overview caps** (with `tests/real-site/overview-overflow.php`, which adds 5 synthetic groups and 5 announcements and removes them afterwards), at 1920, 1440, 1280, 1100, 834 and 390: exactly 6 group rows and 3 announcements visible; only the list body scrolls, to the last item; headings stay fixed; thin themed scrollbars; keyboard region; no sideways scrolling; reference column widths; KPI tile padding. The ⋯ menu of the last visible note is fully visible. Short lists are not capped. **Long group name:** a temporarily renamed group with a 112-character name, at 1920, 1440, 1280, 1100, 834 and 390. At each width it is shown in full on 3–5 lines, with no ellipsis and no clipping, and bar, % and status stay inside the card with no sideways scrolling. The reference column widths hold. The name is restored afterwards; this needs `GHCA_REAL_WP`. Container width at 1920. Overview columns at 1440 and 1280, and stacking at 1100, 834 and 390, with a long announcement (created and deleted again). Certificates routing and the employee filter: report action, Overview "View all", chip removal, the Certificates tab by click (also while filtered) and by arrow key (corrected build), direct link. Report picker icons at 1440 and 390. |
-| Same under **Twenty Twenty-Two** | 49 checks | Same |
+| `tests/browser-real-site9.cjs` under **Twenty Twenty-Four** | 59 checks | **Equal heights and list caps (after `74a0a3d`):** Compliance by group and Announcements share one height on desktop. Every visible item is whole, with no clipped or peeking item, and the space under a list is smaller than the next item, at 1920–390. A short announcement list is shown whole and not as a scroll region, still at equal height. **ODP ticker:** shown for a cached zero-bulletin feed ("No ODP bulletins right now.") and for no feed (unavailable), at 1440, 834 and 390. **Overview caps** (with `tests/real-site/overview-overflow.php`, which adds 5 synthetic groups and 5 announcements and removes them afterwards), at 1920, 1440, 1280, 1100, 834 and 390: exactly 6 group rows and 3 announcements visible; only the list body scrolls, to the last item; headings stay fixed; thin themed scrollbars; keyboard region; no sideways scrolling; reference column widths; KPI tile padding. The ⋯ menu of the last visible note is fully visible. Short lists are not capped. **Long group name:** a temporarily renamed group with a 112-character name, at 1920, 1440, 1280, 1100, 834 and 390. At each width it is shown in full on 3–5 lines, with no ellipsis and no clipping, and bar, % and status stay inside the card with no sideways scrolling. The reference column widths hold. The name is restored afterwards; this needs `GHCA_REAL_WP`. Container width at 1920. Overview columns at 1440 and 1280, and stacking at 1100, 834 and 390, with a long announcement (created and deleted again). Certificates routing and the employee filter: report action, Overview "View all", chip removal, the Certificates tab by click (also while filtered) and by arrow key (corrected build), direct link. Report picker icons at 1440 and 390. |
+| Same under **Twenty Twenty-Two** | 59 checks | Same |
 | `browser-real-site.cjs` (Slice 8) under both themes | 67 checks each | Regression |
 | Other `integration-*.php` (slice8 36, packet-ready 29, bulk-recovery 29, …) | pass | Regression |
 | Redesign off (legacy) on the real site | pass | Legacy dashboard loads with no viewer, selection bar or listbox, and no script errors |
@@ -282,14 +282,14 @@ All three are fixed as described under "Deletion outcomes" and "Database errors"
 
 | | |
 | --- | --- |
-| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-74a0a3d.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
-| Commit | `74a0a3d552626b424556afcd7455b41eeba6f983` |
-| Size | 741,478 bytes |
-| SHA-256 | `5949602e627c3dd8813c19ca2a6486921ac18705d1a3df10bca41331650b7937` |
-| External BUILD.txt SHA-256 | `29f031e710d23943c4b7c977831d2e590f2d8b9e6f964110eb715497fafd5fc4` |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-3628587.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `362858744dbef397f8966b8ec7d07e22612a430c` |
+| Size | 742,475 bytes |
+| SHA-256 | `b822b6a36f47348a049cc9182042e79165c440d558c00430f4f88c75d15b1a58` |
+| External BUILD.txt SHA-256 | `454652fc91f1c33d7016b41571ea5e6ac6cf07042058630a4eeba56497d02d16` |
 | Manifest | `BUILD.txt`, inside the archive and alongside it: all 145 runtime files with their SHA-256 |
-| Supersedes | `10161f1`, `3ce13be`, `70e1d6b`, `84e9985` and `a67c01d` (all prepared, never installed). Do not install them. |
-| Previous staging | `dea0da8`, installed by the site owner on November 7, 2026 at approximately 10:48 PM Toronto time, replacing `94b612d` |
+| Supersedes | `74a0a3d` (installed on Isoke) |
+| Deployed builds | Isoke: `74a0a3d`. Akansoh staging: `10161f1`. See `docs/staging-builds.md`. |
 
 **Verification (counts measured before BUILD.txt was written):**
 - `unzip -t` reports no errors.
@@ -299,13 +299,12 @@ All three are fixed as described under "Deletion outcomes" and "Database errors"
 - The disposable site, running these exact files, passed:
   - `integration-slice9` (90 checks) and `integration-slice8` (36 checks);
   - `integration-packet-ready` (29), `integration-bulk-recovery` (29) and the other integration suites;
-  - `browser-real-site9` (49 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
+  - `browser-real-site9` (59 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
 - At this commit:
-  - every synthetic browser suite passes, including the new `browser-drawer-documents` (26) and `browser-slice9` (112);
-  - all 82 unit test files pass.
-- **Not verified:** real Jotform documents and grants end to end. The disposable site has no Jotform integration; the grant endpoints were mocked and their server code is unchanged.
+  - every synthetic browser suite passes, including `browser-odp-ticker` (15), `browser-drawer-documents` (26) and `browser-slice9` (112);
+  - all 83 unit test files pass, including `test-odp-ticker-states` (15).
 
-**Not installed on staging.**
+**Not installed anywhere.**
 
 ## Rollback
 

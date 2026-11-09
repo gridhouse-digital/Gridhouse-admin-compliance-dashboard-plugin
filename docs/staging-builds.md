@@ -6,7 +6,7 @@ One place for what each staging site runs. Update it whenever a build is install
 
 | Build | Status | Date | Notes |
 | --- | --- | --- | --- |
-| `1.7.3-rc.8-NEXT15` | Prepared, not installed | | Equal Overview card heights (Announcements matches Compliance by group; whole items only; internal scrolling) and the ODP ticker kept visible for an empty feed ("No ODP bulletins right now."). `docs/dashboard-redesign-phase2-slice9.md`. |
+| `1.7.3-rc.8-3628587` | Prepared, not installed | | Equal Overview card heights (Announcements matches Compliance by group; whole items only; internal scrolling) and the ODP ticker kept visible for an empty feed ("No ODP bulletins right now."). `docs/dashboard-redesign-phase2-slice9.md`. |
 | `1.7.3-rc.8-74a0a3d` | **Installed** (current on Isoke) | Install date not recorded here | Drawer Documents PDF previews in the redesigned viewer; Announcements card shrunk to its content (reverted in the build above, requested). Installed by the site owner; the assistant did not install it. On Isoke the cached ODP feed holds zero bulletins, so this build shows no ticker at all (fixed in the build above). |
 
 ## Akansoh staging
