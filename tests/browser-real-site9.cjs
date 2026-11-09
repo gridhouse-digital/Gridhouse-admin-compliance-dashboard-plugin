@@ -60,7 +60,38 @@ const cols = (page) => page.evaluate(() => {
     await ctx.close();
   }
 
-  // ---------- Overview: list caps (6 groups, 3 announcements), fixed headings, themed scrollbars; KPI height ----------
+  // ---------- Overview: equal card heights, whole items only, internal scrolling, themed scrollbars; KPI height ----------
+  // Measures both lists at rest: no item partly visible (no clipped row, nothing of a next item showing), the space
+  // under a scrolling list too small for another whole item, headings fixed while the list scrolls.
+  const measureLists = (page) => page.evaluate(() => {
+    const out = {};
+    for (const [key, sel] of [['groups', '.gh-grp > li'], ['ann', '.gh-ann']]) {
+      const body = document.querySelector(key === 'groups' ? '.gh-ovp [data-ghca-ovp-items=".gh-grp li"]' : '.gh-ovp [data-ghca-announce-list]');
+      const card = body.closest('.gh-card');
+      const hd = card.querySelector('.gh-card-hd');
+      const items = Array.from(body.querySelectorAll(sel));
+      body.scrollTop = 0;
+      const b = body.getBoundingClientRect();
+      const whole = items.filter((i) => { const x = i.getBoundingClientRect(); return x.top >= b.top - 1 && x.bottom <= b.bottom + 1; });
+      const partial = items.filter((i) => { const x = i.getBoundingClientRect(); return x.bottom > b.top + 1 && x.top < b.bottom - 1 && !(x.top >= b.top - 1 && x.bottom <= b.bottom + 1); }).length;
+      const next = items[whole.length];
+      const ccs = getComputedStyle(card);
+      const slack = Math.round(card.getBoundingClientRect().bottom - parseFloat(ccs.borderBottomWidth) - parseFloat(ccs.paddingBottom) - b.bottom);
+      const hdTop = hd.getBoundingClientRect().top;
+      body.scrollTop = body.scrollHeight;
+      const last = items[items.length - 1].getBoundingClientRect();
+      const nb = body.getBoundingClientRect();
+      const lastIn = last.bottom <= nb.bottom + 1 && last.top >= nb.top - 1;
+      const hdSame = Math.abs(hd.getBoundingClientRect().top - hdTop) < 1 && hd.getBoundingClientRect().bottom <= nb.top + 1;
+      body.scrollTop = 0;
+      const cs = getComputedStyle(body);
+      out[key] = { n: items.length, whole: whole.length, partial, slack, nextH: next ? Math.round(next.getBoundingClientRect().height) : 0, cardH: Math.round(card.getBoundingClientRect().height), scrolls: body.scrollHeight > body.clientHeight + 1, lastIn, hdSame, overflowY: cs.overflowY, sbColor: cs.scrollbarColor, sbWidth: cs.scrollbarWidth, tab: body.getAttribute('tabindex'), role: body.getAttribute('role'), label: body.getAttribute('aria-label') };
+    }
+    const kpi = document.querySelector('.gh-kpi--overview > .gh-stat');
+    out.kpi = { h: Math.round(kpi.getBoundingClientRect().height), pt: getComputedStyle(kpi).paddingTop };
+    out.page = document.documentElement.scrollWidth > window.innerWidth;
+    return out;
+  });
   if (WPROOT) {
     const fixture = (mode) => execFileSync('php', [path.join(__dirname, 'real-site', 'overview-overflow.php'), WPROOT, mode]).toString();
     fixture('add');
@@ -69,48 +100,25 @@ const cols = (page) => page.evaluate(() => {
       await dash(page);
       for (const w of [1920, 1440, 1280, 1100, 834, 390]) {
         await page.setViewportSize({ width: w, height: 900 });
-        await page.waitForTimeout(150);
-        const r = await page.evaluate(() => {
-          const out = {};
-          for (const [key, sel] of [['groups', '.gh-grp > li'], ['ann', '.gh-ann']]) {
-            const body = document.querySelector(key === 'groups' ? '.gh-ovp [data-ghca-ovp-items=".gh-grp li"]' : '.gh-ovp [data-ghca-announce-list]');
-            const card = body.closest('.gh-card');
-            const hd = card.querySelector('.gh-card-hd');
-            const items = Array.from(body.querySelectorAll(sel));
-            const b = body.getBoundingClientRect();
-            const shown = () => items.filter((i) => { const x = i.getBoundingClientRect(); return x.top >= b.top - 1 && x.bottom <= b.bottom + 1; }).length;
-            const first = shown();
-            // Nothing of the item after the cap shows below it, and (Announcements) no blank space under the list.
-            const capN = key === 'groups' ? 6 : 3;
-            const peek = items[capN] ? items[capN].getBoundingClientRect().top < b.bottom - 1 : false;
-            const gap = Math.round(card.getBoundingClientRect().bottom - b.bottom);
-            const hdTop = hd.getBoundingClientRect().top;
-            body.scrollTop = body.scrollHeight;
-            const last = items[items.length - 1].getBoundingClientRect();
-            const lastIn = last.bottom <= body.getBoundingClientRect().bottom + 1 && last.top >= body.getBoundingClientRect().top - 1;
-            const hdSame = Math.abs(hd.getBoundingClientRect().top - hdTop) < 1 && hd.getBoundingClientRect().bottom <= body.getBoundingClientRect().top + 1;
-            body.scrollTop = 0;
-            const cs = getComputedStyle(body);
-            out[key] = { n: items.length, shown: first, peek, gap, scrolls: body.scrollHeight > body.clientHeight + 1, lastIn, hdSame, overflowY: cs.overflowY, sbColor: cs.scrollbarColor, sbWidth: cs.scrollbarWidth, tab: body.getAttribute('tabindex'), role: body.getAttribute('role'), label: body.getAttribute('aria-label') };
-          }
-          const kpi = document.querySelector('.gh-kpi--overview > .gh-stat');
-          out.kpi = { h: Math.round(kpi.getBoundingClientRect().height), pt: getComputedStyle(kpi).paddingTop };
-          out.page = document.documentElement.scrollWidth > window.innerWidth;
-          return out;
-        });
-        for (const [key, n, cap, name] of [['groups', 8, 6, 'group rows'], ['ann', 5, 3, 'announcements']]) {
+        await page.waitForTimeout(200);
+        const r = await measureLists(page);
+        const threeCol = w >= 1241;
+        for (const [key, n, cap] of [['groups', 8, 6], ['ann', 5, 3]]) {
           const x = r[key];
           assert.ok(x.n >= n, key + ' items ' + x.n);
-          assert.equal(x.shown, cap, key + ' ' + JSON.stringify(x));
+          assert.equal(x.partial, 0, key + ' partly visible item ' + JSON.stringify(x));
           assert.ok(x.scrolls && x.lastIn && x.hdSame && x.overflowY === 'auto', key + ' ' + JSON.stringify(x));
           assert.ok(x.sbWidth === 'thin' && /color-mix|rgba|\d%/.test(x.sbColor) && x.sbColor !== 'auto', key + ' ' + JSON.stringify(x));
           assert.ok(x.tab === '0' && x.role === 'region' && /scrollable list/.test(x.label), key + ' ' + JSON.stringify(x));
-          assert.equal(x.peek, false, key + ' ' + JSON.stringify(x));
-          if (key === 'ann') { assert.ok(x.gap >= 0 && x.gap <= 2, key + ' ' + JSON.stringify(x)); }
+          assert.ok(x.slack >= -1 && x.slack < x.nextH, key + ' room for another whole item ' + JSON.stringify(x));
+          // Stacked: no stretching, so exactly the cap. Side by side: at least the cap, more whole items if the card has room.
+          const stacked = w <= 900 || (w <= 1240 && key === 'ann');
+          if (stacked) { assert.equal(x.whole, cap, key + ' ' + JSON.stringify(x)); } else { assert.ok(x.whole >= cap, key + ' ' + JSON.stringify(x)); }
         }
+        if (threeCol) { assert.ok(Math.abs(r.groups.cardH - r.ann.cardH) <= 1, 'heights ' + r.groups.cardH + ' / ' + r.ann.cardH); }
         assert.equal(r.page, false);
-        ok(THEME + ' ' + w + ': ' + r.groups.n + ' groups and ' + r.ann.n + ' announcements: exactly 6 group rows and 3 complete announcements visible, nothing of the next one peeking, no blank space under the announcements (' + r.ann.gap + ' px); only the list body scrolls (to the last item), the card headings stay fixed; thin semi-transparent theme-coloured scrollbars; keyboard-scrollable region; no sideways page scroll');
-        if (w >= 1241) {
+        ok(THEME + ' ' + w + ': ' + (threeCol ? 'Compliance by group and Announcements are the same height (' + r.groups.cardH + ' / ' + r.ann.cardH + ' px); ' : '') + r.groups.whole + ' of ' + r.groups.n + ' group rows and ' + r.ann.whole + ' of ' + r.ann.n + ' announcements visible, all whole: no clipped or peeking item; space under the lists smaller than the next item (' + r.groups.slack + ' / ' + r.ann.slack + ' px); only the list bodies scroll, to the last item, headings fixed; themed scrollbars; keyboard regions; no sideways page scroll');
+        if (threeCol) {
           const c = await cols(page);
           assert.ok(refCols(c), JSON.stringify(c)); ok(THEME + ' ' + w + ': columns ' + c.map((x) => x.w).join(' / ') + ' px: the reference proportions');
         }
@@ -121,16 +129,37 @@ const cols = (page) => page.evaluate(() => {
           if (w === 1440) { await page.locator('.gh-kpi--overview').screenshot({ path: path.join(shots, 'real9-kpi-1440.png') }); }
         }
       }
-      // The ⋯ menu of the third (last visible) announcement is not cut off by the scrolling list.
+      // The ⋯ menu of the last visible announcement is not cut off by the scrolling list.
       await page.setViewportSize({ width: 1440, height: 900 });
-      await page.waitForTimeout(150);
-      const btn = page.locator('.gh-ovp [data-ghca-announce-list] .gh-ann').nth(2).locator('[data-ghca-ann-menu-btn]');
-      await btn.click();
+      await page.waitForTimeout(200);
+      const lastVisible = (await measureLists(page)).ann.whole - 1;
+      await page.locator('.gh-ovp [data-ghca-announce-list] .gh-ann').nth(lastVisible).locator('[data-ghca-ann-menu-btn]').click();
       const m = await page.evaluate(() => { const menu = Array.from(document.querySelectorAll('[data-ghca-ann-menu]')).find((x) => !x.hidden); const b = menu.closest('.gh-ovp-scroll').getBoundingClientRect(); const r = menu.getBoundingClientRect(); return { inside: r.top >= b.top - 1 && r.bottom <= b.bottom + 1, up: menu.classList.contains('gh-ann-menu--up') }; });
       assert.ok(m.inside, JSON.stringify(m)); ok(THEME + ': the ⋯ menu of the last visible announcement opens ' + (m.up ? 'upward' : 'downward') + ' and is fully visible inside the scrolling list');
       await page.keyboard.press('Escape');
       assert.equal(errors.length, 0, errors.join(' | '));
       await ctx.close();
+      // Short announcement list beside overflowing groups: still the same height, no scroll region for the notes.
+      fixture('notes-off');
+      const s2 = await login(browser, { width: 1440, height: 900 });
+      await dash(s2.page);
+      for (const w of [1440, 1280, 834, 390]) {
+        await s2.page.setViewportSize({ width: w, height: 900 });
+        await s2.page.waitForTimeout(200);
+        const sr = await s2.page.evaluate(() => {
+          const body = document.querySelector('.gh-ovp [data-ghca-announce-list]');
+          const g = document.querySelector('.gh-ovp [data-ghca-ovp-items=".gh-grp li"]').closest('.gh-card').getBoundingClientRect();
+          const a = body.closest('.gh-card').getBoundingClientRect();
+          const b = body.getBoundingClientRect();
+          const items = Array.from(body.querySelectorAll('.gh-ann, .gh-ovp-empty'));
+          return { gh: Math.round(g.height), ah: Math.round(a.height), scroll: body.classList.contains('gh-ovp-scroll'), max: body.style.maxHeight, n: items.length, allIn: items.every((i) => { const x = i.getBoundingClientRect(); return x.top >= b.top - 1 && x.bottom <= b.bottom + 1; }) };
+        });
+        assert.ok(!sr.scroll && !sr.max && sr.allIn, JSON.stringify(sr));
+        if (w >= 1241) { assert.ok(Math.abs(sr.gh - sr.ah) <= 1, JSON.stringify(sr)); }
+        ok(THEME + ' ' + w + ': a short announcement list (' + sr.n + ' item' + (sr.n === 1 ? '' : 's') + ') is shown whole, not a scroll region' + (w >= 1241 ? '; the card still matches Compliance by group (' + sr.gh + ' / ' + sr.ah + ' px)' : ''));
+        if (shots && w === 1440) { await s2.page.locator('.gh-ovp').screenshot({ path: path.join(shots, 'real9-overview-short-1440.png') }); }
+      }
+      await s2.ctx.close();
     } finally {
       fixture('remove');
     }
@@ -140,8 +169,30 @@ const cols = (page) => page.evaluate(() => {
     const plain = await page.evaluate(() => Array.from(document.querySelectorAll('.gh-ovp [data-ghca-ovp-cap]')).map((b) => ({ s: b.classList.contains('gh-ovp-scroll'), h: b.style.maxHeight, t: b.getAttribute('tabindex') })));
     assert.ok(plain.length === 2 && plain.every((x) => !x.s && !x.h && x.t === null), JSON.stringify(plain)); ok(THEME + ': with 3 groups and few announcements the lists are not capped and not scroll regions');
     await ctx.close();
+
+    // ---------- ODP ticker on the real site: empty (Isoke's cached zero-bulletin feed) and unavailable ----------
+    const cache = (mode) => execFileSync('php', [path.join(__dirname, 'real-site', 'odp-feed-cache.php'), WPROOT, mode]).toString().trim();
+    try {
+      for (const [mode, state, msg] of [['empty', 'empty', 'No ODP bulletins right now.'], ['clear', 'unavailable', 'ODP bulletins are unavailable right now.']]) {
+        assert.equal(cache(mode), mode + ': state ' + state);
+        const t = await login(browser, { width: 1440, height: 900 });
+        await dash(t.page);
+        for (const w of [1440, 834, 390]) {
+          await t.page.setViewportSize({ width: w, height: 900 });
+          await t.page.waitForTimeout(150);
+          const tk = await t.page.evaluate(() => { const s = document.querySelector('.ghca-ui [data-gh-ticker]'); if (!s) { return null; } const r = s.getBoundingClientRect(); const m = s.querySelector('.gh-ticker-msg'); return { state: s.getAttribute('data-gh-ticker-state'), msg: m ? m.textContent.trim() : '', h: Math.round(r.height), items: s.querySelectorAll('.gh-ticker-item').length, link: /All bulletins/.test(s.textContent), page: document.documentElement.scrollWidth > window.innerWidth }; });
+          assert.ok(tk && tk.state === state && tk.msg === msg && tk.h > 0 && tk.items === 0 && tk.link && !tk.page, JSON.stringify(tk));
+          ok(THEME + ' ' + w + ': ' + (mode === 'empty' ? 'a cached feed with zero bulletins' : 'no feed (outbound blocked here)') + ': the ticker is shown with "' + msg + '" and the All bulletins link; no items invented');
+          if (shots && w === 1440) { await t.page.locator('.ghca-ui [data-gh-ticker]').screenshot({ path: path.join(shots, 'real9-ticker-' + state + '-1440.png') }); }
+        }
+        assert.equal(t.errors.length, 0, t.errors.join(' | '));
+        await t.ctx.close();
+      }
+    } finally {
+      cache('clear');
+    }
   } else {
-    process.stdout.write('skip - Overview list caps: set GHCA_REAL_WP to the disposable site\'s WordPress folder\n');
+    process.stdout.write('skip - Overview heights and ticker states: set GHCA_REAL_WP to the disposable site\'s WordPress folder\n');
   }
 
   // ---------- Overview: a long group name wraps instead of being cut off ----------

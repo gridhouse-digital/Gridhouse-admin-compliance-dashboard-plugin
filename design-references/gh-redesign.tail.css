@@ -954,9 +954,8 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
 @media (min-width: 720px) {
   :is(.ghca-ui, #ghca-ui-scope) .gh-ov .gh-kpi--overview > .gh-stat { padding-top: 22px; padding-bottom: 24px; gap: 8px; }
 }
-/* The Announcements card keeps its own height (heading + three notes) instead of stretching to the row's height,
-   which left blank space below the list. */
-:is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 > .gh-ovp-ann { align-self: start; }
+/* Equal card heights: the Announcements card stretches with the row like the board's other Overview cards (the
+   shrink-to-content rule was removed). dashboard.js fills each capped list with whole items up to its card's height. */
 /* An announcement's menu opens upward when it would be cut off at the bottom of the scrolling list. */
 :is(.ghca-ui, #ghca-ui-scope) .gh-ann-menu.gh-ann-menu--up { top: auto; bottom: calc(100% + 4px); }
 :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-grp-n, :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-ann-t, :is(.ghca-ui, #ghca-ui-scope) .gh-ovp--3 .gh-ann-m { overflow-wrap: anywhere; }

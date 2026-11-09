@@ -71,13 +71,16 @@ $overview = GHCA_ACD_Redesign::render_from_model( array(
 	'health' => $health,
 	'groups' => $groups,
 	'certificates' => array( 'issued' => 8, 'recent' => 4, 'missing' => 1 ),
-	'bulletin_html' => GHCA_ODP_UI::ticker( array(
-		'state' => 'fresh',
-		'library_url' => 'library.html',
-		'items' => array(
-			array( 'id' => 'synthetic-notice', 'url' => 'bulletin.html', 'published_at' => '2026-11-01T15:00:00Z', 'date_label' => 'Nov 1', 'headline' => 'Synthetic headline for the ticker' ),
-		),
-	) ),
+	// GHCA_PREVIEW_TICKER: empty | unavailable | cached-empty | two (two synthetic items); default one synthetic item.
+	'bulletin_html' => GHCA_ODP_UI::ticker( (static function (): array {
+		$one  = array( 'id' => 'synthetic-notice', 'url' => 'bulletin.html', 'published_at' => '2026-11-01T15:00:00Z', 'date_label' => 'Nov 1', 'headline' => 'Synthetic headline for the ticker' );
+		$mode = (string) getenv( 'GHCA_PREVIEW_TICKER' );
+		if ( 'empty' === $mode ) { return array( 'state' => 'empty', 'library_url' => 'library.html', 'items' => array() ); }
+		if ( 'unavailable' === $mode ) { return array( 'state' => 'unavailable', 'library_url' => 'library.html', 'items' => array() ); }
+		if ( 'cached-empty' === $mode ) { return array( 'state' => 'cached', 'library_url' => 'library.html', 'items' => array() ); }
+		if ( 'two' === $mode ) { return array( 'state' => 'fresh', 'library_url' => 'library.html', 'items' => array( $one, array_merge( $one, array( 'id' => 'synthetic-second', 'headline' => 'Second synthetic headline for the ticker' ) ) ) ); }
+		return array( 'state' => 'fresh', 'library_url' => 'library.html', 'items' => array( $one ) );
+	})() ),
 	'announcements_html' => '<section class="gh-card"><h2>Announcements</h2><p>No announcements yet.</p></section>',
 	'panels' => array( 'ghca-tab-employees' => '<p>Existing employees table.</p>' ),
 	'drawer_html' => GHCA_ODP_UI::drawer( array( 'library_url' => 'library.html' ) ) . GHCA_ODP_UI::payload_script( array( 'payload' => array(

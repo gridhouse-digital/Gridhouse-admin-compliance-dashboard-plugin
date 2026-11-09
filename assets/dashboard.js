@@ -2187,21 +2187,61 @@
     body.setAttribute('role', 'region');
     body.setAttribute('aria-label', body.getAttribute('data-ghca-ovp-label') || 'Scrollable list');
   }
+  // Equal card heights (desktop): where the grid stretches a card taller than its capped list (Announcements beside a
+  // taller Compliance by group, or the other way round), the list shows as many more WHOLE items as fit in the
+  // card. Its height never exceeds the room the card already has, so the row height does not change, nothing is
+  // clipped and nothing of a next item shows. Short lists stay as they are. Stacked layouts do not stretch cards,
+  // so they keep the base caps.
+  function ghcaOvpFill(body) {
+    if (!body.classList.contains('gh-ovp-scroll') || !body.clientWidth) return;
+    var card = body.closest('.gh-card');
+    if (!card) return;
+    var items = body.querySelectorAll(body.getAttribute('data-ghca-ovp-items') || ':scope > *');
+    var bTop = body.getBoundingClientRect().top;
+    var cs = getComputedStyle(card);
+    var room = card.getBoundingClientRect().bottom - (parseFloat(cs.borderBottomWidth) || 0) - (parseFloat(cs.paddingBottom) || 0) - bTop;
+    if (room <= body.getBoundingClientRect().height + 1) return; // the card is not taller than the list
+    var fit = 0, edge = 0;
+    for (var i = 0; i < items.length; i++) {
+      var bottom = items[i].getBoundingClientRect().bottom - bTop + body.scrollTop;
+      if (bottom > room + 0.5) break;
+      fit = i + 1; edge = bottom;
+    }
+    if (fit >= items.length) {
+      // Everything fits once the card's height is used: no scroll region needed.
+      body.style.maxHeight = '';
+      body.classList.remove('gh-ovp-scroll');
+      body.removeAttribute('tabindex'); body.removeAttribute('role'); body.removeAttribute('aria-label');
+      return;
+    }
+    body.style.maxHeight = Math.floor(edge) + 'px';
+  }
+  function ghcaOvpLayout(grid) {
+    var bodies = Array.prototype.slice.call(grid.querySelectorAll('[data-ghca-ovp-cap]'));
+    var kept = bodies.map(function (b) { return b.scrollTop; });
+    bodies.forEach(function (b) { ghcaOvpCap(b); });   // 1. base caps: 6 group rows, 3 notes
+    bodies.forEach(function (b) { ghcaOvpFill(b); });  // 2. use the height the equal-height row gives each card
+    bodies.forEach(function (b, i) { if (kept[i]) { b.scrollTop = kept[i]; } });
+  }
   function initOverviewCaps() {
-    document.querySelectorAll('.ghca-ui [data-ghca-ovp-cap]').forEach(function (body) {
+    document.querySelectorAll('.ghca-ui .gh-ovp').forEach(function (grid) {
+      if (!grid.querySelector('[data-ghca-ovp-cap]')) return;
       var lastW = -1;
-      var measure = function () { lastW = body.clientWidth; ghcaOvpCap(body); };
-      measure();
-      // Re-measure when the width changes (resize, layout switch, the Overview tab becoming visible) or when the
-      // list is re-rendered (an announcement added, edited or deleted).
+      var run = function () { lastW = grid.clientWidth; ghcaOvpLayout(grid); };
+      run();
+      // Re-measure when the width changes (resize, layout switch, the Overview tab becoming visible), when a list is
+      // re-rendered (an announcement added, edited or deleted) and once web fonts have loaded.
       if (window.ResizeObserver) {
-        new ResizeObserver(function () { if (body.clientWidth !== lastW) { measure(); } }).observe(body);
+        new ResizeObserver(function () { if (grid.clientWidth !== lastW) { run(); } }).observe(grid);
       } else {
-        window.addEventListener('resize', measure);
+        window.addEventListener('resize', run);
       }
       if (window.MutationObserver) {
-        new MutationObserver(function () { measure(); }).observe(body, { childList: true, subtree: true, characterData: true });
+        grid.querySelectorAll('[data-ghca-ovp-cap]').forEach(function (body) {
+          new MutationObserver(run).observe(body, { childList: true, subtree: true, characterData: true });
+        });
       }
+      if (document.fonts && document.fonts.ready) { document.fonts.ready.then(run); }
     });
   }
 

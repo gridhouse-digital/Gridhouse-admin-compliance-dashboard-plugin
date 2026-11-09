@@ -151,10 +151,14 @@ How it behaves:
   - **The ⋯ menu** of an announcement opens upward when it would be cut off at the bottom of the list.
   - The phone layout keeps the same caps.
 - **KPI strip (requested: "a little height"):** on desktop and tablet the tiles have 22px top and 24px bottom padding and an 8px gap, up from 16px, 18px and 4px. At 1440 they are 133px tall. The phone keeps its compact 12px tiles.
-- **No blank space under Announcements (corrected after `10161f1`, requested):**
-  - **The card keeps its own height.** It used to stretch to the row's height, which the taller Compliance by group card sets, and that left blank space under the list. It now ends with the list.
-  - **The caps end exactly at the last visible item.** They previously included the body's bottom padding, which let the top of the next note (or group row) show.
-  - Measured on the real site: 3 complete notes, nothing of the fourth, and 1 px between the list and the card's bottom edge at every width. The heading stays fixed, and the agency-coloured scrollbar is unchanged.
+- **Equal card heights on desktop (corrected after `74a0a3d`, requested):** the Announcements card is again exactly as tall as Compliance by group.
+  - **The shrink-to-content rule from `74a0a3d` is removed,** so the card stretches with the row as the board intends.
+  - **How the caps and equal heights work together:** each list first takes its base cap (6 group rows, 3 notes) and the row height follows from that. Where the row then makes a card taller than its list, the list shows more **whole** items, as many as fit. It never goes past the room the card already has, so the row does not grow.
+  - **The trade-off:** nothing is clipped, nothing of a next item shows, and no padding is added. When a list overflows, the space left under it is always smaller than the next item, because a taller next note does not fit.
+    - On the test site at 1440, with 8 groups and 6 notes, both cards are 520 px. They show 7 whole group rows (11 px left over) and 3 whole notes (109 px left over: the fourth note is taller than that).
+    - Equal heights with exactly whole items in both lists is not possible in general, because items differ in height. This is the version without clipping.
+  - **Stacked tablet and phone layouts** do not stretch cards, so they keep exactly 6 rows and 3 notes. Short lists are shown whole and are not scroll regions.
+  - **Unchanged:** headings stay fixed, only the list bodies scroll, and the agency-coloured scrollbars and the keyboard regions are as before.
 - **Long group names:** names wrap in full instead of being cut off with an ellipsis. Long unbroken words break only as a last resort. In the reference layout, a 112-character name takes 3 lines at 1920, 4 at 1440 and 5 at 1280. Bar, % and status stay inside the card.
 - **Long announcements** wrap inside the card, and the ⋯ control stays usable.
 - **Container:** 1480px wide, as requested mid-slice; unchanged.
@@ -174,6 +178,16 @@ How it behaves:
   - the legacy dashboard (redesign off) has no redesigned viewer, so its previews are unchanged too.
 - **Stacking:** the viewer now uses the certificate overlay's level in the dashboard's overlay ladder (100006: above the documents list at 100005, below toasts), so it opens above "View all documents". Escape closes only the viewer.
 - **Escaping:** values placed in attributes of the client-rendered list are attribute-escaped, quotes included.
+
+## 9. ODP ticker for an empty feed (after `74a0a3d`, requested)
+
+- **The problem on Isoke:** Isoke's cached feed holds zero bulletins, and `GHCA_ODP_UI::ticker()` returned no HTML for that "empty" state, so the ticker disappeared.
+- **The fix:** it now stays on screen with "No ODP bulletins right now." as a status message, with the "ODP Bulletin" label and the "All bulletins" link, and no track or pause control. A feed with no current items and no other state is treated the same way.
+- **Unchanged:**
+  - **Other states:** unavailable, cached and offline keep their own messages, and a populated feed renders exactly as before.
+  - **Content:** no example bulletins are added and nothing is published.
+  - **The feed and access:** the feed endpoint and the access checks are untouched.
+- `data-gh-ticker-state` (`items`, `empty`, `unavailable`, `cached`, `offline`) marks the state for tests.
 
 ## Decisions and dependencies to report
 

@@ -4,15 +4,24 @@
  * synthetic groups, each with one synthetic employee, and five announcements, so Compliance by group has 8 rows and
  * Announcements has 5 notes. Synthetic data only. Refuses to run anywhere but a ghca_test* database.
  *
- *   php tests/real-site/overview-overflow.php /path/to/wp add|remove
+ *   php tests/real-site/overview-overflow.php /path/to/wp add|remove|notes-off
+ *
+ * notes-off removes only the overflow announcements (the extra groups stay), for the short-list checks.
  */
 $ghca_wp_root = rtrim( (string) ( $argv[1] ?? '' ), '/' );
 $ghca_mode    = (string) ( $argv[2] ?? '' );
 $_SERVER['HTTP_HOST'] = 'localhost';
 require $ghca_wp_root . '/wp-load.php';
-if ( ! defined( 'GHCA_DISPOSABLE_TEST_SITE' ) || 0 !== strpos( DB_NAME, 'ghca_test' ) || ! in_array( $ghca_mode, array( 'add', 'remove' ), true ) ) {
-	fwrite( STDERR, "refusing: not a disposable ghca_test site, or no add|remove\n" );
+if ( ! defined( 'GHCA_DISPOSABLE_TEST_SITE' ) || 0 !== strpos( DB_NAME, 'ghca_test' ) || ! in_array( $ghca_mode, array( 'add', 'remove', 'notes-off' ), true ) ) {
+	fwrite( STDERR, "refusing: not a disposable ghca_test site, or no add|remove|notes-off\n" );
 	exit( 1 );
+}
+if ( 'notes-off' === $ghca_mode ) {
+	foreach ( get_posts( array( 'post_type' => 'ghca-announce', 'numberposts' => -1, 'post_status' => 'any', 's' => 'Synthetic overflow note' ) ) as $a ) {
+		wp_delete_post( $a->ID, true );
+	}
+	echo "notes-off\n";
+	exit( 0 );
 }
 $tracked = array_map( 'intval', (array) get_option( 'ghca_acd_tracked_groups', array() ) );
 $extra   = array();

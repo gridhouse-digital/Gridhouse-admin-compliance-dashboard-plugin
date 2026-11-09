@@ -279,3 +279,15 @@ With `GHCA_REAL_WP` set, `browser-real-site9.cjs` temporarily gives one syntheti
 ```bash
 node tests/browser-drawer-documents.cjs [screenshot-dir]
 ```
+
+ODP ticker states. `tests/test-odp-ticker-states.php` (unit) and `tests/browser-odp-ticker.cjs` (synthetic Overview at 1440, 834 and 390) check that the ticker stays visible for an empty feed. They also check that unavailable, cached and populated feeds are unchanged:
+
+```bash
+php tests/test-odp-ticker-states.php
+```
+
+```bash
+node tests/browser-odp-ticker.cjs [screenshot-dir]
+```
+
+On the disposable site, `browser-real-site9.cjs` (with `GHCA_REAL_WP`) uses `tests/real-site/odp-feed-cache.php empty|clear`. That sets a verified zero-bulletin feed cache (Isoke's state) or removes the cache (unavailable). It adds no bulletins and leaves the cache cleared afterwards.

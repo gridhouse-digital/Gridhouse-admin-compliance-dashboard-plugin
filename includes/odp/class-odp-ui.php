@@ -86,10 +86,12 @@ final class GHCA_ODP_UI {
 	public static function ticker( array $model ): string {
 		$items = isset( $model['items'] ) && is_array( $model['items'] ) ? $model['items'] : array();
 		$state = (string) ( $model['state'] ?? 'empty' );
-		if ( ! $items && 'empty' === $state ) {
-			return '';
+		// A feed with no current bulletins keeps the ticker on screen with its own message (it used to disappear).
+		// Cached, offline and unavailable keep their distinct messages; a populated feed is unchanged.
+		if ( ! $items && ! in_array( $state, array( 'cached', 'offline', 'unavailable' ), true ) ) {
+			$state = 'empty';
 		}
-		$html  = '<section class="gh-ticker" data-gh-ticker aria-label="' . esc_attr__( 'ODP Bulletin', 'ghca-acd' ) . '">';
+		$html  = '<section class="gh-ticker" data-gh-ticker data-gh-ticker-state="' . esc_attr( $items ? 'items' : $state ) . '" aria-label="' . esc_attr__( 'ODP Bulletin', 'ghca-acd' ) . '">';
 		$html .= '<span class="gh-ticker-lbl">' . self::icon( 'megaphone' ) . esc_html__( 'ODP Bulletin', 'ghca-acd' ) . '</span>';
 		if ( $items ) {
 			$html .= '<div class="gh-ticker-vp"><ul class="gh-ticker-track" style="list-style:none;margin:0">';
