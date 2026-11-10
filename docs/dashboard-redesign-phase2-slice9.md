@@ -189,6 +189,21 @@ How it behaves:
   - **The feed and access:** the feed endpoint and the access checks are untouched.
 - `data-gh-ticker-state` (`items`, `empty`, `unavailable`, `cached`, `offline`) marks the state for tests.
 
+## 10. Review follow-ups (after `3628587`)
+
+Found in a review of the announcements code:
+- **Removed the dormant BuddyBoss notification code.** `process_buddyboss_notifications()` and `format_buddypress_notifications()`, with their commented-out hooks and `do_action`, are gone.
+  - **Why it mattered:** it was switched off, but it would have notified every user with the `caregiver` or `nurse` role about every new announcement, whatever its audience ("Admins only" and group announcements included). Its link also ignored the configured employee-dashboard page.
+  - **No behaviour change:** nothing called it.
+- **The confirmation after a legacy-form edit reports the real audience.** The legacy form sends no audience, and the stored audience was correctly kept. But the success message ("Who sees it: …") was built from the default, so editing an "Admins only" or group announcement from that form said "Employees and admins". It now reports the stored audience.
+- **Docs:** the employee plugin's repository is no longer described as unavailable. Its redesign was reported on `feature/dashboard-redesign` (not checked from here). The plan's "Slice 9 — Employee plugin" is renamed, because this repository's Slice 9 was the certificates work.
+- **Tests:** `integration-slice8` grows from 36 to 40 checks:
+  - a legacy-form edit of a group announcement reports "Group: …";
+  - a legacy-form edit of an "Admins only" announcement stays Admins only and reports "Admins only";
+  - a new legacy announcement reports "Employees and admins";
+  - the notification code is gone.
+  - Against the previous code, three of the new checks fail.
+
 ## Decisions and dependencies to report
 
 1. **Outside certificates:** approved outside certificates live in the external-evidence store, not in this list. Showing them here (with Source "Outside" and a source filter) needs a decision on scope and on whether they belong in ZIPs. Until then Source is LearnDash only.

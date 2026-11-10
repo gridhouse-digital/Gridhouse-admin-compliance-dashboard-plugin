@@ -20,8 +20,6 @@ final class GHCA_ACD_Announcements {
     add_action( 'wp_ajax_ghca_acd_save_announcement', array( __CLASS__, 'ajax_save_announcement' ) );
     add_action( 'wp_ajax_ghca_acd_delete_announcement', array( __CLASS__, 'ajax_delete_announcement' ) );
     add_action( 'wp_ajax_ghca_acd_get_announcements', array( __CLASS__, 'ajax_get_announcements' ) );
-    // add_action( 'ghca_acd_new_announcement_published', array( __CLASS__, 'process_buddyboss_notifications' ), 10, 3 );
-    // add_filter( 'bp_notifications_get_notifications_for_user', array( __CLASS__, 'format_buddypress_notifications' ), 10, 5 );
   }
 
   /** Announcement type slugs supported by the dashboard. */
@@ -488,59 +486,18 @@ final class GHCA_ACD_Announcements {
       }
     }
 
-    // if ( $announce_id === 0 ) {
-    //   do_action( 'ghca_acd_new_announcement_published', $post_id, $title, $body );
-    // }
+    // The legacy form sends no audience, so an edit from it keeps the stored audience (above); the confirmation must
+    // report that stored audience, not the default.
+    if ( ! $has_audience && $announce_id > 0 ) {
+      $audience = self::sanitize_audience( (string) get_post_meta( $post_id, 'ghca_announce_audience', true ) ?: 'all' );
+      $group_id = 'group' === $audience ? (int) get_post_meta( $post_id, 'ghca_announce_group', true ) : 0;
+    }
 
     wp_send_json_success( array(
       'html'    => self::render_announcement_list_html( self::requested_format() ),
       'message' => $announce_id > 0 ? __( 'Announcement updated.', 'ghca-acd' ) : __( 'Announcement published.', 'ghca-acd' ),
       'audience' => self::audience_label( $audience, $group_id ),
     ) );
-  }
-
-  public static function process_buddyboss_notifications( $post_id, $title, $body ) {
-    if ( ! function_exists( 'bp_notifications_add_notification' ) ) {
-      return;
-    }
-
-    $employee_roles = apply_filters( 'ghca_acd_employee_roles', array( 'caregiver', 'nurse' ) );
-
-    $users = get_users( array(
-      'role__in' => $employee_roles,
-      'fields'   => 'ID',
-    ) );
-
-    foreach ( $users as $user_id ) {
-      bp_notifications_add_notification( array(
-        'user_id'           => $user_id,
-        'item_id'           => $post_id,
-        'secondary_item_id' => get_current_user_id(),
-        'component_name'    => 'custom',
-        'component_action'  => 'new_announcement',
-        'date_notified'     => bp_core_current_time(),
-        'is_new'            => 1,
-      ) );
-    }
-  }
-
-  public static function format_buddypress_notifications( $action, $item_id, $secondary_item_id, $total_items, $format = 'string' ) {
-    if ( 'new_announcement' === $action ) {
-      $title = get_the_title( $item_id );
-      $link  = site_url( '/employee-dashboard/' );
-
-      $text = sprintf( __( 'New Compliance Announcement: %s', 'ghca-acd' ), $title );
-
-      if ( 'string' === $format ) {
-        return '<a href="' . esc_url( $link ) . '">' . esc_html( $text ) . '</a>';
-      } else {
-        return array(
-          'text' => $text,
-          'link' => $link
-        );
-      }
-    }
-    return $action;
   }
 
   /** Deletes an admin announcement, then returns the refreshed list. */

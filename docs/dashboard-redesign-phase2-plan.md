@@ -63,9 +63,10 @@ the whole ODP set: `ODP-Drawer-Admin`, `ODP-Drawer-Employee`,
 
 ### Remaining in the employee plugin — 10 boards
 
-Repository identified: **`gridhouse-digital/Gridhouse-employee-compliance-dashboard-plugin`**
-(public, last pushed 2026-07-13). Not attached to this session; nothing has been
-read from or written to it. Boards: `EmpChrome`, `Emp-Home`, `Emp-Courses`,
+Repository: **`gridhouse-digital/Gridhouse-employee-compliance-dashboard-plugin`**.
+Update (November 10, 2026): the repository is available, and its redesign was
+reported to be on the `feature/dashboard-redesign` branch. That work happens in
+that repository; this plan was not checked against it. Boards: `EmpChrome`, `Emp-Home`, `Emp-Courses`,
 `Emp-Certificates`, `Emp-Handbook`, `Emp-Policies`, `M-Emp-Home`,
 `M-Emp-Courses`, `M-Emp-Policy`, `M-Emp-Certs`.
 
@@ -193,10 +194,12 @@ URLs and bookmarks. Two options:
 Unsaved-changes and save-failed behaviour already exists in
 `assets/settings-console.js`; those two boards are a restyle, not new logic.
 
-### Slice 9 — Employee plugin (separate repository)
+### Employee plugin (separate repository; not one of this repository's slices)
 
-Not started until this repository's slices are accepted and the employee repo is
-attached to a session. The ODP employee boards are already served by this
+This was planned here as "Slice 9". This repository's own Slice 9 became the
+certificates work (`docs/dashboard-redesign-phase2-slice9.md`), so the employee
+plugin is no longer numbered as a slice of this repository. Its redesign is
+reported to be under way in its own repository (`feature/dashboard-redesign`). The ODP employee boards are already served by this
 plugin's ODP module and are not part of that work.
 
 ### Alternative order
@@ -339,9 +342,10 @@ Needed before the slices they affect:
    `wp-admin.css` are present). Without them the per-agency OKLCH derivation
    cannot be ported faithfully. Affects slice 8 (Branding). Everything else is
    unblocked.
-2. **Employee plugin repository access.** Identified as
-   `gridhouse-digital/Gridhouse-employee-compliance-dashboard-plugin`. Not
-   attached to this session. Needed only for slice 9.
+2. **Employee plugin repository.** Resolved:
+   `gridhouse-digital/Gridhouse-employee-compliance-dashboard-plugin` is
+   available, with its redesign reported on `feature/dashboard-redesign`
+   (November 10, 2026). Its work is tracked there, not as a slice here.
 3. **LearnDash, BuddyBoss and Elementor.** Not installed in the development
    environment. Isolation is currently argued by selector weight plus a
    simulated hostile stylesheet, which is weaker than a real render. Either

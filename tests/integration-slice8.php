@@ -79,11 +79,16 @@ check( false !== strpos( (string) $r['data']['html'], 'Group: ' . $groups[0]->po
 // A legacy save (no audience field) keeps the stored audience.
 $r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => $post->ID, 'title' => 'S8 group note, edited', 'type' => 'update' ) );
 check( ! empty( $r['success'] ) && 'group' === get_post_meta( $post->ID, 'ghca_announce_audience', true ), 'a save from the legacy form keeps the stored audience' );
+check( 'Group: ' . $groups[0]->post_title === (string) ( $r['data']['audience'] ?? '' ), 'the confirmation after a legacy-form edit reports the stored audience ("Group: …"), not the default' );
 $r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => 0, 'title' => 'S8 legacy new', 'type' => 'update' ) );
 $legacy = get_posts( array( 'post_type' => 'ghca-announce', 'title' => 'S8 legacy new', 'post_status' => 'any' ) )[0] ?? null;
 check( $legacy && 'all' === get_post_meta( $legacy->ID, 'ghca_announce_audience', true ), 'a new announcement from the legacy form is for employees and admins' );
+check( 'Employees and admins' === (string) ( $r['data']['audience'] ?? '' ), 'its confirmation says "Employees and admins"' );
 $r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => $post->ID, 'title' => 'S8 group note, edited', 'type' => 'update', 'audience' => 'admins' ) );
 check( 'admins' === get_post_meta( $post->ID, 'ghca_announce_audience', true ) && '' === get_post_meta( $post->ID, 'ghca_announce_group', true ), 'changing to Admins only drops the stored group' );
+$r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_save_announcement' ), array( 'announce_id' => $post->ID, 'title' => 'S8 admins note, legacy edit', 'type' => 'update' ) );
+check( ! empty( $r['success'] ) && 'admins' === get_post_meta( $post->ID, 'ghca_announce_audience', true ) && 'Admins only' === (string) ( $r['data']['audience'] ?? '' ), 'an "Admins only" announcement edited from the legacy form stays Admins only, and the confirmation says "Admins only" (it used to say "Employees and admins")' );
+check( ! method_exists( 'GHCA_ACD_Announcements', 'process_buddyboss_notifications' ) && ! method_exists( 'GHCA_ACD_Announcements', 'format_buddypress_notifications' ) && ! has_action( 'ghca_acd_new_announcement_published' ), 'the dormant BuddyBoss notification code (which ignored the audience) is gone' );
 // Delete works and is permission-checked.
 wp_set_current_user( $viewer->ID );
 $r = ajax( array( 'GHCA_ACD_Announcements', 'ajax_delete_announcement' ), array( 'announce_id' => $post->ID ) );

@@ -27,7 +27,7 @@ REST responses send `Cache-Control: private, no-store`. Browser calls that use t
 
 List responses contain only that context’s audience filter. Do not store them in a shared cache. The server cache stores the full validated feed in the option `ghca_odp_feed_cache` and filters per request.
 
-The employee plugin should not register `/odp-bulletins`. This plugin owns those routes. Return something other than `ghca-acd` from `ghca_odp_route_owner` to opt out. There is no employee-plugin repository in this workspace. Existing hooks that stay as they are: page slug `employee-dashboard`, branding selector `.ghca-ecd`, and `ghca_employee_support_email`.
+The employee plugin should not register `/odp-bulletins`. This plugin owns those routes. Return something other than `ghca-acd` from `ghca_odp_route_owner` to opt out. The employee plugin lives in its own repository, `gridhouse-digital/Gridhouse-employee-compliance-dashboard-plugin`. Its redesign was reported (November 10, 2026) to be on its `feature/dashboard-redesign` branch; that repository is not part of this one, and this note was not checked against it. Existing hooks that stay as they are: page slug `employee-dashboard`, branding selector `.ghca-ecd`, and `ghca_employee_support_email`.
 
 ## Cache
 
