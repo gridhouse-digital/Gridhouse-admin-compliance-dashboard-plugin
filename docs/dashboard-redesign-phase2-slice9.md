@@ -297,13 +297,13 @@ All three are fixed as described under "Deletion outcomes" and "Database errors"
 
 | | |
 | --- | --- |
-| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-3628587.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
-| Commit | `362858744dbef397f8966b8ec7d07e22612a430c` |
-| Size | 742,475 bytes |
-| SHA-256 | `b822b6a36f47348a049cc9182042e79165c440d558c00430f4f88c75d15b1a58` |
-| External BUILD.txt SHA-256 | `454652fc91f1c33d7016b41571ea5e6ac6cf07042058630a4eeba56497d02d16` |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-9a92da1.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `9a92da10db48386d570869cfa2ead7d576312537` |
+| Size | 741,965 bytes |
+| SHA-256 | `ac8c1dd719642cccc2f3f31ac68504db76f6af2a3f4046ab785f48f2e29945f1` |
+| External BUILD.txt SHA-256 | `06cca0222140c0573600889682937c091061e1d2a149f83acabf30daa38b3844` |
 | Manifest | `BUILD.txt`, inside the archive and alongside it: all 145 runtime files with their SHA-256 |
-| Supersedes | `74a0a3d` (installed on Isoke) |
+| Supersedes | `3628587` (prepared, not installed) |
 | Deployed builds | Isoke: `74a0a3d`. Akansoh staging: `10161f1`. See `docs/staging-builds.md`. |
 
 **Verification (counts measured before BUILD.txt was written):**
@@ -312,12 +312,12 @@ All three are fixed as described under "Deletion outcomes" and "Database errors"
 - `php -l` passes on every PHP file.
 - No tests or test stubs are in the package.
 - The disposable site, running these exact files, passed:
-  - `integration-slice9` (90 checks) and `integration-slice8` (36 checks);
+  - `integration-slice8` (40 checks) and `integration-slice9` (90 checks);
   - `integration-packet-ready` (29), `integration-bulk-recovery` (29) and the other integration suites;
   - `browser-real-site9` (59 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
 - At this commit:
-  - every synthetic browser suite passes, including `browser-odp-ticker` (15), `browser-drawer-documents` (26) and `browser-slice9` (112);
-  - all 83 unit test files pass, including `test-odp-ticker-states` (15).
+  - every synthetic browser suite passes;
+  - all 83 unit test files pass.
 
 **Not installed anywhere.**
 
