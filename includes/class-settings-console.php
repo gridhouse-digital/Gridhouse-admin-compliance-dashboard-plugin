@@ -22,6 +22,8 @@ final class GHCA_Settings_Console {
     public static function page(): string {
         $raw = $_GET['page'] ?? '';
         if ( ! is_admin() || ! is_string( $raw ) ) { return ''; }
+        // The redesigned settings screen replaces this console while the redesign switch is on.
+        if ( class_exists( 'GHCA_ACD_Redesign_Settings' ) && '' !== GHCA_ACD_Redesign_Settings::page() ) { return ''; }
         $page = sanitize_key( wp_unslash( $raw ) );
         foreach ( self::groups() as $links ) {
             foreach ( $links as $key => $label ) {

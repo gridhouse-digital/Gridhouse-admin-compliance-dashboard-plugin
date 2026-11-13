@@ -51,6 +51,7 @@ require_once __DIR__ . '/includes/class-audit-mapping.php';
 require_once __DIR__ . '/includes/class-audit-calculator.php';
 require_once __DIR__ . '/includes/class-training-year.php';
 require_once __DIR__ . '/includes/class-training-year-review.php';
+require_once __DIR__ . '/includes/class-redesign-settings.php';
 require_once __DIR__ . '/includes/class-audit-export.php';
 require_once __DIR__ . '/includes/class-audit-pdf.php';
 require_once __DIR__ . '/includes/class-audit-pdf-jobs.php';
@@ -110,6 +111,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     GHCA_Audit_Export::init();
     GHCA_Audit_PDF::init();
     GHCA_ACD_Training_Year_Review::init();
+    GHCA_ACD_Redesign_Settings::init();
     GHCA_ACD_Audit_UI::init();
     GHCA_ACD_Messaging_Schema::init();
     GHCA_ACD_Messaging_Worker::init();
