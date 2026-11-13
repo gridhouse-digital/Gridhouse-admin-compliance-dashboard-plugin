@@ -76,3 +76,22 @@ wp ghca-acd training-year-review --user=<admin login> --format=csv > training-ye
 - Real LearnDash data was not used (stand-ins have no enrolments, so status changes from course data are untested on a real catalogue).
 - WP-CLI is not installed in the test environment, so `wp ghca-acd training-year-review` was not run. It reuses the same `build()`/`csv_rows()` as the page.
 - The § 6100.143 role list follows the regulation text and ODP's 2026 reminder as found online. The agency should confirm which of its job titles map to 24 or 12 hours.
+
+## Package
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-2.0.0-rc.1-f774878.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `f774878e0d281b9de17985d171ce50fee537a3bd` |
+| Size | 770,342 bytes |
+| SHA-256 | `15675524dca957c9b2e7b0495b4815f40a848fcd7aa4fd3ccb5a1c0131a9855a` |
+| External BUILD.txt SHA-256 | `8d8ca2ded2a562f730a53a738aa4d6a4aa2bbeae6af952a3d06f836b223fbc12` |
+| Manifest | 151 runtime files with SHA-256, inside the archive and alongside it |
+| Supersedes | `eeec7da` (prepared, not installed) |
+
+**Verification:**
+- `unzip -t` clean.
+- Every file matches the commit and the tested site, every hash is in the manifest, `php -l` passes, and no tests are in the package.
+- Counts were measured on the committed files: integration-training-year 25, integration-packet-layout 39, integration-packet-ready 29, browser-settings-redesign 15, test-training-year 36, and 84 unit test files.
+
+**Not installed anywhere.** Install with the rules off, run the dry run on each site, then enable. Ship as one release; no partial deploys.
