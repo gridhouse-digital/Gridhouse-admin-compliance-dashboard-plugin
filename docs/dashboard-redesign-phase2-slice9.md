@@ -351,27 +351,28 @@ All three are fixed as described under "Deletion outcomes" and "Database errors"
 
 | | |
 | --- | --- |
-| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-9a92da1.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
-| Commit | `9a92da10db48386d570869cfa2ead7d576312537` |
-| Size | 741,965 bytes |
-| SHA-256 | `ac8c1dd719642cccc2f3f31ac68504db76f6af2a3f4046ab785f48f2e29945f1` |
-| External BUILD.txt SHA-256 | `06cca0222140c0573600889682937c091061e1d2a149f83acabf30daa38b3844` |
-| Manifest | `BUILD.txt`, inside the archive and alongside it: all 145 runtime files with their SHA-256 |
-| Supersedes | `3628587` (prepared, not installed) |
+| File | `Gridhouse-admin-compliance-dashboard-1.7.3-rc.8-eeec7da.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `eeec7da70a05a3091ac3bc0bf589765c0b5ca2fe` |
+| Size | 750,332 bytes |
+| SHA-256 | `a8d054b7669b8f7e4aa664c188953016f0c88c8e5ec65053dc9d0a26be8a3f64` |
+| External BUILD.txt SHA-256 | `c90b405a08e496f8b2215ef852de6c89d64aecffd494ccd73f26eca1467e78a8` |
+| Manifest | `BUILD.txt`, inside the archive and alongside it: all 146 runtime files with their SHA-256 |
+| Supersedes | `9a92da1` (prepared, not installed) |
 | Deployed builds | Isoke: `74a0a3d`. Akansoh staging: `10161f1`. See `docs/staging-builds.md`. |
 
 **Verification (counts measured before BUILD.txt was written):**
 - `unzip -t` reports no errors.
-- Every packaged file matches the commit byte for byte and the files tested on the disposable site. Every hash is in the manifest. The BUILD.txt inside matches the one alongside.
+- Every packaged file matches the commit byte for byte and the files tested on the disposable site. Every hash is in the manifest. The BUILD.txt alongside is a short header followed by the BUILD.txt inside.
 - `php -l` passes on every PHP file.
 - No tests or test stubs are in the package.
 - The disposable site, running these exact files, passed:
-  - `integration-slice8` (40 checks) and `integration-slice9` (90 checks);
-  - `integration-packet-ready` (29), `integration-bulk-recovery` (29) and the other integration suites;
-  - `browser-real-site9` (59 checks) and `browser-real-site` (67 checks), each under Twenty Twenty-Four and under Twenty Twenty-Two.
+  - `integration-packet-layout` (39 checks, new) and `integration-packet-ready` (29);
+  - `integration-slice8` (40), `integration-slice9` (90), `integration-bulk-recovery` (29) and the other integration suites.
+- Both sample packets also open and render in Chromium's PDF viewer.
 - At this commit:
-  - every synthetic browser suite passes;
+  - `browser-slice9`, `browser-slice8`, `browser-slice7`, `browser-drawer-documents` and `browser-odp-ticker` pass;
   - all 83 unit test files pass.
+- **Not re-run:** `browser-real-site9` and `browser-real-site`. There was no UI change; they passed on `9a92da1`.
 
 **Not installed anywhere.**
 

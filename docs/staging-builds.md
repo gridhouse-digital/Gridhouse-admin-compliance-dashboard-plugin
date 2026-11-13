@@ -6,7 +6,8 @@ One place for what each staging site runs. Update it whenever a build is install
 
 | Build | Status | Date | Notes |
 | --- | --- | --- | --- |
-| `1.7.3-rc.8-9a92da1` | Prepared, not installed | | Review follow-ups: dormant BuddyBoss notification code removed (it ignored the announcement audience); the legacy-form edit confirmation reports the stored audience; docs. Recommended for prod in place of `3628587`. |
+| `1.7.3-rc.8-eeec7da` | Prepared, not installed | | Print layout for the ODP Annual and Orientation audit packets (board "Print: Orientation audit packet"); OLTL unchanged. Recommended for testing, then prod, in place of `9a92da1`. |
+| `1.7.3-rc.8-9a92da1` | Prepared, not installed | | Review follow-ups: dormant BuddyBoss notification code removed (it ignored the announcement audience); the legacy-form edit confirmation reports the stored audience; docs. Superseded by `eeec7da`. |
 | `1.7.3-rc.8-3628587` | Prepared, not installed. Superseded by the build above | | Equal Overview card heights (Announcements matches Compliance by group; whole items only; internal scrolling) and the ODP ticker kept visible for an empty feed ("No ODP bulletins right now."). `docs/dashboard-redesign-phase2-slice9.md`. |
 | `1.7.3-rc.8-74a0a3d` | **Installed** (current on Isoke) | Install date not recorded here | Drawer Documents PDF previews in the redesigned viewer; Announcements card shrunk to its content (reverted in the build above, requested). Installed by the site owner; the assistant did not install it. On Isoke the cached ODP feed holds zero bulletins, so this build shows no ticker at all (fixed in the build above). |
 
