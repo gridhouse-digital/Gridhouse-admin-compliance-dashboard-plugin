@@ -1400,6 +1400,33 @@ final class GHCA_ACD_Data_Provider {
     }
   }
 
+  /**
+   * Tracked employee ids (active and inactive) visible to the current user, without the dashboard aggregate or its
+   * transient: nothing is written. For the training-year dry run.
+   *
+   * @return array<int>
+   */
+  public static function review_employee_ids(): array {
+    $ids = array_values( array_unique( array_filter( array_map( 'intval', self::get_employee_user_ids() ) ) ) );
+    return array_values( array_filter( $ids, array( __CLASS__, 'is_tracked_employee' ) ) );
+  }
+
+  /**
+   * The previous (pre-training-year) dashboard cycle for one employee, as "M j, Y – M j, Y": the 365-day block from
+   * the earliest of registration and group enrollment that contains today. '' when it falls back to the fixed date.
+   */
+  public static function legacy_cycle_label( int $user_id ): string {
+    $start = self::get_platform_start_timestamp( $user_id );
+    if ( ! $start ) {
+      return '';
+    }
+    $days_on = (int) floor( max( 0, time() - $start ) / DAY_IN_SECONDS );
+    $cycle   = (int) floor( $days_on / GHCA_Admin_Compliance_Dashboard::CYCLE_DAYS );
+    $from    = $start + ( $cycle * GHCA_Admin_Compliance_Dashboard::CYCLE_DAYS * DAY_IN_SECONDS );
+    $to      = $from + ( GHCA_Admin_Compliance_Dashboard::CYCLE_DAYS * DAY_IN_SECONDS );
+    return wp_date( 'M j, Y', $from ) . ' – ' . wp_date( 'M j, Y', $to );
+  }
+
   /** @return array<string,mixed> */
   private static function get_compliance_cycle( int $user_id ): array {
     if ( self::training_year_rules() ) {

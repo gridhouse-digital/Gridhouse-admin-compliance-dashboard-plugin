@@ -86,7 +86,8 @@ $unset = calculate();
 check( 'in_progress' === $unset['annual_status'] && 24 === $unset['required_annual_hrs'] && false === GHCA_ACD_Training_Year::requirement( 900001 )['set'], 'rules on, requirement not set: 24 hours is assumed' );
 check( 'compliant' === GHCA_Audit_Calculator::annual_status( 12, time(), time() + 9, 12 ) && 'in_progress' === GHCA_Audit_Calculator::annual_status( 11.99, time(), time() + 9, 12 ) && 'compliant' === GHCA_Audit_Calculator::annual_status( 24, time(), time() + 9 ), 'annual_status(): the threshold is a parameter; 24 by default' );
 foreach ( GHCA_ACD_Training_Year::requirements() as $key => $choice ) {
-	check( in_array( $choice[1], array( 12, 24 ), true ) && ( 24 === $choice[1] ) === in_array( $key, array( 'dsp', 'life_sharer', 'dsp_supervisor' ), true ), 'requirement ' . $key . ' is ' . $choice[1] . ' h' );
+	$want = in_array( $key, array( 'dsp', 'life_sharer', 'dsp_supervisor' ), true ) ? 24 : ( 0 === strpos( $key, 'none_' ) ? 0 : 12 );
+	check( $want === $choice[1] && ( 0 !== $want || false !== strpos( $choice[0], 'Not required — ' ) ), 'override ' . $key . ' is ' . $choice[1] . ' h' . ( 0 === $want ? ' and names its exception' : '' ) );
 }
 $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
 \GHCA_Audit_PDF::render_cover( $pdf, $on, 'annual' );

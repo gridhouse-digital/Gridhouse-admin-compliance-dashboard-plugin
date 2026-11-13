@@ -35,6 +35,56 @@
     });
   }
 
+  // A field in a hidden section must never block a save silently: on "invalid", show that section, say what is
+  // wrong, and focus the field (the browser's own message cannot show on a hidden field).
+  var groups = {};
+  try { groups = JSON.parse(shell.getAttribute('data-ghca-set-groups') || '{}') || {}; } catch (err) { groups = {}; }
+  var invalidBox = shell.querySelector('[data-ghca-set-invalid]');
+  var reported = false;
+  var showGroupFor = function (block) {
+    var key = Object.keys(groups).find(function (k) { return groups[k].anchors.indexOf(block.id) !== -1; });
+    if (!key) { block.hidden = false; return ''; }
+    Array.prototype.forEach.call(body.querySelectorAll('.ghca-settings-section, #ghca-packet-selection'), function (el) {
+      el.hidden = groups[key].anchors.indexOf(el.id) === -1;
+      if (!el.hidden && el.tagName === 'DETAILS') { el.open = true; }
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('form'), function (f) {
+      var submit = f.querySelector(':scope > .submit');
+      if (submit && f.querySelector('.ghca-settings-section')) { submit.hidden = !Array.prototype.some.call(f.querySelectorAll('.ghca-settings-section'), function (x) { return !x.hidden; }); }
+    });
+    var title = shell.querySelector('.ghca-set-title');
+    if (title) { title.textContent = groups[key].label; }
+    Array.prototype.forEach.call(shell.querySelectorAll('.ghca-set-nav-i'), function (a) {
+      if (a.getAttribute('href') === groups[key].url) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
+    });
+    if (window.history && window.history.replaceState) { window.history.replaceState(null, '', groups[key].url); }
+    return groups[key].label;
+  };
+  body.addEventListener('invalid', function (e) {
+    var field = e.target;
+    if (reported || !field || !field.closest) { return; }
+    reported = true;
+    window.setTimeout(function () { reported = false; }, 0);
+    var block = field.closest('.ghca-settings-section, #ghca-packet-selection');
+    var section = '';
+    if (block && (block.hidden || block.closest('[hidden]'))) { section = showGroupFor(block); }
+    if (block && !section) {
+      var owner = Object.keys(groups).find(function (k) { return groups[k].anchors.indexOf(block.id) !== -1; });
+      section = owner ? groups[owner].label : '';
+    }
+    if (block && block.tagName === 'DETAILS') { block.open = true; }
+    var row = field.closest('tr');
+    var name = row && row.querySelector('th') ? row.querySelector('th').textContent.trim() : (field.getAttribute('aria-label') || field.name || '');
+    if (invalidBox) {
+      invalidBox.querySelector('[data-ghca-set-invalid-msg]').textContent = (section ? section + ' — ' : '') + name + ': ' + field.validationMessage;
+      invalidBox.hidden = false;
+    }
+    window.setTimeout(function () {
+      field.focus();
+      if (field.reportValidity) { field.reportValidity(); }
+    }, 0);
+  }, true);
+
   // Narrow screens: the section picker navigates.
   var pick = shell.querySelector('[data-ghca-set-pick]');
   if (pick) { pick.addEventListener('change', function () { window.location.href = pick.value; }); }

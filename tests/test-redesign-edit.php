@@ -84,10 +84,9 @@ $legacy = edit_form()['data']['html'];
 edit_env( $with );
 $board = edit_form( array( 'ghca_ui' => 'board' ) )['data']['html'];
 
-// With the training-year rules off, the redesigned form adds only the annual requirement (settable before they are
-// enabled); the legacy form gains it only once they are on. Otherwise the field names are identical.
-check( array_values( array_diff( names( $board ), array( 'training_requirement' ) ) ) === names( $legacy ), 'the redesigned form submits the legacy form\'s field names, plus only training_requirement' );
-check( in_array( 'training_requirement', names( $board ), true ) && ! in_array( 'training_requirement', names( $legacy ), true ), 'rules off: the annual requirement is in the redesigned form only' );
+// With the training-year rules off, both forms are exactly as before (no annual-requirement override field).
+check( names( $board ) === names( $legacy ), 'rules off: the redesigned form submits exactly the same field names as the legacy form' );
+check( ! in_array( 'training_requirement', names( $board ), true ) && ! in_array( 'training_requirement', names( $legacy ), true ), 'rules off: neither form shows the annual-requirement override' );
 GHCA_ACD_Training_Year::set_override( true );
 edit_env( $with );
 $legacy_on = edit_form()['data']['html'];

@@ -902,7 +902,7 @@ final class GHCA_ACD_AJAX {
       'employment_type' => $employment_type,
       'employment_type_label' => $employment_type_label,
       'employment_options' => $employment_options,
-      'training_requirement' => GHCA_ACD_Training_Year::requirement( $user_id )['key'],
+      'training_requirement' => (string) get_user_meta( $user_id, GHCA_ACD_Training_Year::REQUIREMENT_META, true ),
       'actor_login' => $actor_login,
     );
   }
@@ -932,9 +932,9 @@ final class GHCA_ACD_AJAX {
           </div>
 <?php if ( GHCA_ACD_Training_Year::enabled() ) : ?>
           <div class="ghca-acd__edit-field">
-            <label class="ghca-acd__edit-label" for="ghca-edit-training-requirement"><?php esc_html_e( 'Annual training requirement (§ 6100.143)', 'ghca-acd' ); ?></label>
+            <label class="ghca-acd__edit-label" for="ghca-edit-training-requirement"><?php esc_html_e( 'Annual training requirement override (§ 6100.143)', 'ghca-acd' ); ?></label>
             <select class="ghca-acd__edit-input" id="ghca-edit-training-requirement" name="training_requirement">
-              <option value=""><?php esc_html_e( 'Not set — 24 h assumed', 'ghca-acd' ); ?></option>
+              <option value=""><?php esc_html_e( 'No override (use the role map)', 'ghca-acd' ); ?></option>
               <?php foreach ( GHCA_ACD_Training_Year::requirements() as $value => $choice ) : ?>
                 <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $training_requirement, $value ); ?>><?php echo esc_html( $choice[0] ); ?></option>
               <?php endforeach; ?>

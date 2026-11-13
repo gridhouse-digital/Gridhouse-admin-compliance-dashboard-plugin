@@ -48,12 +48,15 @@ final class GHCA_ACD_Redesign_Edit {
 			$opts .= '<option value="' . esc_attr( (string) $value ) . '"' . selected( $sel_type, (string) $value, false ) . '>' . esc_html( (string) $label ) . '</option>';
 		}
 		$h .= self::field( 'ghca-edit-employment-type', __( 'Employment type', 'ghca-acd' ), '<select class="gh-select" id="ghca-edit-employment-type" name="employment_type">' . $opts . '</select>' );
-		// Annual hours requirement (24 or 12). Settable before the training-year rules are enabled, so the dry run can use it.
-		$req  = '<option value="">' . esc_html__( 'Not set — 24 h assumed', 'ghca-acd' ) . '</option>';
-		foreach ( GHCA_ACD_Training_Year::requirements() as $value => $choice ) {
-			$req .= '<option value="' . esc_attr( (string) $value ) . '"' . selected( (string) ( $m['training_requirement'] ?? '' ), (string) $value, false ) . '>' . esc_html( (string) $choice[0] ) . '</option>';
+		// Per-employee override of the role map's annual hours. Only with the training-year rules on; with them off
+		// the form is exactly as before (the role map on the Training year page is what the dry run uses).
+		if ( GHCA_ACD_Training_Year::enabled() ) {
+			$req = '<option value="">' . esc_html__( 'No override (use the role map)', 'ghca-acd' ) . '</option>';
+			foreach ( GHCA_ACD_Training_Year::requirements() as $value => $choice ) {
+				$req .= '<option value="' . esc_attr( (string) $value ) . '"' . selected( (string) ( $m['training_requirement'] ?? '' ), (string) $value, false ) . '>' . esc_html( (string) $choice[0] ) . '</option>';
+			}
+			$h .= self::field( 'ghca-edit-training-requirement', __( 'Annual training requirement override (§ 6100.143)', 'ghca-acd' ), '<select class="gh-select" id="ghca-edit-training-requirement" name="training_requirement">' . $req . '</select>', __( 'Overrides the hours from this employee’s job role.', 'ghca-acd' ) );
 		}
-		$h .= self::field( 'ghca-edit-training-requirement', __( 'Annual training requirement (§ 6100.143)', 'ghca-acd' ), '<select class="gh-select" id="ghca-edit-training-requirement" name="training_requirement">' . $req . '</select>', __( 'Sets the annual hours this employee must complete: 24 or 12.', 'ghca-acd' ) );
 		$h .= self::field( 'ghca-edit-role', __( 'Primary role', 'ghca-acd' ), '<input id="ghca-edit-role" class="gh-input is-readonly" value="' . esc_attr( '' !== (string) $m['edit_role_label'] ? (string) $m['edit_role_label'] : '—' ) . '" readonly />' );
 		$h .= self::field( 'ghca-edit-group', __( 'Group', 'ghca-acd' ), '<input id="ghca-edit-group" class="gh-input is-readonly" value="' . esc_attr( '' !== (string) $m['edit_group'] ? (string) $m['edit_group'] : '—' ) . '" readonly />' );
 		$h .= '<div class="gh-field"><span class="gh-label">' . esc_html__( 'Employment status', 'ghca-acd' ) . '</span><span class="gh-st gh-st--lg gh-st--' . ( $suspend ? 'suspended' : 'active' ) . ' gh-dr-chip">' . esc_html( (string) $m['edit_status'] ) . '</span></div>';

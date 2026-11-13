@@ -26,7 +26,7 @@ const getOpt = (name) => php('echo wp_json_encode(get_option("' + name + '", nul
 const setOpt = (name, json) => php('$v = json_decode(\'' + json.replace(/'/g, "\\'") + '\', true); null === $v ? delete_option("' + name + '") : update_option("' + name + '", $v);');
 
 (async () => {
-  const saved = { redesign: getOpt('ghca_acd_ui_redesign'), days: getOpt('ghca_new_hire_deadline_days'), cycle: getOpt('ghca_acd_annual_cycle') };
+  const saved = { redesign: getOpt('ghca_acd_ui_redesign'), days: getOpt('ghca_new_hire_deadline_days'), cycle: getOpt('ghca_acd_annual_cycle'), warn: getOpt('ghca_acd_warning_days') };
   setOpt('ghca_acd_ui_redesign', '1');
   const browser = await chromium.launch();
   try {
@@ -93,6 +93,29 @@ const setOpt = (name, json) => php('$v = json_decode(\'' + json.replace(/'/g, "\
         assert.equal(getOpt('ghca_acd_annual_cycle'), saved.cycle);
         ok('a rejected value shows "Settings not saved" with the reason, and the stored policy is unchanged');
         if (shots) { await page.screenshot({ path: path.join(shots, 'settings-error-1440.png') }); }
+        // An invalid value in a hidden section must not block the save silently.
+        await page.evaluate(() => { document.getElementById('ghca_acd_warning_days').value = '999'; });
+        await page.fill('#ghca_new_hire_deadline_days', '32');
+        const urlBefore = page.url();
+        await page.click('[data-ghca-set-save]');
+        await page.waitForSelector('[data-ghca-set-invalid]:not([hidden])');
+        const inv = await page.evaluate(() => ({
+          title: document.querySelector('.ghca-set-title').textContent,
+          shown: !document.getElementById('ghca-lifespans').hidden,
+          trainingHidden: document.getElementById('ghca-training').hidden,
+          focused: document.activeElement && document.activeElement.id,
+          msg: document.querySelector('[data-ghca-set-invalid-msg]').textContent,
+          current: (document.querySelector('.ghca-set-nav-i[aria-current="page"]') || {}).textContent,
+          url: location.search,
+        }));
+        assert.equal(inv.title, 'Course validity & packets'); assert.equal(inv.shown, true); assert.equal(inv.trainingHidden, true);
+        assert.equal(inv.focused, 'ghca_acd_warning_days'); assert.match(inv.msg, /Course validity & packets — Warning window \(days\): ./);
+        assert.equal(inv.current.trim(), 'Course validity & packets'); assert.match(inv.url, /section=validity/);
+        assert.equal(Number(JSON.parse(getOpt('ghca_new_hire_deadline_days'))), 31);
+        ok('an invalid value in a hidden section: the save stops visibly, the section with the field opens, the reason is shown and the field is focused (' + inv.msg + ')');
+        if (shots) { await page.screenshot({ path: path.join(shots, 'settings-invalid-1440.png') }); }
+        await page.goto(SITE + '/wp-admin/admin.php?page=ghca-acd-settings&section=training');
+        await page.waitForSelector('#ghca-set-shell.is-ready');
         // Discard reloads without saving.
         await page.fill('#ghca_new_hire_deadline_days', '45');
         await Promise.all([page.waitForNavigation(), page.click('[data-ghca-set-discard]')]);
@@ -152,6 +175,7 @@ const setOpt = (name, json) => php('$v = json_decode(\'' + json.replace(/'/g, "\
     setOpt('ghca_acd_ui_redesign', saved.redesign);
     setOpt('ghca_new_hire_deadline_days', saved.days);
     setOpt('ghca_acd_annual_cycle', saved.cycle);
+    setOpt('ghca_acd_warning_days', saved.warn);
     await browser.close();
   }
   process.stdout.write('PASS: ' + n + ' settings redesign browser checks (disposable site, Chromium; settings restored)\n');

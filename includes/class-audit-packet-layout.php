@@ -326,7 +326,7 @@ final class GHCA_Audit_Packet_Layout {
 		$status = self::annual_status( $data );
 		return self::summary_box( array(
 			array( 'Annual window', esc_html( $range ) . '<br><span style="font-size:8pt;">Annual Cycle Rule: ' . esc_html( $cycle ) . '</span>' ),
-			array( 'Recorded hours', $hours . ' of ' . self::required( $data ) . ( '' !== (string) ( $data['required_annual_label'] ?? '' ) ? '<br><span style="font-size:8pt;">' . esc_html( (string) $data['required_annual_label'] ) . '</span>' : '' ) ),
+			array( 'Recorded hours', $hours . ( self::required( $data ) > 0 ? ' of ' . self::required( $data ) : ' (annual hours not required)' ) . ( '' !== (string) ( $data['required_annual_label'] ?? '' ) ? '<br><span style="font-size:8pt;">' . esc_html( (string) $data['required_annual_label'] ) . '</span>' : '' ) ),
 			array( '6100 topic hours', '<span style="font-size:16pt;"><strong>' . esc_html( self::hours( (float) ( $data['total_annual_hrs'] ?? 0 ) ) ) . '</strong></span> h' ),
 			array( $status[2], self::badge( $status[0], $status[1] ) ),
 		) );
@@ -595,7 +595,7 @@ final class GHCA_Audit_Packet_Layout {
 		$html = '<h2 style="font-size:13pt;">Gaps found</h2><table cellpadding="5" cellspacing="0" style="font-size:9.5pt;border:0.2mm solid #cccccc;"><tr><td>';
 		if ( ! $gaps ) {
 			$html .= $annual
-				? ( $reporting ? 'None recorded in this period.' : 'None. All annual areas are complete or not applicable, and recorded hours meet the ' . self::required( $data ) . '-hour requirement.' )
+				? ( $reporting ? 'None recorded in this period.' : ( self::required( $data ) > 0 ? 'None. All annual areas are complete or not applicable, and recorded hours meet the ' . self::required( $data ) . '-hour requirement.' : 'None. All annual areas are complete or not applicable; annual hours are not required for this employee.' ) )
 				: 'None. All orientation areas complete and dates verified.';
 		} else {
 			$html .= '<ul>';

@@ -81,6 +81,9 @@ $annual = array_merge( $base, array(
 	'raw_completed_courses' => array( $course( 900201, 'Synthetic Annual Person-Centered', 'person_centered', '2026-11-01', 6 ), $course( 900202, 'Synthetic Annual Abuse Prevention', 'abuse_prevention', '2026-11-02', 4 ), $course( 900203, 'Synthetic Annual Rights', 'individual_rights', '2026-11-03', 3 ) ),
 ) );
 
+// The employee plugin relies on this signature: (Fpdi $pdf, string $path, int &$total_pages, array $label = array()).
+$sig = ( new ReflectionMethod( 'GHCA_Audit_PDF', 'append_certificate' ) )->getParameters();
+check( 4 === count( $sig ) && 'setasign\\Fpdi\\Tcpdf\\Fpdi' === (string) $sig[0]->getType() && 'string' === (string) $sig[1]->getType() && 'int' === (string) $sig[2]->getType() && $sig[2]->isPassedByReference() && $sig[3]->isOptional() && ! $sig[3]->isPassedByReference(), 'append_certificate signature unchanged: Fpdi, string, int &$total_pages, optional $label' );
 foreach ( array( 'orientation' => $orientation, 'annual' => $annual ) as $tracker => $data ) {
 	// Certificates as the job would hold them: index => course key (one per course, plus one unmatched).
 	$keys = array();
@@ -94,7 +97,9 @@ foreach ( array( 'orientation' => $orientation, 'annual' => $annual ) as $tracke
 	$summary_pages = (int) $pdf->getPage();
 	$total = $summary_pages;
 	$label = array( $attachments[ count( $keys ) - 1 ]['label'], 'Synthetic Layout' );
+	$before_total = $total;
 	check( GHCA_Audit_PDF::append_certificate( $pdf, $cert_path, $total, $label ), "$tracker: a certificate is appended with its attachment label" );
+	check( $before_total + 1 === $total && $total === (int) $pdf->getNumPages(), "$tracker: append_certificate by-reference packet path: \$total_pages grows by the certificate's page count ($before_total → $total) and matches the packet" );
 	$out = wp_tempnam( 'ghca-layout-' . $tracker );
 	$pdf->Output( $out, 'F' );
 	$text  = (string) shell_exec( 'pdftotext -layout ' . escapeshellarg( $out ) . ' - 2>/dev/null' );

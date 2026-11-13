@@ -164,7 +164,16 @@ final class GHCA_ACD_Redesign_Settings {
 			}
 		}
 
-		$h  = '<div class="ghca-ui ghca-set-shell" id="ghca-set-shell" data-ghca-set-section="' . esc_attr( $current ) . '" data-ghca-set-anchors="' . esc_attr( implode( ' ', $anchors ) ) . '" data-ghca-set-label="' . esc_attr( $label ) . '">';
+		// Sections that share this page's form, so an invalid field in a hidden one can be shown (settings-redesign.js).
+		$groups = array();
+		foreach ( self::sections() as $items ) {
+			foreach ( $items as $key => $item ) {
+				if ( $item['page'] === $page && $item['anchors'] && self::can( $item ) ) {
+					$groups[ $key ] = array( 'label' => $item['label'], 'anchors' => $item['anchors'], 'url' => self::url( $key, $item ) );
+				}
+			}
+		}
+		$h  = '<div class="ghca-ui ghca-set-shell" id="ghca-set-shell" data-ghca-set-section="' . esc_attr( $current ) . '" data-ghca-set-anchors="' . esc_attr( implode( ' ', $anchors ) ) . '" data-ghca-set-label="' . esc_attr( $label ) . '" data-ghca-set-groups="' . esc_attr( (string) wp_json_encode( $groups ) ) . '">';
 		$h .= '<div class="gh-app" data-theme="' . esc_attr( GHCA_ACD_Settings::ui_theme() ) . '">';
 		$h .= '<div class="ghca-set-head"><span class="gh-eyebrow">' . esc_html__( 'Gridhouse Compliance · GHCA ACD', 'ghca-acd' ) . '</span><h1 class="gh-h1">' . esc_html__( 'Settings', 'ghca-acd' ) . '</h1>';
 		$h .= '<p class="gh-p gh-secondary gh-small">' . esc_html( sprintf( /* translators: %s: agency name */ __( 'Agency configuration for %s.', 'ghca-acd' ), wp_specialchars_decode( GHCA_Dashboard_Branding::get_org_name(), ENT_QUOTES ) ) ) . '</p></div>';
@@ -172,6 +181,7 @@ final class GHCA_ACD_Redesign_Settings {
 		$h .= '<div class="ghca-set-main" data-ghca-set-main>';
 		$h .= '<div class="gh-field ghca-set-pick"><label class="gh-label" for="ghca-set-pick">' . esc_html__( 'Section', 'ghca-acd' ) . '</label><select id="ghca-set-pick" class="gh-select" data-ghca-set-pick>' . $options . '</select></div>';
 		$h .= self::notices_html();
+		$h .= '<div class="gh-alert gh-alert--danger" role="alert" data-ghca-set-invalid hidden><div class="gh-alert-body"><span class="gh-alert-t">' . esc_html__( 'Settings not saved', 'ghca-acd' ) . '</span><p data-ghca-set-invalid-msg></p></div></div>';
 		$h .= '<h2 class="gh-h2 ghca-set-title">' . esc_html( $label ) . '</h2>';
 		$h .= '<div data-ghca-set-body></div>';
 		$h .= '</div></div>';
