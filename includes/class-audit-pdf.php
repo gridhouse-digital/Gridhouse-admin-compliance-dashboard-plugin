@@ -3,6 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/class-audit-packet-layout.php';
+
 final class GHCA_Audit_PDF {
 	const MAX_CERTIFICATES          = 40;
 	const MAX_CERTIFICATE_BYTES     = 8388608;
@@ -339,7 +341,17 @@ final class GHCA_Audit_PDF {
 
 		$pdf = self::create_document( $context['audit_data'] );
 		$pdf->AddPage();
-		self::render_cover( $pdf, $context['audit_data'], (string) $job['tracker'] );
+		// Attachment numbers (A-1, A-2 ...) follow the merge order below, so the cover can list and cite them.
+		$attachments = GHCA_Audit_Packet_Layout::attachment_labels( (array) ( $context['audit_data']['raw_completed_courses'] ?? array() ), (array) $job['course_keys'], count( $job['urls'] ) );
+		self::render_cover( $pdf, $context['audit_data'], (string) $job['tracker'], array(
+			'user_id'     => (int) $job['user_id'],
+			'group'       => (string) ( $context['employee_data']['group'] ?? '' ),
+			'attachments' => $attachments,
+		) );
+		$employee_name = trim( (string) ( $context['audit_data']['first_name'] ?? '' ) . ' ' . (string) ( $context['audit_data']['last_name'] ?? '' ) );
+		$label_for     = static function ( int $index ) use ( $attachments, $job, $employee_name ): array {
+			return 'oltl_training' === (string) $job['tracker'] || ! isset( $attachments[ $index ] ) ? array() : array( $attachments[ $index ]['label'], $employee_name );
+		};
 
 		$total               = count( $job['urls'] );
 		$total_pages         = $pdf->getPage();
@@ -366,7 +378,7 @@ final class GHCA_Audit_PDF {
 			}
 			while ( ! empty( $certificate_indexes[ $course_key ] ) ) {
 				$index = array_shift( $certificate_indexes[ $course_key ] );
-				if ( ! self::append_certificate( $pdf, GHCA_Audit_PDF_Jobs::cert_path( $job['job_id'], $index ), $total_pages ) ) {
+				if ( ! self::append_certificate( $pdf, GHCA_Audit_PDF_Jobs::cert_path( $job['job_id'], $index ), $total_pages, $label_for( (int) $index ) ) ) {
 					GHCA_Audit_PDF_Jobs::release_lock( $lock );
 					GHCA_Audit_PDF_Jobs::delete_job( $job['job_id'] );
 					wp_send_json_error( array( 'message' => __( 'A certificate was missing or unreadable at merge time. Packet generation was aborted - no partial packet was created.', 'ghca-acd' ) ) );
@@ -379,7 +391,7 @@ final class GHCA_Audit_PDF {
 			if ( isset( $appended[ $i ] ) ) {
 				continue;
 			}
-			if ( ! self::append_certificate( $pdf, GHCA_Audit_PDF_Jobs::cert_path( $job['job_id'], $i ), $total_pages ) ) {
+			if ( ! self::append_certificate( $pdf, GHCA_Audit_PDF_Jobs::cert_path( $job['job_id'], $i ), $total_pages, $label_for( $i ) ) ) {
 				// ABORT policy (defense in depth): every fetched cert must merge.
 				GHCA_Audit_PDF_Jobs::release_lock( $lock );
 				GHCA_Audit_PDF_Jobs::delete_job( $job['job_id'] );
@@ -541,7 +553,10 @@ final class GHCA_Audit_PDF {
 
 	/** Document setup: page format, metadata, margins. */
 	public static function create_document( array $audit_data ): \setasign\Fpdi\Tcpdf\Fpdi {
-		$pdf = new \setasign\Fpdi\Tcpdf\Fpdi( PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false );
+		// ODP Annual and Orientation packets print on US Letter (design board "Print: Orientation audit packet");
+		// the OLTL packet keeps the library default.
+		$format = 'oltl_training' === (string) ( $audit_data['packet_type'] ?? '' ) ? PDF_PAGE_FORMAT : 'LETTER';
+		$pdf = new \setasign\Fpdi\Tcpdf\Fpdi( PDF_PAGE_ORIENTATION, PDF_UNIT, $format, true, 'UTF-8', false );
 
 		// Set Document Info
 		$pdf->SetCreator( 'Gridhouse Compliance Dashboard' );
@@ -557,8 +572,15 @@ final class GHCA_Audit_PDF {
 		return $pdf;
 	}
 
-	/** Cover page (Compliance Matrix). Caller must AddPage() first. */
-	public static function render_cover( \setasign\Fpdi\Tcpdf\Fpdi $pdf, array $audit_data, string $tracker_type ): void {
+	/**
+	 * Cover and summary pages. Caller must AddPage() first. Annual and Orientation packets use the print layout in
+	 * GHCA_Audit_Packet_Layout ($context: user_id, group, attachments); the OLTL packet keeps its own cover.
+	 */
+	public static function render_cover( \setasign\Fpdi\Tcpdf\Fpdi $pdf, array $audit_data, string $tracker_type, array $context = array() ): void {
+		if ( 'oltl_training' !== $tracker_type ) {
+			GHCA_Audit_Packet_Layout::render( $pdf, $audit_data, $tracker_type, $context );
+			return;
+		}
 		$logo_source = GHCA_Dashboard_Branding::get_pdf_logo_source();
 		if ( $logo_source ) {
 			try {
@@ -576,247 +598,7 @@ final class GHCA_Audit_PDF {
 			$pdf->Cell( 0, 10, $agency_name, 0, 1, 'C' );
 			$pdf->Ln( 2 );
 		}
-		if ( 'oltl_training' === $tracker_type ) {
-			self::render_oltl_cover_body( $pdf, $audit_data );
-			return;
-		}
-
-		$pdf->SetFont( 'helvetica', 'B', 14 );
-		$pdf->Cell( 0, 10, 'Compliance Audit Packet', 0, 1, 'C' );
-
-		$pdf->Ln( 5 );
-
-		// Details block
-		$pdf->SetFont( 'helvetica', '', 10 );
-		$html = '
-		<table cellpadding="4" style="width: 100%; border: 1px solid #ddd;">
-			<tr>
-				<td width="30%"><strong>Employee:</strong></td>
-				<td width="70%">' . esc_html( $audit_data['first_name'] . ' ' . $audit_data['last_name'] ) . '</td>
-			</tr>
-			<tr>
-				<td width="30%"><strong>Role:</strong></td>
-				<td width="70%">' . esc_html( $audit_data['role'] ) . '</td>
-			</tr>
-			<tr>
-				<td><strong>Date of Hire (DOH):</strong></td>
-				<td>' . esc_html( $audit_data['doh'] ) . '</td>
-			</tr>
-			<tr>
-				<td><strong>First Service Date:</strong></td>
-				<td>' . esc_html( $audit_data['first_service_date'] ) . '</td>
-			</tr>
-			<tr>
-				<td><strong>Worked Alone Date:</strong></td>
-				<td>' . esc_html( $audit_data['worked_alone_date'] ) . '</td>
-			</tr>
-		</table>
-		<br><br>';
-
-		$reporting = ! empty( $audit_data['audit_period'] );
-		if ( $reporting ) {
-			$html .= '<h3>Audit Reporting Period — Training Evidence</h3><p><strong>Period reviewed (inclusive):</strong> ' . esc_html( $audit_data['start_date'] ) . ' to ' . esc_html( $audit_data['end_date'] ) . '</p>';
-		} elseif ( 'annual' === $tracker_type ) {
-			$cycle_name = GHCA_ACD_Settings::annual_cycle_label( (string) ( $audit_data['annual_cycle'] ?? '' ) );
-			$html .= '<h3>Annual ODP Requirements Matrix</h3>';
-			$html .= '<p><strong>Annual Cycle Rule:</strong> ' . esc_html( $cycle_name ) . '<br>';
-			$html .= '<strong>Window Reviewed:</strong> ' . esc_html( $audit_data['start_date'] ) . ' to ' . esc_html( $audit_data['end_date'] ) . '</p>';
-
-			$status_styles = array(
-				'compliant'    => array( '#dff0d8', 'Compliant' ),
-				'in_progress'  => array( '#fcf8e3', 'In Progress' ),
-				'noncompliant' => array( '#f2dede', 'Non-Compliant' ),
-				'missing_evidence' => array( '#fcf8e3', 'Missing Evidence — Review Required' ),
-				'needs_review' => array( '#fcf8e3', 'Needs Review — Topic Coverage Unresolved' ),
-			);
-			$status_style = $status_styles[ $audit_data['annual_status'] ] ?? $status_styles['in_progress'];
-			$status_heading = 'Overall Annual Status:';
-			if ( 'needs_review' === $audit_data['annual_status'] && ! empty( $audit_data['isp_manual_delivery'] ) && empty( $audit_data['evidence_issues'] ) && (float) $audit_data['total_hrs'] >= 24 ) {
-				$other_topics = array_intersect_key( $audit_data['category_statuses'] ?? array(), array_fill_keys( array( 'person_centered', 'abuse_prevention', 'individual_rights', 'reporting_incidents', 'behavior_supports' ), true ) );
-				if ( count( $other_topics ) === 5 && ! array_diff( $other_topics, array( 'Completed', 'Not applicable' ) ) ) {
-					// Report the split scope, without turning unverified ISP evidence into compliance.
-					$status_heading = 'Annual Training Summary:';
-					$status_style[1] = 'Recorded hours and other required topics met — ISP handled manually / in person';
-				}
-			}
-			$html .= '<div style="background-color: ' . $status_style[0] . '; padding: 10px; border: 1px solid #ccc;">
-				<strong>' . $status_heading . '</strong> ' . $status_style[1] . '
-			</div><br>';
-		} else {
-			$html .= '<h3>Orientation ODP Requirements Matrix</h3>';
-		}
-
-		if ( ! empty( $audit_data['evidence_issues'] ) ) {
-			$html .= '<p><strong>Evidence review required:</strong> Records with missing or invalid completion dates are excluded from credited hours and included certificates.</p><ul>';
-			foreach ( $audit_data['evidence_issues'] as $issue ) {
-				$html .= '<li>' . esc_html( $issue ) . '</li>';
-			}
-			$html .= '</ul>';
-		}
-
-		$requirement_hours = $audit_data['requirement_hours'] ?? array();
-		$is_annual_matrix = 'annual' === $tracker_type;
-		$format_hours = static function ( float $hours ): string {
-			return rtrim( rtrim( number_format( $hours, 2, '.', '' ), '0' ), '.' );
-		};
-		$hours_cell = static function ( string $category ) use ( $requirement_hours, $is_annual_matrix, $format_hours ): string {
-			$achieved = (float) ( $requirement_hours[ $category ]['achieved'] ?? 0 );
-			if ( $is_annual_matrix ) {
-				return $format_hours( $achieved ) . ' hrs';
-			}
-			// Orientation: time spent is informational, so no target is implied.
-			return $achieved > 0 ? $format_hours( $achieved ) . ' hrs' : '0 hrs';
-		};
-		$date_cell = static function ( string $category ) use ( $requirement_hours ): string {
-			$date = (int) ( $requirement_hours[ $category ]['date'] ?? 0 );
-			return $date > 0 ? wp_date( 'm/d/Y', $date ) : '-';
-		};
-		$matrix_row = static function ( string $label, string $met, string $category ) use ( $hours_cell, $date_cell, $is_annual_matrix, $audit_data ): string {
-			$met = GHCA_Audit_Calculator::category_display( $audit_data, $category );
-			if ( $is_annual_matrix && 'individual_plan' === $category && ! empty( $audit_data['agency_training']['isp'] ) && ( $audit_data['category_statuses']['individual_plan'] ?? '' ) === 'Completed — manually verified' ) {
-				$met = 'Completed in person — agency confirmed';
-			} elseif ( $is_annual_matrix && 'individual_plan' === $category && ! empty( $audit_data['isp_manual_delivery'] ) ) {
-				$met = 'Handled manually / in person';
-			} elseif ( $is_annual_matrix && 'individual_plan' === $category && ! empty( $audit_data['external_isp_evidence'] ) ) {
-				$met = $audit_data['category_statuses'][ $category ];
-			}
-			$cells = '<td>' . esc_html( $label ) . '</td><td>' . esc_html( $met ) . '</td>';
-			if ( ! $is_annual_matrix ) {
-				$cells .= '<td>' . esc_html( $date_cell( $category ) ) . '</td>';
-			}
-			return '<tr>' . $cells . '<td>' . esc_html( $hours_cell( $category ) ) . '</td></tr>';
-		};
-
-		$html .= '<table border="1" cellpadding="5" style="width: 100%; border-collapse: collapse;">
-			<tr style="background-color: #f1f1f1;">
-				<th width="' . ( $is_annual_matrix ? '50' : '40' ) . '%"><strong>Requirement Area</strong></th>
-				<th width="' . ( $is_annual_matrix ? '20' : '15' ) . '%"><strong>Topic Status</strong></th>'
-				. ( $is_annual_matrix ? '' : '<th width="20%"><strong>Completed On</strong></th>' ) .
-				'<th width="' . ( $is_annual_matrix ? '30' : '25' ) . '%"><strong>' . ( $is_annual_matrix ? 'Hours Counted Here' : 'Time Spent' ) . '</strong></th>
-			</tr>'
-			. $matrix_row( 'Person-Centered Practices', $audit_data['person_centered'], 'person_centered' )
-			. $matrix_row( 'Prevention of Abuse', $audit_data['abuse'], 'abuse_prevention' )
-			. $matrix_row( 'Individual Rights', $audit_data['rights'], 'individual_rights' )
-			. $matrix_row( 'Reporting Incidents', $audit_data['incidents'], 'reporting_incidents' );
-
-		if ( $is_annual_matrix ) {
-			$html .= $matrix_row( 'Behavior Supports', $audit_data['behavior'], 'behavior_supports' )
-				. $matrix_row( 'Implementation of Individual Plan (ISP)', $audit_data['isp'], 'individual_plan' );
-		} else {
-			$html .= $matrix_row( 'Job-related Knowledge', $audit_data['job_related'], 'job_related' );
-		}
-
-		if ( ! empty( $audit_data['agency_selected_courses'] ) || ! empty( $audit_data['communication_manual_delivery'] ) ) {
-			$html .= '<tr style="background-color:#f1f1f1"><td colspan="' . ( $is_annual_matrix ? '3' : '4' ) . '"><strong>Agency Mandated Training/compliance</strong></td></tr>';
-			if ( ! empty( $audit_data['communication_manual_delivery'] ) ) {
-				$confirmed = $audit_data['agency_training']['communication'] ?? array();
-				$html .= '<tr><td>Communication Profile Training</td><td>' . ( $confirmed ? 'Completed in person — agency confirmed' : 'Handled by agency — not yet confirmed' ) . '</td><td>' . esc_html( $format_hours( (float) ( $confirmed['hours'] ?? 0 ) ) ) . ' hrs</td></tr>';
-			}
-			foreach ( $audit_data['agency_selected_courses'] as $course ) {
-				$html .= '<tr><td>' . esc_html( $course['title'] ) . '</td><td>' . ( $course['included'] ? '' : 'No included evidence' ) . '</td>';
-				if ( ! $is_annual_matrix ) { $html .= '<td>' . ( $course['date'] ? esc_html( wp_date( 'm/d/Y', $course['date'] ) ) : '-' ) . '</td>'; }
-				$html .= '<td>' . esc_html( $format_hours( (float) $course['hours'] ) ) . ' hrs</td></tr>';
-			}
-		}
-		$html .= '</table>';
-		if ( $is_annual_matrix && ( ! empty( $audit_data['isp_manual_delivery'] ) || ! empty( $audit_data['agency_training']['isp'] ) ) ) {
-			$html .= '<p><strong>ISP training delivery:</strong> Supporting records are maintained by the agency and provided separately for audit.</p>';
-		} elseif ( $is_annual_matrix && ! empty( $audit_data['external_isp_evidence'] ) ) {
-			$html .= '<p><strong>ISP evidence to be supplied separately — agency review required</strong><br>' . esc_html( $audit_data['category_notes']['individual_plan'] ) . '</p>';
-		}
-		$html .= $reporting
-			? ''
-			: '<p style="font-size:9px">Topic status reflects mapped evidence, not independent verification of course content. Each course credits hours to its primary category only; additional covered topics may show Completed with zero hours counted here. Unmapped topics need review, not an automatic failure. Conditional applicability is reviewed by an administrator for this employee and period.</p>';
-		if ( ! $is_annual_matrix ) {
-			$html .= '<p style="font-size: 9px; color: #555;">Orientation is assessed on completion of each required content area and on the timing rules below. Time spent is recorded for reference and is not a regulatory threshold.</p>';
-		}
-		$html .= '<br><br>';
-
-		if ( 'annual' === $tracker_type ) {
-			$html .= '<table cellpadding="4" style="width: 100%; border: 1px solid #ddd;">
-				<tr>
-					<td width="70%"><strong>6100 topic training hours:</strong></td>
-					<td width="30%">' . esc_html( $audit_data['total_annual_hrs'] ) . '</td>
-				</tr>
-				<tr>
-					<td><strong>Additional training hours:</strong></td>
-					<td>' . esc_html( $audit_data['additional_hrs'] ) . '</td>
-				</tr>
-				<tr style="background-color: #f9f9f9;">
-					<td><strong>Total recorded training hours:</strong></td>
-					<td><strong>' . esc_html( $audit_data['total_hrs'] ) . '</strong></td>
-				</tr>
-			</table>';
-		} else {
-			$worked_color = ( strpos( $audit_data['worked_alone_compliant'], 'Violation' ) !== false ) ? 'red' : 'green';
-			if ( in_array( $audit_data['worked_alone_compliant'], array( 'Missing evidence', 'Not complete' ), true ) ) {
-				$worked_color = '#8a6d3b';
-			}
-			$html .= '<table cellpadding="4" style="width: 100%; border: 1px solid #ddd;">
-				<tr>
-					<td width="70%"><strong>Orientation Completion Date:</strong></td>
-					<td width="30%">' . esc_html( $audit_data['completion_date'] ) . '</td>
-				</tr>
-				<tr>
-					<td><strong>Completed within 30 days of verified date of hire?</strong></td>
-					<td>' . esc_html( $audit_data['completed_within_30'] ) . '</td>
-				</tr>
-				<tr>
-					<td><strong>Completed BEFORE working alone?</strong></td>
-					<td><strong style="color: ' . $worked_color . ';">' . esc_html( $audit_data['worked_alone_compliant'] ) . '</strong></td>
-				</tr>
-			</table>';
-			$program = (array) ( $audit_data['new_hire_program'] ?? array() );
-			if ( ! empty( $program['active'] ) ) {
-				$titles = static function ( array $items ): string {
-					return esc_html( implode( '; ', array_map( static function ( $item ) { return $item['title'] . ' (#' . (int) $item['course_id'] . ')'; }, $items ) ) );
-				};
-				$html .= '<p style="font-size: 9px;"><strong>New-hire program courses:</strong> '
-					. ( ! empty( $program['complete'] ) && empty( $program['missing_dates'] ) ? 'All required courses are complete.' : 'Not complete.' );
-				if ( ! empty( $program['outstanding'] ) ) {
-					$html .= '<br><strong>Outstanding:</strong> ' . $titles( $program['outstanding'] );
-				}
-				if ( ! empty( $program['missing_dates'] ) ) {
-					$html .= '<br><strong>Completed without a recorded date:</strong> ' . $titles( $program['missing_dates'] );
-				}
-				if ( ! empty( $program['unmapped_required'] ) ) {
-					$html .= '<br>Required by the new-hire program but not mapped to an ODP orientation topic (not shown in the topic table): ' . $titles( $program['unmapped_required'] );
-				}
-				$html .= '<br>The overall completion date is the last required new-hire course completion. The 30-day result runs from the verified date of hire (regulatory basis). The agency\'s new-hire program deadline'
-					. ( $program['deadline_date'] ? ' (' . esc_html( $program['deadline_date'] ) . ')' : '' )
-					. ' is an internal target of ' . (int) $program['deadline_days'] . ' days from program enrollment'
-					. ( $program['enrollment_date'] ? ' (' . esc_html( $program['enrollment_date'] ) . ')' : '' ) . ' and may differ.</p>';
-			}
-		}
-
-		if ( GHCA_ACD_Settings::include_packet_course_details() && ! empty( $audit_data['raw_completed_courses'] ) ) {
-			$pdf->writeHTML( $html, true, false, true, false, '' );
-			$pdf->AddPage();
-			$html = '<h3>Included Course Details</h3>
-			<table border="1" cellpadding="5" style="width: 100%; border-collapse: collapse;">
-				<thead>
-				<tr style="background-color: #f1f1f1;">
-					<th width="25%"><strong>Course</strong></th>
-					<th width="45%"><strong>Course Details</strong></th>
-					<th width="16%"><strong>Completed</strong></th>
-					<th width="14%"><strong>Credit Hrs Achieved</strong></th>
-				</tr>
-				</thead>
-				<tbody>';
-			foreach ( $audit_data['raw_completed_courses'] as $course ) {
-				$description = ! empty( $course['description'] ) ? esc_html( $course['description'] ) : '<span style="color: #777;">Not provided</span>';
-				$hours = rtrim( rtrim( number_format( (float) $course['credit_hours'], 2, '.', '' ), '0' ), '.' );
-				$html .= '<tr nobr="true">
-					<td width="25%"><strong>' . esc_html( $course['title'] ) . '</strong></td>
-					<td width="45%">' . $description . '</td>
-					<td width="16%">' . esc_html( wp_date( 'm/d/Y', (int) $course['date'] ) ) . '</td>
-					<td width="14%">' . esc_html( $hours ) . '</td>
-				</tr>';
-			}
-			$html .= '</tbody></table>';
-		}
-
-		$pdf->writeHTML( $html, true, false, true, false, '' );
+		self::render_oltl_cover_body( $pdf, $audit_data );
 	}
 
 	private static function render_oltl_cover_body( \setasign\Fpdi\Tcpdf\Fpdi $pdf, array $audit_data ): void {
@@ -868,7 +650,7 @@ final class GHCA_Audit_PDF {
 	}
 
 	/** Audit-facing description of an administrator manual entry, so packets distinguish it from signed Jotform submissions. */
-	private static function manual_entry_label( array $course ): string {
+	public static function manual_entry_label( array $course ): string {
 		$user   = get_userdata( (int) ( $course['entered_by'] ?? 0 ) );
 		$name   = $user ? (string) $user->display_name : ( '#' . (int) ( $course['entered_by'] ?? 0 ) );
 		$reason = trim( (string) ( $course['entry_reason'] ?? '' ) );
@@ -928,7 +710,8 @@ final class GHCA_Audit_PDF {
 	 *
 	 * @return bool false if the file is missing/malformed (caller decides policy).
 	 */
-	public static function append_certificate( \setasign\Fpdi\Tcpdf\Fpdi $pdf, string $path, int &$total_pages ): bool {
+	/** $label: optional [attachment label, employee name] stamped small at the top of each appended page. */
+	public static function append_certificate( \setasign\Fpdi\Tcpdf\Fpdi $pdf, string $path, int &$total_pages, array $label = array() ): bool {
 		if ( ! is_readable( $path ) ) {
 			return false;
 		}
@@ -951,6 +734,9 @@ final class GHCA_Audit_PDF {
 				$orientation = $size['width'] > $size['height'] ? 'L' : 'P';
 				$pdf->AddPage( $orientation, array( $size['width'], $size['height'] ) );
 				$pdf->useTemplate( $template_id, 0, 0, $size['width'], $size['height'] );
+				if ( $label ) {
+					GHCA_Audit_Packet_Layout::stamp_attachment( $pdf, (string) $label[0], (string) ( $label[1] ?? '' ), $page_no, (int) $page_count );
+				}
 			}
 			$total_pages += (int) $page_count;
 		} catch ( \Exception $e ) {

@@ -204,6 +204,58 @@ Found in a review of the announcements code:
   - the notification code is gone.
   - Against the previous code, three of the new checks fail.
 
+## 11. Audit packet print layout (after `9a92da1`, requested)
+
+The Annual and Orientation packets now follow the design board "Print: Orientation audit packet". The OLTL packet is unchanged. The new layout is in `includes/class-audit-packet-layout.php`; `GHCA_Audit_PDF::render_cover()` hands Annual and Orientation to it.
+
+**Page 1**
+- **Header:** the agency logo, or a monogram in the agency colour when there is no logo; the agency name; "ODP orientation audit packet" or "ODP annual audit packet" ("… reporting period" for a custom period). On the right: when it was generated, by whom, and "page 1 of N". N counts the summary pages only; certificates are numbered separately.
+- **Employee:** name, role and group. There is no employee ID in the data, so none is printed.
+- **Summary box, Orientation:**
+  - Verified start, with "Checked by {name}, {date}" from the employment record.
+  - Orientation completed.
+  - Days to complete: "21 of 30", or "Day N of 30, not complete".
+  - 30-day verdict: Within 30 days / Over 30 days / Not completed within 30 days / Not complete / Missing evidence.
+- **Summary box, Annual:**
+  - Annual window, with the cycle rule.
+  - Recorded hours "of 24".
+  - 6100 topic hours.
+  - Overall annual status. This includes the existing split ISP summary, which still never reads as compliant.
+- **Summary box, custom reporting period:** the period, the recorded hours and the 6100 topic hours. The result reads "Evidence report only — no compliance verdict", with no threshold.
+- **Areas table:** the same areas as before.
+  - Status is a symbol plus its word, and any recorded note (e.g. a not-applicable reason) is printed under it.
+  - The third column is the completion date (Orientation) or the hours counted (Annual).
+  - Evidence names the courses for that area, with their attachment numbers.
+  - Agency-mandated rows, the ISP notes, the evidence-review list and the existing disclaimers are kept word for word.
+- **Key dates, Orientation:**
+  - date of hire;
+  - completion date;
+  - the 30-day answer;
+  - first service date;
+  - worked-alone date, with "on/after" or "before orientation completion";
+  - the before-working-alone answer;
+  - "Account registered (not used for audit)".
+  - The new-hire program notes are kept.
+- **Hours and dates, Annual:** the existing hours lines, plus the date of hire and the first service date.
+- **Status footnote:** "Every status prints as a symbol plus its word … Colour is not needed to read this document."
+
+**Following pages**
+- **Running header:** agency · employee, "page n of N".
+- **Course records:** course, status, completed, time (Orientation) or hours (Annual), and certificate. Outside training is marked. Outstanding or undated new-hire program courses are listed as not complete or "No recorded date".
+- **Gaps found:** every open item from page 1. That means evidence issues, areas that are not Completed or Not applicable, agency rows without evidence, the overall annual status, the new-hire program, and the 30-day and working-alone answers. "None. All orientation areas complete and dates verified." prints only when there is nothing open. Annual uses its own wording.
+- **Attached certificates:** numbered A-1, A-2 … in the exact order the merge appends them. Each appended certificate page carries a small "Attachment A-n · {employee}" label in its top 6 mm.
+- **Included Course Details:** when the existing setting is on.
+- **Signature block:** "Reviewed by (name, title)" and "Date".
+
+**Other details**
+- **Paper:** Annual and Orientation summary pages are US Letter, as the board specifies. OLTL keeps the library default. Course detail pages (the existing per-course pages) are unchanged and still A4.
+- **Status symbols:** use TCPDF's DejaVu Sans when it is installed (it is in LearnDash's TCPDF), otherwise an ASCII mark.
+- **Fonts:** Helvetica, as before (the board's web fonts are not available to TCPDF).
+- **Unchanged:** the calculator, the packet snapshot check, certificate fetching and validation, grants, downloads, limits and the OLTL packet.
+- **Tests:**
+  - New `tests/integration-packet-layout.php` (39 checks, real TCPDF/FPDI, synthetic data; see Tests).
+  - Unit tests that matched the old cover's wording or markup were updated to the new layout, keeping the same facts: date format, "Overall annual status", the orientation completion and 30-day rows, and source checks for hours/time and the escaped employee name. They pass.
+
 ## Decisions and dependencies to report
 
 1. **Outside certificates:** approved outside certificates live in the external-evidence store, not in this list. Showing them here (with Source "Outside" and a source filter) needs a decision on scope and on whether they belong in ZIPs. Until then Source is LearnDash only.
@@ -237,6 +289,7 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 
 | Test | Result | Covers |
 | --- | --- | --- |
+| `tests/integration-packet-layout.php` (new) | 39 checks | Real TCPDF/FPDI on the test site: Annual and Orientation packets for a synthetic employee from synthetic audit data, plus one appended synthetic certificate, read back with `pdftotext`/`pdfinfo`. Covers: US Letter; the header (agency, packet name, generated time, the user, "page 1 of N"); running headers on later pages; the employee block with no invented ID; symbol-plus-word statuses; the summary figures (21 of 30, Within 30 days, Checked by …; 15.5 of 24, Overall annual status); missing and not-applicable symbols with the recorded reason; area evidence with attachment numbers; worked-alone and registration rows; course time in h/min; gaps listed, or "None" only when nothing is open; attachments numbered in merge order; the certificate page stamped "Attachment A-1"; the signature block. |
 | `tests/integration-slice9.php` (new) | 90 checks | ZIP building and private storage. Duplicate selections. Distinct and clashing file names. Archive name. Download refused without document access, with a bad nonce, with a malformed token, and for another administrator. Single use, owner-only. A fetch failure means no archive, with the failed items named. A non-PDF answer is a failure. The 20-item limit. Malformed selections. A real `group_leader` is refused for a selection with an out-of-scope certificate before any fetch, with a count only and no names, and can ZIP their own group's certificate. The preview endpoint refuses out-of-scope employees (403) and answers 404, never a file, when no certificate exists. The Certificates employee filter ignores out-of-scope ids. **Corrected build adds:**
   - **Archive failures:** a refused entry write, a refused close (half-written file), an entry silently missing and an entry with different bytes. Each gives an error, leaves no file (temporary files included) and no record, and is simulated with ZipArchive subclasses injected through a test-only seam.
   - **Read failures:** the read returns false, a short read and an empty read. Each gives a 500 JSON answer, never a 200; the file and record are removed and a retry gets 410. Simulated with an injected reader; a real disk read error was not produced.
@@ -266,6 +319,7 @@ The site uses the LearnDash stand-ins in `tests/real-site/`. They provide synthe
 
 ### Not verified
 
+- **Audit packet layout:** checked with real TCPDF and synthetic data only. Real LearnDash certificates, real employees, very long course lists, long agency names and other PDF viewers' rendering of the status symbols were not checked. No printer test.
 - **Staging:** nothing ran on Akansoh staging, under its BuddyBoss/Elementor theme, or with real people.
 - **LearnDash:** real LearnDash certificates were not used. The stand-ins have none, so the 200 path of the real endpoint, and real PDFs inside a real ZIP, were tested only with synthetic PDFs through the same code.
 - **Inline PDF display:** verified only in Chromium's built-in viewer, with synthetic PDFs (see Simulated, then real). Firefox, Safari and Edge, and real LearnDash certificates, were not checked.

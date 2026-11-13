@@ -142,7 +142,7 @@ namespace {
 		check( '' === calculate()['start_date'] && 'missing_evidence' === calculate()['annual_status'], 'Missing/invalid cycle never receives default anniversary assessment' );
 		$pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
 		\GHCA_Audit_PDF::render_cover( $pdf, calculate(), 'annual' );
-		check( strpos( $pdf->html, 'Annual Cycle Rule:</strong> Not configured' ) !== false && strpos( $pdf->html, 'Employee Hire Date' ) === false, 'Missing cycle must not be labelled as hire-date policy' );
+		check( strpos( $pdf->html, 'Annual Cycle Rule: Not configured' ) !== false && strpos( $pdf->html, 'Employee Hire Date' ) === false, 'Missing cycle must not be labelled as hire-date policy' );
 	}
 	$tz = new \DateTimeZone( 'America/Toronto' );
 	$hire = ( new \DateTimeImmutable( '2024-02-29', $tz ) )->getTimestamp();

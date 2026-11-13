@@ -21,8 +21,8 @@ check( '09/01/2025' === $report['start_date'] && '08/31/2026' === $report['end_d
 check( 'Recorded in period' === $report['category_statuses']['person_centered'], 'Topic reports evidence, not compliance' );
 check( 'No completion recorded in period' === $report['category_statuses']['individual_plan'], 'Missing records are disclosed without invented compliance' );
 $html = summary_html( $report );
-check( false !== strpos( $html, 'Audit Reporting Period' ) && false !== strpos( $html, '09/01/2025' ), 'Cover identifies selected range' );
-check( false === strpos( $html, 'Overall Annual Status:' ) && false === strpos( $html, '/ 24 Required' ), 'Arbitrary range does not get annual verdict or threshold' );
+check( false !== strpos( $html, 'Audit Reporting Period' ) && false !== strpos( $html, 'Sep 1, 2025' ) && false !== strpos( $html, 'Aug 31, 2026' ), 'Cover identifies selected range' );
+check( false === strpos( $html, 'Overall annual status' ) && false === strpos( $html, '/ 24 Required' ), 'Arbitrary range does not get annual verdict or threshold' );
 check( false === strpos( $html, 'not a frozen historical archive' ) && false === strpos( $html, 'Selected reporting dates only.' ) && false === strpos( $html, 'Employee applicability decisions from the current annual cycle' ), 'Client-requested explanatory paragraph omitted; reporting semantics unchanged' );
 check( false === strpos( $html, 'Topic coverage reflects mapped evidence' ), 'Custom report omits requested topic-coverage paragraph' );
 $legacy = calculate();
@@ -38,7 +38,7 @@ foreach ( array( $report, $legacy ) as $hours_data ) {
         check( false === strpos( $hours_html, '/ 24 Required' ), 'Recorded total is displayed without a threshold suffix' );
     }
 }
-check( false !== strpos( summary_html( $legacy ), 'Overall Annual Status:' ), 'Default-cycle annual assessment remains unchanged' );
+check( false !== strpos( summary_html( $legacy ), 'Overall annual status' ), 'Default-cycle annual assessment remains unchanged' );
 check( false === strpos( summary_html( $legacy, 'orientation' ), '6100 topic training hours:' ), 'Orientation keeps its own summary' );
 check( empty( $legacy['audit_period'] ) && 'reporting_only' !== $legacy['annual_status'], 'Default annual calculation remains separate' );
 foreach ( array( array(), array( 'start' => '2025-09-01' ), array( 'start' => array(), 'end' => '2026-08-31' ), array( 'start' => '2026-02-30', 'end' => '2026-08-31' ), array( 'start' => '2026-09-01', 'end' => '2026-08-31' ), array( 'start' => 'today', 'end' => '2026-08-31' ), array( 'start' => "2025-09-01\0", 'end' => '2026-08-31' ) ) as $bad ) {
