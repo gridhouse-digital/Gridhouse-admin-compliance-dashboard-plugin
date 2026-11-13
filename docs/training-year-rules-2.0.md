@@ -192,3 +192,24 @@ wp ghca-acd training-year-review --user=<admin login> --format=csv > training-ye
 - Counts were measured on the committed files: integration-training-year 25, integration-packet-layout 39, integration-packet-ready 29, browser-settings-redesign 15, test-training-year 36, and 84 unit test files.
 
 **Not installed anywhere.** Install with the rules off, run the dry run on each site, then enable. Ship as one release; no partial deploys.
+
+## Package (2.0.0-rc.2)
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-2.0.0-rc.2-11a7c64.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `11a7c64d11002242ade895eaa2eee93f1df02dc9` |
+| Size | 776,869 bytes |
+| SHA-256 | `6f42fddeea4252b6376b8486ffd011e417b3a3fa325b0a434ed7536d2925b02f` |
+| External BUILD.txt SHA-256 | `d9bc0c45adcab1b6fb1475bbea8a5cd479fc0ab6d3cd2507053f63e2c4f0658f` |
+| Tests archive (not installable) | `Gridhouse-admin-compliance-dashboard-2.0.0-rc.2-11a7c64-tests.zip`, 696,414 bytes, SHA-256 `d5d20b6a5b66b715ff29af120560c52108e358a6cacb19caf54ef6097152ecb6` (`tests/`, `docs/`, `tools/`, `TESTING.md` at the same commit) |
+| Supersedes | `f774878` (2.0.0-rc.1, prepared, not installed) |
+
+**Tests are not in the plugin ZIP**, on purpose. The unit tests are plain PHP files that run without WordPress, so inside `wp-content/plugins/` they would be reachable over the web. They are shipped as a separate archive from the same commit instead, and they are in the repository.
+
+**Verification:**
+- `unzip -t` is clean.
+- All 151 runtime files match the commit and the tested site, every hash is in the manifest, `php -l` passes, and there are no tests in the plugin ZIP.
+- The counts were measured on the committed files.
+
+**Not installed anywhere.** No employee plugin ZIP is part of this build.

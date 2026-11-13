@@ -6,7 +6,8 @@ One place for what each staging site runs. Update it whenever a build is install
 
 | Build | Status | Date | Notes |
 | --- | --- | --- | --- |
-| `2.0.0-rc.1-f774878` | Prepared, not installed | | Major release: training-year rules (off until enabled after the dry run, Compliance → Training year) and the redesigned settings screen (redesign switch). Includes the packet print layout. `docs/training-year-rules-2.0.md`, `docs/settings-redesign.md`. |
+| `2.0.0-rc.2-11a7c64` | Prepared, not installed | | Fix-up on rc.1 (GRI-115): role map for annual hours, stable employee API (`course()` added), zero-write cached dry run, identical switch-off screens, hidden-section validation. `docs/training-year-rules-2.0.md`. |
+| `2.0.0-rc.1-f774878` | Prepared, not installed | | Major release: training-year rules (off until enabled after the dry run, Compliance → Training year) and the redesigned settings screen (redesign switch). Includes the packet print layout. Superseded by `11a7c64`. |
 | `1.7.3-rc.8-eeec7da` | Prepared, not installed | | Print layout for the ODP Annual and Orientation audit packets (board "Print: Orientation audit packet"); OLTL unchanged. Superseded by `f774878`. |
 | `1.7.3-rc.8-9a92da1` | Prepared, not installed | | Review follow-ups: dormant BuddyBoss notification code removed (it ignored the announcement audience); the legacy-form edit confirmation reports the stored audience; docs. Superseded by `eeec7da`. |
 | `1.7.3-rc.8-3628587` | Prepared, not installed. Superseded by the build above | | Equal Overview card heights (Announcements matches Compliance by group; whole items only; internal scrolling) and the ODP ticker kept visible for an empty feed ("No ODP bulletins right now."). `docs/dashboard-redesign-phase2-slice9.md`. |
