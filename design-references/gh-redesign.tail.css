@@ -1074,3 +1074,6 @@ html body.ghca-ui-page { background-color: #F3EFEA !important; }
 @media (max-width: 1023px) {
   :is(.ghca-ui, #ghca-ui-scope) .gh-cbx-list > li { min-height: var(--gh-touch, 44px); display: flex; align-items: center; }
 }
+
+/* Training-year rules (2.0): the training-year window and annual requirement under the drawer's next-due line. */
+:is(.ghca-ui, #ghca-ui-scope) .gh-dr-ty { display: block; margin-top: 2px; }

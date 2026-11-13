@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Gridhouse Admin Compliance Dashboard
  * Description: HR/compliance administrative dashboard shortcodes for LearnDash + Elementor.
- * Version: 1.7.3-rc.8
+ * Version: 2.0.0-rc.1
  * Author: Gridhouse Digital
  * Author URI: https://gridhouse.digital
  * Text Domain: ghca-acd
@@ -49,6 +49,8 @@ require_once __DIR__ . '/includes/class-table-ui.php';
 require_once __DIR__ . '/includes/class-manage-users-ui.php';
 require_once __DIR__ . '/includes/class-audit-mapping.php';
 require_once __DIR__ . '/includes/class-audit-calculator.php';
+require_once __DIR__ . '/includes/class-training-year.php';
+require_once __DIR__ . '/includes/class-training-year-review.php';
 require_once __DIR__ . '/includes/class-audit-export.php';
 require_once __DIR__ . '/includes/class-audit-pdf.php';
 require_once __DIR__ . '/includes/class-audit-pdf-jobs.php';
@@ -79,7 +81,7 @@ require_once __DIR__ . '/includes/oltl/class-oltl-readiness.php';
 require_once __DIR__ . '/includes/oltl/class-oltl-ui.php';
 
 final class GHCA_Admin_Compliance_Dashboard {
-  const VERSION         = '1.7.3-rc.8';
+  const VERSION         = '2.0.0-rc.1';
   const OPTION_DUE_DATE = 'ghca_compliance_due_date';
   const CYCLE_DAYS      = 365;
   const NOTICE_DAYS     = 90;
@@ -107,6 +109,7 @@ final class GHCA_Admin_Compliance_Dashboard {
     GHCA_Audit_Mapping::init();
     GHCA_Audit_Export::init();
     GHCA_Audit_PDF::init();
+    GHCA_ACD_Training_Year_Review::init();
     GHCA_ACD_Audit_UI::init();
     GHCA_ACD_Messaging_Schema::init();
     GHCA_ACD_Messaging_Worker::init();

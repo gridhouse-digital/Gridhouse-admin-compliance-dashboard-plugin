@@ -298,7 +298,7 @@ final class GHCA_Audit_Packet_Layout {
 		);
 		$style   = $styles[ $data['annual_status'] ?? '' ] ?? $styles['in_progress'];
 		$heading = 'Overall annual status';
-		if ( 'needs_review' === ( $data['annual_status'] ?? '' ) && ! empty( $data['isp_manual_delivery'] ) && empty( $data['evidence_issues'] ) && (float) ( $data['total_hrs'] ?? 0 ) >= 24 ) {
+		if ( 'needs_review' === ( $data['annual_status'] ?? '' ) && ! empty( $data['isp_manual_delivery'] ) && empty( $data['evidence_issues'] ) && (float) ( $data['total_hrs'] ?? 0 ) >= self::required( $data ) ) {
 			$other = array_intersect_key( (array) ( $data['category_statuses'] ?? array() ), array_fill_keys( array( 'person_centered', 'abuse_prevention', 'individual_rights', 'reporting_incidents', 'behavior_supports' ), true ) );
 			if ( 5 === count( $other ) && ! array_diff( $other, array( 'Completed', 'Not applicable' ) ) ) {
 				// Report the split scope, without turning unverified ISP evidence into compliance.
@@ -326,7 +326,7 @@ final class GHCA_Audit_Packet_Layout {
 		$status = self::annual_status( $data );
 		return self::summary_box( array(
 			array( 'Annual window', esc_html( $range ) . '<br><span style="font-size:8pt;">Annual Cycle Rule: ' . esc_html( $cycle ) . '</span>' ),
-			array( 'Recorded hours', $hours . ' of 24' ),
+			array( 'Recorded hours', $hours . ' of ' . self::required( $data ) . ( '' !== (string) ( $data['required_annual_label'] ?? '' ) ? '<br><span style="font-size:8pt;">' . esc_html( (string) $data['required_annual_label'] ) . '</span>' : '' ) ),
 			array( '6100 topic hours', '<span style="font-size:16pt;"><strong>' . esc_html( self::hours( (float) ( $data['total_annual_hrs'] ?? 0 ) ) ) . '</strong></span> h' ),
 			array( $status[2], self::badge( $status[0], $status[1] ) ),
 		) );
@@ -477,10 +477,19 @@ final class GHCA_Audit_Packet_Layout {
 			if ( ! empty( $program['unmapped_required'] ) ) {
 				$html .= '<br>Required by the new-hire program but not mapped to an ODP orientation topic (not shown in the topic table): ' . $titles( $program['unmapped_required'] );
 			}
-			$html .= '<br>The overall completion date is the last required new-hire course completion. The 30-day result runs from the verified date of hire (regulatory basis). The agency\'s new-hire program deadline'
-				. ( ! empty( $program['deadline_date'] ) ? ' (' . esc_html( (string) $program['deadline_date'] ) . ')' : '' )
-				. ' is an internal target of ' . (int) ( $program['deadline_days'] ?? 0 ) . ' days from program enrollment'
-				. ( ! empty( $program['enrollment_date'] ) ? ' (' . esc_html( (string) $program['enrollment_date'] ) . ')' : '' ) . ' and may differ.</p>';
+			$basis = (string) ( $program['deadline_basis'] ?? '' );
+			$html .= '<br>The overall completion date is the last required new-hire course completion. The 30-day result runs from the verified date of hire (regulatory basis). ';
+			if ( 'hire' === $basis || 'first_service' === $basis ) {
+				$html .= 'The agency\'s new-hire program deadline' . ( ! empty( $program['deadline_date'] ) ? ' (' . esc_html( (string) $program['deadline_date'] ) . ')' : '' )
+					. ' is ' . (int) ( $program['deadline_days'] ?? 0 ) . ' days after the ' . ( 'first_service' === $basis ? 'first service date' : 'verified date of hire' ) . '.</p>';
+			} elseif ( 'missing' === $basis ) {
+				$html .= 'The agency\'s new-hire program deadline cannot be set: the verified date of hire is missing.</p>';
+			} else {
+				$html .= 'The agency\'s new-hire program deadline'
+					. ( ! empty( $program['deadline_date'] ) ? ' (' . esc_html( (string) $program['deadline_date'] ) . ')' : '' )
+					. ' is an internal target of ' . (int) ( $program['deadline_days'] ?? 0 ) . ' days from program enrollment'
+					. ( ! empty( $program['enrollment_date'] ) ? ' (' . esc_html( (string) $program['enrollment_date'] ) . ')' : '' ) . ' and may differ.</p>';
+			}
 		}
 		return $html;
 	}
@@ -586,7 +595,7 @@ final class GHCA_Audit_Packet_Layout {
 		$html = '<h2 style="font-size:13pt;">Gaps found</h2><table cellpadding="5" cellspacing="0" style="font-size:9.5pt;border:0.2mm solid #cccccc;"><tr><td>';
 		if ( ! $gaps ) {
 			$html .= $annual
-				? ( $reporting ? 'None recorded in this period.' : 'None. All annual areas are complete or not applicable, and recorded hours meet the 24-hour requirement.' )
+				? ( $reporting ? 'None recorded in this period.' : 'None. All annual areas are complete or not applicable, and recorded hours meet the ' . self::required( $data ) . '-hour requirement.' )
 				: 'None. All orientation areas complete and dates verified.';
 		} else {
 			$html .= '<ul>';
@@ -645,6 +654,11 @@ final class GHCA_Audit_Packet_Layout {
 	}
 
 	/* ----------------------------------------------------------------- helpers */
+
+	/** The employee's annual hours requirement (24 or 12), as the calculator applied it. */
+	public static function required( array $data ): int {
+		return (int) ( $data['required_annual_hrs'] ?? 24 );
+	}
 
 	public static function kind_for( string $text ): string {
 		$t = strtolower( trim( $text ) );

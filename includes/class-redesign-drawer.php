@@ -123,7 +123,13 @@ final class GHCA_ACD_Redesign_Drawer {
 		$h .= '<div class="gh-dr-sum-t"><h3 class="gh-h4">' . esc_html__( 'Overall compliance', 'ghca-acd' ) . '</h3><div class="gh-meta gh-dr-sum-meta">';
 		$h .= '<span>' . self::icon( 'check-circle', 'sm' ) . esc_html( sprintf( /* translators: 1: completed, 2: total */ __( '%1$d of %2$d courses', 'ghca-acd' ), (int) $m['completed_count'], (int) $m['total_courses'] ) ) . '</span>';
 		$h .= '<span>' . self::icon( 'award', 'sm' ) . esc_html( sprintf( /* translators: %d: certificates */ _n( '%d certificate', '%d certificates', (int) $m['cert_count'], 'ghca-acd' ), (int) $m['cert_count'] ) ) . '</span></div>';
-		$h .= '<span class="gh-dr-due gh-due--' . esc_attr( $due_tone ) . '">' . self::icon( 'calendar', 'sm' ) . esc_html( sprintf( /* translators: %s: date */ __( 'Next due %s', 'ghca-acd' ), (string) $m['due_date_short'] ) . ( $note ? ' · ' . $note['text'] : '' ) ) . '</span></div></div>';
+		$h .= '<span class="gh-dr-due gh-due--' . esc_attr( $due_tone ) . '">' . self::icon( 'calendar', 'sm' ) . esc_html( sprintf( /* translators: %s: date */ __( 'Next due %s', 'ghca-acd' ), (string) $m['due_date_short'] ) . ( $note ? ' · ' . $note['text'] : '' ) ) . '</span>';
+		if ( '' !== (string) ( $m['training_year_label'] ?? '' ) ) {
+			// Training-year rules: the window the due date closes, and the hours it requires.
+			$h .= '<span class="gh-small gh-muted gh-dr-ty" data-ghca-training-year>' . esc_html( sprintf( /* translators: %s: date range */ __( 'Training year %s', 'ghca-acd' ), (string) $m['training_year_label'] ) ) . '</span>';
+			$h .= '<span class="gh-small gh-muted gh-dr-ty" data-ghca-annual-requirement>' . esc_html( sprintf( /* translators: %s: requirement */ __( 'Annual requirement: %s', 'ghca-acd' ), (string) $m['annual_requirement_label'] ) ) . '</span>';
+		}
+		$h .= '</div></div>';
 
 		if ( '' !== (string) $m['oltl_html'] ) {
 			// The OLTL card has no board; it keeps its existing markup.

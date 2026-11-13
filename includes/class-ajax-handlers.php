@@ -12,6 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/class-training-year.php';
+
 require_once __DIR__ . '/class-employment-record.php';
 require_once __DIR__ . '/class-certificate-download.php';
 
@@ -348,6 +350,9 @@ final class GHCA_ACD_AJAX {
       'due_context' => $due_context,
       'due_date_label' => $due_date_label,
       'due_date_short' => $due_date_short,
+      // Training-year rules only (empty otherwise, so nothing new renders): the window and the annual requirement.
+      'training_year_label' => (string) ( $employee['training_year_label'] ?? '' ),
+      'annual_requirement_label' => (string) ( $employee['annual_requirement_label'] ?? '' ),
       'employee' => $employee,
       'employee_name' => $employee_name,
       'employment_label' => $employment_label,
@@ -427,7 +432,8 @@ final class GHCA_ACD_AJAX {
             <div class="ghca-acd__drawer-compliance-stats">
               <span><?php echo self::drawer_icon( 'task_alt' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php echo esc_html( sprintf( __( '%1$d / %2$d Courses', 'ghca-acd' ), $completed_count, $total_courses ) ); ?></span>
               <span><?php echo self::drawer_icon( 'workspace_premium' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php echo esc_html( sprintf( _n( '%d Certificate', '%d Certificates', $cert_count, 'ghca-acd' ), $cert_count ) ); ?></span>
-              <span class="ghca-acd__drawer-compliance-due"><?php echo self::drawer_icon( 'event' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php echo esc_html( sprintf( __( 'Next Due: %s', 'ghca-acd' ), $due_date_short ) ); ?></span>
+              <span class="ghca-acd__drawer-compliance-due"><?php echo self::drawer_icon( 'event' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php echo esc_html( sprintf( __( 'Next Due: %s', 'ghca-acd' ), $due_date_short ) ); ?></span><?php if ( '' !== $training_year_label ) : ?><span class="ghca-acd__drawer-compliance-due ghca-acd__drawer-training-year"><?php echo esc_html( sprintf( __( 'Training year: %s', 'ghca-acd' ), $training_year_label ) ); ?></span><span class="ghca-acd__drawer-compliance-due ghca-acd__drawer-requirement"><?php echo esc_html( sprintf( __( 'Annual requirement: %s', 'ghca-acd' ), $annual_requirement_label ) ); ?></span><?php endif; ?>
+
             </div>
           </div>
         </section>
@@ -896,6 +902,7 @@ final class GHCA_ACD_AJAX {
       'employment_type' => $employment_type,
       'employment_type_label' => $employment_type_label,
       'employment_options' => $employment_options,
+      'training_requirement' => GHCA_ACD_Training_Year::requirement( $user_id )['key'],
       'actor_login' => $actor_login,
     );
   }
@@ -923,6 +930,17 @@ final class GHCA_ACD_AJAX {
               <?php endforeach; ?>
             </select>
           </div>
+<?php if ( GHCA_ACD_Training_Year::enabled() ) : ?>
+          <div class="ghca-acd__edit-field">
+            <label class="ghca-acd__edit-label" for="ghca-edit-training-requirement"><?php esc_html_e( 'Annual training requirement (§ 6100.143)', 'ghca-acd' ); ?></label>
+            <select class="ghca-acd__edit-input" id="ghca-edit-training-requirement" name="training_requirement">
+              <option value=""><?php esc_html_e( 'Not set — 24 h assumed', 'ghca-acd' ); ?></option>
+              <?php foreach ( GHCA_ACD_Training_Year::requirements() as $value => $choice ) : ?>
+                <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $training_requirement, $value ); ?>><?php echo esc_html( $choice[0] ); ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+<?php endif; ?>
           <div class="ghca-acd__edit-field">
             <span class="ghca-acd__edit-label"><?php esc_html_e( 'Primary Role', 'ghca-acd' ); ?></span>
             <p class="ghca-acd__edit-static"><?php echo esc_html( $edit_role_label ?: '—' ); ?></p>
@@ -1100,6 +1118,17 @@ final class GHCA_ACD_AJAX {
     }
     if ( $type_saved ) {
       $changes[] = __( 'Employment Type', 'ghca-acd' );
+    }
+    if ( array_key_exists( 'training_requirement', $_POST ) ) {
+      $requirement = $_POST['training_requirement'];
+      $requirement_saved = is_string( $requirement ) ? GHCA_ACD_Training_Year::save_requirement( $user_id, sanitize_key( $requirement ) === $requirement ? $requirement : '!' ) : new WP_Error( 'ghca_requirement_invalid', __( 'Invalid annual training requirement.', 'ghca-acd' ) );
+      if ( is_wp_error( $requirement_saved ) ) {
+        wp_send_json_error( array( 'message' => ( $changes ? implode( ', ', $changes ) . ' saved. ' : '' ) . $requirement_saved->get_error_message() ) );
+      }
+      if ( $requirement_saved ) {
+        GHCA_ACD_Data_Provider::bust_cache();
+        $changes[] = __( 'Annual training requirement', 'ghca-acd' );
+      }
     }
 
     // --- Registration date ---------------------------------------------------

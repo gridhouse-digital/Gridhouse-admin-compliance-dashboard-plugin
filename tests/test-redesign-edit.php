@@ -84,7 +84,17 @@ $legacy = edit_form()['data']['html'];
 edit_env( $with );
 $board = edit_form( array( 'ghca_ui' => 'board' ) )['data']['html'];
 
-check( names( $board ) === names( $legacy ), 'the redesigned form submits exactly the same field names as the legacy form' );
+// With the training-year rules off, the redesigned form adds only the annual requirement (settable before they are
+// enabled); the legacy form gains it only once they are on. Otherwise the field names are identical.
+check( array_values( array_diff( names( $board ), array( 'training_requirement' ) ) ) === names( $legacy ), 'the redesigned form submits the legacy form\'s field names, plus only training_requirement' );
+check( in_array( 'training_requirement', names( $board ), true ) && ! in_array( 'training_requirement', names( $legacy ), true ), 'rules off: the annual requirement is in the redesigned form only' );
+GHCA_ACD_Training_Year::set_override( true );
+edit_env( $with );
+$legacy_on = edit_form()['data']['html'];
+edit_env( $with );
+$board_on = edit_form( array( 'ghca_ui' => 'board' ) )['data']['html'];
+GHCA_ACD_Training_Year::set_override( null );
+check( names( $board_on ) === names( $legacy_on ) && in_array( 'training_requirement', names( $legacy_on ), true ), 'rules on: both forms submit exactly the same field names, including training_requirement' );
 $legacy_n = names( $legacy );
 check( in_array( 'course[101][mark_complete]', $legacy_n, true ) && in_array( 'employment_type', $legacy_n, true ) && in_array( 'registration_date', $legacy_n, true ), 'and those include the course, employment and registration fields' );
 check( str_contains( $board, 'data-ghca-edit-form data-user-id="42"' ), 'the form keeps the hook the save script binds to' );

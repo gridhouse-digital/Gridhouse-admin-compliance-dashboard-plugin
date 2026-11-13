@@ -212,6 +212,8 @@ Report the tested page, action, expected result, actual result and a redacted sc
 
 ## Packet-ready result against a real database
 
+`tests/test-training-year.php` (36 checks, no WordPress) covers the 2.0 training-year rules: Feb 29 hires, a completion on the anniversary date, a calendar-year employee hired mid-year, a 12-hour role, due-date labels, calendar-day lifespans and the new-hire anchor. `tests/integration-training-year.php` (disposable site) checks that the dry run is read-only, and covers the enable switch, the requirement field and the drawers. See `docs/training-year-rules-2.0.md`.
+
 `tests/integration-packet-layout.php` renders the Annual and Orientation packet print layout with real TCPDF/FPDI from synthetic audit data, appends one synthetic certificate, and reads the PDF back with `pdftotext`/`pdfinfo` (poppler-utils; skips without them). Same disposable-site requirements. Run `php wp-content/plugins/<plugin folder>/tests/integration-packet-layout.php [png-dir]`; with a directory it also writes each page as PNG for review.
 
 `tests/integration-packet-ready.php` builds real Annual and Orientation packets through the plugin's own AJAX handlers for a synthetic employee and compares the merge result (pages, flagged items, expiry, packet type) with the stored PDF and its job. It also checks private storage, authorization, single use, expiry and replacement. Same requirements as above, plus `pcntl` and TCPDF at `wp-content/plugins/sfwd-lms/includes/lib/tcpdf/tcpdf.php` (LearnDash's path; the test stubs LearnDash's course functions). Run `php wp-content/plugins/<plugin folder>/tests/integration-packet-ready.php`. Nothing is sent and no training record is changed. Never point it at staging or live.

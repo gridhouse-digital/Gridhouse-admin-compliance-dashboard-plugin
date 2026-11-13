@@ -2,6 +2,8 @@
 if ( ! defined( 'ABSPATH' ) ) {
   exit;
 }
+
+require_once __DIR__ . '/class-training-year.php';
 require_once __DIR__ . '/class-packet-course-selection.php';
 require_once __DIR__ . '/class-agency-training.php';
 
@@ -59,6 +61,8 @@ final class GHCA_ACD_Settings {
       GHCA_Dashboard_Branding::OPTION,
       GHCA_Course_Lifespans::OPTION_LIFESPANS,
       GHCA_Course_Lifespans::OPTION_WARNING_DAYS,
+      GHCA_ACD_Training_Year::OPTION_NEW_HIRE_ANCHOR,
+      GHCA_ACD_Training_Year::OPTION_ENABLED,
       self::OPTION_PERM_EDIT_RECORDS,
       self::OPTION_PERM_MANAGE_ANNOUNCEMENTS,
       self::OPTION_PERM_UNRESTRICTED_VIEW,
@@ -287,6 +291,16 @@ final class GHCA_ACD_Settings {
         'type'              => 'array',
         'sanitize_callback' => array( 'GHCA_Course_Lifespans', 'sanitize_lifespan_map' ),
         'default'           => array(),
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
+      GHCA_ACD_Training_Year::OPTION_NEW_HIRE_ANCHOR,
+      array(
+        'type'              => 'string',
+        'sanitize_callback' => array( 'GHCA_ACD_Training_Year', 'sanitize_anchor' ),
+        'default'           => 'hire',
       )
     );
 
@@ -921,7 +935,14 @@ final class GHCA_ACD_Settings {
             <th scope="row"><label for="ghca_new_hire_deadline_days"><?php esc_html_e( 'New hire completion window (days)', 'ghca-acd' ); ?></label></th>
             <td>
               <input type="number" min="7" max="120" id="ghca_new_hire_deadline_days" name="<?php echo esc_attr( GHCA_Compliance_Program::OPTION_NEW_HIRE_DAYS ); ?>" value="<?php echo esc_attr( (string) $new_hire_days ); ?>" class="small-text" />
-              <p class="description"><?php esc_html_e( 'Default: 30 days from new hire group enrollment.', 'ghca-acd' ); ?></p>
+              <p class="description"><?php echo esc_html( GHCA_ACD_Training_Year::enabled() ? __( 'Default: 30 days. Counted from the verified hire date (training-year rules).', 'ghca-acd' ) : __( 'Default: 30 days from new hire group enrollment.', 'ghca-acd' ) ); ?></p>
+              <p>
+                <label for="ghca_acd_new_hire_anchor"><?php esc_html_e( 'With training-year rules, count from', 'ghca-acd' ); ?></label>
+                <select id="ghca_acd_new_hire_anchor" name="<?php echo esc_attr( GHCA_ACD_Training_Year::OPTION_NEW_HIRE_ANCHOR ); ?>">
+                  <option value="hire" <?php selected( GHCA_ACD_Training_Year::new_hire_anchor_rule(), 'hire' ); ?>><?php esc_html_e( 'The verified hire date', 'ghca-acd' ); ?></option>
+                  <option value="hire_or_first_service" <?php selected( GHCA_ACD_Training_Year::new_hire_anchor_rule(), 'hire_or_first_service' ); ?>><?php esc_html_e( 'The first service date when it is later than the hire date (§ 6100.142(a))', 'ghca-acd' ); ?></option>
+                </select>
+              </p>
             </td>
           </tr>
           <tr>
@@ -1069,6 +1090,7 @@ final class GHCA_ACD_Settings {
         </details>
         <details class="ghca-settings-section" id="ghca-lifespans"><summary><?php esc_html_e( 'Course validity & expiration', 'ghca-acd' ); ?></summary>
         <p><?php esc_html_e( 'Define how long each course stays valid after completion. A completed course turns yellow inside the warning window and red once it passes its lifespan. Courses with no lifespan never expire.', 'ghca-acd' ); ?></p>
+        <p class="description"><?php esc_html_e( 'Recommended: no lifespan for courses mapped to ODP annual (6100) categories. Their due date is the end of the employee’s training year. With training-year rules enabled, lifespans on those courses are ignored and the rest count calendar days in the site time zone.', 'ghca-acd' ); ?></p>
         <table class="form-table" role="presentation">
           <tr>
             <th scope="row"><label for="ghca_acd_warning_days"><?php esc_html_e( 'Warning window (days)', 'ghca-acd' ); ?></label></th>
@@ -1094,6 +1116,7 @@ final class GHCA_ACD_Settings {
                       </select>
                       <input type="number" min="1" max="3650" class="ghca-lifespan-days small-text" value="<?php echo esc_attr( (string) $days ); ?>" placeholder="<?php esc_attr_e( 'days', 'ghca-acd' ); ?>" />
                       <button type="button" class="button ghca-lifespan-remove"><?php esc_html_e( 'Remove', 'ghca-acd' ); ?></button>
+                      <?php if ( GHCA_ACD_Training_Year::is_annual_course( (int) $cid ) ) : ?><span class="description ghca-lifespan-annual"><?php echo esc_html( GHCA_ACD_Training_Year::enabled() ? __( 'Ignored: this course earns annual ODP credit, so it follows the training year. Recommended: remove this lifespan.', 'ghca-acd' ) : __( 'Earns annual ODP credit. With training-year rules this lifespan is ignored; recommended: no lifespan.', 'ghca-acd' ) ); ?></span><?php endif; ?>
                     </div>
                   <?php endforeach; ?>
                 </div>
