@@ -83,7 +83,8 @@ final class GHCA_ACD_Messaging_UI {
 			return;
 		}
 		?>
-		<?php if ( GHCA_ACD_Roles::user_can_send_reminders() ) : ?>
+		<?php /* The redesigned dashboard prints its own copy of this modal inside its themed wrapper. */ ?>
+		<?php if ( GHCA_ACD_Roles::user_can_send_reminders() && ! GHCA_ACD_Redesign::dashboard_rendered() ) : ?>
 		<div class="ghca-acd__reminder-modal ghca-acd__overlay ghca-acd__overlay--reminder" id="ghca-acd-reminder-modal" hidden aria-hidden="true">
 			<div class="ghca-acd__reminder-modal-backdrop" data-ghca-reminder-close></div>
 			<div class="ghca-acd__reminder-modal-dialog ghca-acd__v2-modal" role="dialog" aria-modal="true" aria-labelledby="ghca-acd-reminder-title">
@@ -217,7 +218,8 @@ final class GHCA_ACD_Messaging_UI {
 			</div>
 		</div>
 		<?php endif; ?>
-		<?php if ( GHCA_ACD_Roles::user_can_view_communication_history() ) : ?>
+		<?php /* The redesigned dashboard prints its own copy of the history modal (Modal-CommHistory board). */ ?>
+		<?php if ( GHCA_ACD_Roles::user_can_view_communication_history() && ! GHCA_ACD_Redesign::dashboard_rendered() ) : ?>
 		<div class="ghca-acd__history-modal ghca-acd__overlay ghca-acd__overlay--history" id="ghca-acd-history-modal" hidden aria-hidden="true">
 			<div class="ghca-acd__history-modal-backdrop" data-ghca-history-close></div>
 			<div class="ghca-acd__history-modal-dialog ghca-acd__v2-modal ghca-acd__v2-modal--wide" role="dialog" aria-modal="true" aria-labelledby="ghca-acd-history-title">
@@ -337,6 +339,13 @@ final class GHCA_ACD_Messaging_UI {
 			'date_to'   => isset( $_POST['date_to'] ) ? sanitize_text_field( wp_unslash( $_POST['date_to'] ) ) : '',
 			'search'    => isset( $_POST['search'] ) ? substr( sanitize_text_field( wp_unslash( $_POST['search'] ) ), 0, 100 ) : '',
 		);
+		// The redesigned drawer asks for its own markup: the latest three of one channel, or the modal's list.
+		if ( class_exists( 'GHCA_ACD_Redesign_Tables' ) && GHCA_ACD_Redesign_Tables::board_requested() ) {
+			if ( isset( $_POST['view'] ) && 'drawer' === sanitize_key( wp_unslash( $_POST['view'] ) ) ) {
+				$data = GHCA_ACD_Redesign_Drawer::history_data( $user_id, (string) $filters['channel'] );
+				wp_send_json_success( array( 'html' => GHCA_ACD_Redesign_Drawer::history_timeline_html( $data ), 'total' => (int) $data['total'] ) );
+			}
+		}
 		$per_page = 20;
 		$total    = GHCA_ACD_Messaging_Repository::history_count( $user_id, $filters );
 		$user     = get_userdata( $user_id );
@@ -345,7 +354,7 @@ final class GHCA_ACD_Messaging_UI {
 		$rows     = GHCA_ACD_Messaging_Repository::history_for_employee( $user_id, $page, $per_page, $filters );
 		wp_send_json_success(
 			array(
-				'html'         => self::render_history_items( $rows, false ),
+				'html'         => class_exists( 'GHCA_ACD_Redesign_Tables' ) && GHCA_ACD_Redesign_Tables::board_requested() ? self::render_history_board( $rows ) : self::render_history_items( $rows, false ),
 				'total'        => $total,
 				'page'         => $page,
 				'pages'        => $pages,
@@ -430,6 +439,18 @@ final class GHCA_ACD_Messaging_UI {
 	}
 
 	/** @param array<int,array<string,mixed>> $rows */
+	/** Redesigned full-history list (Modal-CommHistory board). @param array<int,array<string,mixed>> $rows */
+	private static function render_history_board( array $rows ): string {
+		if ( empty( $rows ) ) {
+			return '<div class="gh-empty gh-ch-empty"><span class="gh-empty-ico">' . GHCA_ODP_UI::icon( 'mail', 'xl' ) . '</span><strong class="gh-h4">' . esc_html__( 'No communications match.', 'ghca-acd' ) . '</strong><span class="gh-secondary">' . esc_html__( 'Try different filters, or clear them.', 'ghca-acd' ) . '</span></div>';
+		}
+		$h = '<ol class="gh-ch-list">';
+		foreach ( GHCA_ACD_Redesign_Drawer::group_history_rows( $rows ) as $item ) {
+			$h .= GHCA_ACD_Redesign_Drawer::history_modal_item_html( $item );
+		}
+		return $h . '</ol>';
+	}
+
 	private static function render_history_items( array $rows, bool $compact = false ): string {
 		if ( empty( $rows ) ) {
 			return '<p class="ghca-acd__history-empty">' . esc_html__( 'No reminders have been recorded for this employee.', 'ghca-acd' ) . '</p>';
@@ -519,6 +540,11 @@ final class GHCA_ACD_Messaging_UI {
 			<?php
 		}
 		return (string) ob_get_clean();
+	}
+
+	/** The wording the history uses for a delivery state; shared with the redesigned drawer. */
+	public static function delivery_label( string $state, string $channel = 'email' ): string {
+		return self::delivery_status_label( $state, $channel );
 	}
 
 	private static function delivery_status_label( string $state, string $channel = 'email' ): string {

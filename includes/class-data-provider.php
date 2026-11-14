@@ -11,6 +11,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/class-training-year.php';
+
 final class GHCA_ACD_Data_Provider {
 
   const OPTION_ACCOUNT_STATE_VERSION = 'ghca_acd_account_state_version';
@@ -178,7 +180,7 @@ final class GHCA_ACD_Data_Provider {
   private static function get_cache_key(): string {
     // Date stamp (site timezone) makes the aggregate self-invalidate at local
     // midnight, so a course flipping 🟡→🔴 overnight recomputes with no DB write.
-    return 'ghca_acd_agg_' . GHCA_Admin_Compliance_Dashboard::VERSION . '_' . get_current_user_id() . '_' . wp_date( 'Ymd' ) . '_' . (int) get_option( self::OPTION_ACCOUNT_STATE_VERSION, 0 );
+    return 'ghca_acd_agg_' . GHCA_Admin_Compliance_Dashboard::VERSION . '_' . get_current_user_id() . '_' . wp_date( 'Ymd' ) . '_' . (int) get_option( self::OPTION_ACCOUNT_STATE_VERSION, 0 ) . ( self::training_year_rules() ? '_ty' : '' );
   }
 
   public static function bust_cache(): void {
@@ -437,7 +439,7 @@ final class GHCA_ACD_Data_Provider {
       'expiring_soon_employees_label' => sprintf( _n( '%d expiring soon', '%d expiring soon', $expiring, 'ghca-acd' ), $expiring ),
       'certificates_issued'          => $certificates,
       'certificates_issued_label'    => sprintf( _n( '%d certificate', '%d certificates', $certificates, 'ghca-acd' ), $certificates ),
-      'upcoming_due_date_label'      => PHP_INT_MAX === $next_due_ts ? self::format_due_date( get_option( GHCA_Admin_Compliance_Dashboard::OPTION_DUE_DATE, '2026-07-31' ) ) : wp_date( 'F j, Y', $next_due_ts ),
+      'upcoming_due_date_label'      => PHP_INT_MAX === $next_due_ts ? ( self::training_year_rules() ? '—' : self::format_due_date( get_option( GHCA_Admin_Compliance_Dashboard::OPTION_DUE_DATE, '2026-07-31' ) ) ) : wp_date( 'F j, Y', $next_due_ts ),
       'certificates_assigned'        => $cert_available,
       'certificates_available'       => $cert_available, // legacy key: assigned, NOT issued
       'certificates_missing'         => $cert_missing,
@@ -568,6 +570,7 @@ final class GHCA_ACD_Data_Provider {
         'completed_label'      => $total ? sprintf( '%1$d / %2$d', $completed_count, $total ) : '0',
         'due_timestamp'        => $due_ts,
         'due_date_label'       => $due_date_label,
+      ) + self::training_year_fields( $user_id ) + array(
         'last_activity_label'  => self::get_last_activity_label( $user_id, $courses ),
         'status_slug'          => $status_slug,
         'status_label'         => $status_label,
@@ -650,7 +653,8 @@ final class GHCA_ACD_Data_Provider {
       'required_label'       => $total ? (string) $total : '0',
       'completed_label'      => $total ? sprintf( '%1$d / %2$d', $completed_count, $total ) : '0',
       'due_timestamp'        => $due_ts,
-      'due_date_label'       => $cycle['due_date_label'] ?: self::format_due_date( get_option( GHCA_Admin_Compliance_Dashboard::OPTION_DUE_DATE, '2026-07-31' ) ),
+      'due_date_label'       => $cycle['due_date_label'] ?: ( self::training_year_rules() ? '—' : self::format_due_date( get_option( GHCA_Admin_Compliance_Dashboard::OPTION_DUE_DATE, '2026-07-31' ) ) ),
+    ) + self::training_year_fields( $user_id ) + array(
       'last_activity_label'  => self::get_last_activity_label( $user_id, $courses ),
       'status_slug'          => $status_slug,
       'status_label'         => $status_label,
@@ -701,7 +705,7 @@ final class GHCA_ACD_Data_Provider {
         'certificate_url'    => $cert,
         'completed_recently' => $completed && $completed_ts > ( time() - ( 30 * DAY_IN_SECONDS ) ),
         'last_activity_ts'   => self::get_course_last_activity_timestamp( $user_id, $course_id, $completed_ts ),
-      ) + GHCA_Course_Lifespans::decorate( $course_id, $completed, $completed_ts );
+      ) + GHCA_Course_Lifespans::for_user( $user_id, $course_id, $completed, $completed_ts );
     }
 
     return $items;
@@ -1361,8 +1365,74 @@ final class GHCA_ACD_Data_Provider {
     return wp_date( 'F j, Y', $timestamp );
   }
 
+  private static function training_year_rules(): bool {
+    return class_exists( 'GHCA_ACD_Training_Year' ) && GHCA_ACD_Training_Year::enabled();
+  }
+
+  /**
+   * Training-year fields for one employee record (empty strings while the rules are off, so nothing new renders).
+   *
+   * @return array{training_year_label:string,annual_requirement_label:string,annual_required_hours:int}
+   */
+  private static function training_year_fields( int $user_id ): array {
+    if ( ! self::training_year_rules() ) {
+      return array( 'training_year_label' => '', 'annual_requirement_label' => '', 'annual_required_hours' => 0 );
+    }
+    $requirement = GHCA_ACD_Training_Year::requirement( $user_id );
+    return array(
+      'training_year_label'      => (string) GHCA_ACD_Training_Year::window( $user_id )['label'],
+      'annual_requirement_label' => $requirement['label'],
+      'annual_required_hours'    => (int) $requirement['hours'],
+    );
+  }
+
+  /**
+   * One employee's dashboard record, built fresh (no cache), under the rules as given. For the read-only dry run.
+   *
+   * @return array<string,mixed>
+   */
+  public static function employee_record_for_review( int $user_id, bool $training_year_rules ): array {
+    GHCA_ACD_Training_Year::set_override( $training_year_rules );
+    try {
+      return self::build_employee_record( $user_id );
+    } finally {
+      GHCA_ACD_Training_Year::set_override( null );
+    }
+  }
+
+  /**
+   * Tracked employee ids (active and inactive) visible to the current user, without the dashboard aggregate or its
+   * transient: nothing is written. For the training-year dry run.
+   *
+   * @return array<int>
+   */
+  public static function review_employee_ids(): array {
+    $ids = array_values( array_unique( array_filter( array_map( 'intval', self::get_employee_user_ids() ) ) ) );
+    return array_values( array_filter( $ids, array( __CLASS__, 'is_tracked_employee' ) ) );
+  }
+
+  /**
+   * The previous (pre-training-year) dashboard cycle for one employee, as "M j, Y – M j, Y": the 365-day block from
+   * the earliest of registration and group enrollment that contains today. '' when it falls back to the fixed date.
+   */
+  public static function legacy_cycle_label( int $user_id ): string {
+    $start = self::get_platform_start_timestamp( $user_id );
+    if ( ! $start ) {
+      return '';
+    }
+    $days_on = (int) floor( max( 0, time() - $start ) / DAY_IN_SECONDS );
+    $cycle   = (int) floor( $days_on / GHCA_Admin_Compliance_Dashboard::CYCLE_DAYS );
+    $from    = $start + ( $cycle * GHCA_Admin_Compliance_Dashboard::CYCLE_DAYS * DAY_IN_SECONDS );
+    $to      = $from + ( GHCA_Admin_Compliance_Dashboard::CYCLE_DAYS * DAY_IN_SECONDS );
+    return wp_date( 'M j, Y', $from ) . ' – ' . wp_date( 'M j, Y', $to );
+  }
+
   /** @return array<string,mixed> */
   private static function get_compliance_cycle( int $user_id ): array {
+    if ( self::training_year_rules() ) {
+      // Training-year rules: the due date is the last day of the audit training year; no fallback date.
+      return GHCA_ACD_Training_Year::due( $user_id );
+    }
     $start = self::get_platform_start_timestamp( $user_id );
     if ( ! $start ) {
       return array(

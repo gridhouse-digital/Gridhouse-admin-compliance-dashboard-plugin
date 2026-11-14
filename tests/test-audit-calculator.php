@@ -168,13 +168,13 @@ audit_check( $incomplete_orientation_audit['completed_within_30'] === 'No', 'inc
  * the agency had mapped into each area, so enlarging the catalog made every employee
  * look less compliant against a threshold that does not exist in the regulation.
  */
-$pdf_source = file_get_contents( __DIR__ . '/../includes/class-audit-pdf.php' );
+$pdf_source = file_get_contents( __DIR__ . '/../includes/class-audit-packet-layout.php' );
 audit_check(
-	false !== strpos( $pdf_source, "'Hours Counted Here' : 'Time Spent'" ),
+	false !== strpos( $pdf_source, '( $annual ? \'Hours Counted Here\' : \'Completed\' )' ) && false === strpos( $pdf_source, "'required'" ),
 	'the matrix separates counted hours from topic coverage without implying statutory per-topic hours'
 );
 audit_check(
-	false !== strpos( $pdf_source, "<th width=\"20%\"><strong>Completed On</strong></th>" ),
+	false !== strpos( $pdf_source, '$date  = (int) ( $hours[ $key ][\'date\'] ?? 0 );' ),
 	'the orientation matrix shows when each required area was completed'
 );
 audit_check(
@@ -182,8 +182,8 @@ audit_check(
 	'the orientation matrix states that recorded time is informational'
 );
 audit_check(
-	false !== strpos( $pdf_source, "return \$achieved > 0 ? \$format_hours( \$achieved ) . ' hrs' : '0 hrs';" ),
-	'orientation hour cells never render a required figure alongside the achieved value'
+	false !== strpos( $pdf_source, "self::duration( (float) ( \$course['credit_hours'] ?? 0 ) )" ) && false === strpos( $pdf_source, 'required' . "'] ?? " ),
+	'orientation time is printed per course (recorded time only), never with a required figure'
 );
 
 $calculator_source = file_get_contents( __DIR__ . '/../includes/class-audit-calculator.php' );

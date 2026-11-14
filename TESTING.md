@@ -204,3 +204,96 @@ Replace this beta with the retained, verified 1.7.2 ZIP. Do not uninstall/delete
 Verified employment-date metadata also remains after code rollback. Earlier betas/1.7.2 ignore it and return to their earlier date calculations. Retain the beta 2 ZIP as a code rollback option; do not delete date or training evidence to roll back.
 
 Report the tested page, action, expected result, actual result and a redacted screenshot. Do not include passwords or personal records.
+
+## Bulk-message recovery against a real database
+
+`tests/integration-bulk-recovery.php` runs the scheduling lock, the recovery transition and `recover_delivery()` in separate processes against one database. It needs a disposable WordPress site with the plugin active, `mysqli` and `pcntl`, and refuses to run unless `wp-config.php` defines `GHCA_DISPOSABLE_TEST_SITE` and the database name starts with `ghca_test`. Copy the plugin into that site's `wp-content/plugins/` and run `php wp-content/plugins/<plugin folder>/tests/integration-bulk-recovery.php`. It creates and then deletes synthetic users' messaging rows; it never runs cron or sends mail. Never point it at staging or live.
+
+
+## Packet-ready result against a real database
+
+`tests/browser-settings-redesign.cjs` (disposable site, Chromium) checks the redesigned settings screen at desktop, tablet and phone widths. It covers the shell, one section at a time, saving, the save-error message, discarding unsaved changes, and switching the redesign off. Run it with `GHCA_REAL_SITE` and `GHCA_REAL_WP` set; see `docs/settings-redesign.md`.
+
+`tests/test-training-year-api.php` (74 checks, no WordPress) covers the role map, role exclusions and threshold source; the rc.3 annual-course completion window in course(); the dashboard badge parity; and the employee API parity (enabled, due, window, requirement, required_hours, course). `tests/test-training-year.php` (39 checks, no WordPress) covers the 2.0 training-year rules: Feb 29 hires, a completion on the anniversary date, a calendar-year employee hired mid-year, a 12-hour role, due-date labels, calendar-day lifespans and the new-hire anchor. `tests/integration-training-year.php` (disposable site) checks that the dry run is read-only, and covers the enable switch, the requirement field and the drawers. See `docs/training-year-rules-2.0.md`.
+
+`tests/integration-packet-layout.php` renders the Annual and Orientation packet print layout with real TCPDF/FPDI from synthetic audit data, appends one synthetic certificate, and reads the PDF back with `pdftotext`/`pdfinfo` (poppler-utils; skips without them). Same disposable-site requirements. Run `php wp-content/plugins/<plugin folder>/tests/integration-packet-layout.php [png-dir]`; with a directory it also writes each page as PNG for review.
+
+`tests/integration-packet-ready.php` builds real Annual and Orientation packets through the plugin's own AJAX handlers for a synthetic employee and compares the merge result (pages, flagged items, expiry, packet type) with the stored PDF and its job. It also checks private storage, authorization, single use, expiry and replacement. Same requirements as above, plus `pcntl` and TCPDF at `wp-content/plugins/sfwd-lms/includes/lib/tcpdf/tcpdf.php` (LearnDash's path; the test stubs LearnDash's course functions). Run `php wp-content/plugins/<plugin folder>/tests/integration-packet-ready.php`. Nothing is sent and no training record is changed. Never point it at staging or live.
+
+`tests/browser-slice7.cjs` covers the slice 7 browser behaviour (row reminders, Communications and history, packet header, packet-ready notice) on synthetic pages with canned answers: `node tests/browser-slice7.cjs [screenshot-dir]`.
+
+## Slice 8 real-site checks (disposable WordPress, real theme)
+
+1. Copy `tests/real-site/ghca-real-site-stubs.php` into the disposable site's `wp-content/mu-plugins/`. It is tests only: LearnDash stand-ins with synthetic groups. It loads only when `GHCA_DISPOSABLE_TEST_SITE` is defined; never put it on staging or live.
+2. Run the setup:
+
+   ```bash
+   php tests/real-site/setup.php <wp-root> http://127.0.0.1:8099 [theme]
+   ```
+
+   It refuses anything but a `ghca_test*` database. It sets the site URL, turns the redesign on, creates synthetic groups, people and the dashboard pages, and sets a known password for `synthetic-admin`.
+3. Serve the site:
+
+   ```bash
+   php -S 127.0.0.1:8099 -t <wp-root>
+   ```
+
+4. Run the browser checks:
+
+   ```bash
+   GHCA_REAL_SITE=http://127.0.0.1:8099 GHCA_REAL_THEME="Twenty Twenty-Four" node tests/browser-real-site.cjs
+   ```
+
+5. With the plugin copied into the site, run the integration checks:
+
+   ```bash
+   php wp-content/plugins/<plugin folder>/tests/integration-slice8.php
+   ```
+
+The synthetic browser checks run without a site:
+
+```bash
+node tests/browser-slice8.cjs [screenshot-dir]
+```
+
+## Slice 9 checks
+
+Synthetic browser checks (no site needed): the certificate viewer, certificate selection and ZIP messages, the course listbox, the report picker and Title Case.
+
+```bash
+node tests/browser-slice9.cjs [screenshot-dir]
+```
+
+Chromium's headless shell has no PDF viewer, so most viewer checks simulate the "ready" display. The Fit to width section instead launches full Chromium (`channel: 'chromium'`, new headless mode, which has the built-in PDF viewer) and checks the rendered pixels. Other browsers must be checked by hand.
+
+On the disposable real site (prepared as for Slice 8), with the plugin copied into it:
+
+```bash
+php wp-content/plugins/<plugin folder>/tests/integration-slice9.php
+```
+
+```bash
+GHCA_REAL_WP=<wp-root> GHCA_REAL_SITE=http://127.0.0.1:8099 GHCA_REAL_THEME="Twenty Twenty-Four" node tests/browser-real-site9.cjs [screenshot-dir]
+```
+
+With `GHCA_REAL_WP` set, `browser-real-site9.cjs` temporarily gives one synthetic group a long name (and restores it) to check that names wrap. It also runs `tests/real-site/overview-overflow.php add` (5 extra synthetic groups and 5 announcements) to check the Overview list caps, and `remove` afterwards.
+
+`integration-slice9.php` needs the PHP `zip` and `pcntl` extensions. It builds real archives in the private folder from synthetic PDFs. It checks per-item authorization with a real `group_leader`, single use, owner binding, access expiry versus deletion, the cleanup event, abandoned-file cleanup, and the request-end fallback when scheduling fails. It checks failed entry writes, closes and reads through test-only seams. For concurrency, it races 8 downloads of one ZIP from forked processes, each with its own database connection, over 5 rounds, and expects exactly one 200. Deletion failures are real: it uses `chattr +i` to make the filesystem refuse `unlink` (needs root and a filesystem that supports the immutable flag), and a `query` filter that points statements at a missing table to make MariaDB return errors. It removes ZIP leftovers of earlier interrupted runs before it starts. Nothing is sent and no training record is changed. Never point either at staging or live.
+
+`tests/browser-drawer-documents.cjs` checks that drawer Documents PDF previews (Jotform and outside certificates, from the tab and from "View all documents") open in the redesigned viewer. It uses mocked single-use grants: one preview grant per view, a separate download grant for Download, and a fresh grant for Try again. Images keep the previous preview. It launches full Chromium (`channel: 'chromium'`) so the PDF is really rendered:
+
+```bash
+node tests/browser-drawer-documents.cjs [screenshot-dir]
+```
+
+ODP ticker states. `tests/test-odp-ticker-states.php` (unit) and `tests/browser-odp-ticker.cjs` (synthetic Overview at 1440, 834 and 390) check that the ticker stays visible for an empty feed. They also check that unavailable, cached and populated feeds are unchanged:
+
+```bash
+php tests/test-odp-ticker-states.php
+```
+
+```bash
+node tests/browser-odp-ticker.cjs [screenshot-dir]
+```
+
+On the disposable site, `browser-real-site9.cjs` (with `GHCA_REAL_WP`) uses `tests/real-site/odp-feed-cache.php empty|clear`. That sets a verified zero-bulletin feed cache (Isoke's state) or removes the cache (unavailable). It adds no bulletins and leaves the cache cleared afterwards.

@@ -416,6 +416,22 @@ final class GHCA_Audit_PDF_Jobs {
 		}
 	}
 
+	/**
+	 * A private working directory beside the packet jobs (same base, 0700, deny rules), for other short-lived
+	 * private files such as certificate ZIPs (slice 9).
+	 */
+	public static function private_subdir( string $name ): string {
+		$name = preg_replace( '/[^a-z0-9_-]/', '', strtolower( $name ) );
+		if ( '' === $name ) {
+			throw new RuntimeException( 'Invalid private directory name.' );
+		}
+		$base = self::private_base();
+		self::ensure_dir( $base );
+		$dir = $base . '/' . $name;
+		self::ensure_dir( $dir );
+		return $dir;
+	}
+
 	private static function private_base(): string {
 		if ( defined( 'GHCA_ACD_PRIVATE_DIR' ) && is_string( GHCA_ACD_PRIVATE_DIR ) && '' !== trim( GHCA_ACD_PRIVATE_DIR ) ) {
 			$configured = realpath( GHCA_ACD_PRIVATE_DIR );

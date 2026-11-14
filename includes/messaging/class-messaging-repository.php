@@ -375,25 +375,155 @@ final class GHCA_ACD_Messaging_Repository {
 		return true;
 	}
 
-	public static function mark_schedule_failed( int $delivery_id ): void {
+	/**
+	 * Records that a queued delivery has no background job. Compare-and-set on state 'queued', so it can never
+	 * overwrite a delivery a worker has claimed (processing) or finished (accepted, sent, delivered, failed).
+	 * Returns true when this call made the change.
+	 */
+	public static function mark_schedule_failed( int $delivery_id ): bool {
 		global $wpdb;
 		$now = current_time( 'mysql', true );
 
-		$wpdb->update(
-			GHCA_ACD_Messaging_Schema::deliveries_table(),
-			array(
-				'state'              => 'failed',
-				'failed_at'          => $now,
-				'updated_at'         => $now,
-				'last_error_code'    => 'queue_schedule_failed',
-				'last_error_summary' => __( 'The background email job could not be scheduled.', 'ghca-acd' ),
-			),
-			array( 'id' => $delivery_id ),
-			array( '%s', '%s', '%s', '%s', '%s' ),
-			array( '%d' )
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				'UPDATE ' . GHCA_ACD_Messaging_Schema::deliveries_table() . '
+				 SET state = %s, failed_at = %s, updated_at = %s, last_error_code = %s, last_error_summary = %s
+				 WHERE id = %d AND state = %s',
+				'failed',
+				$now,
+				$now,
+				'queue_schedule_failed',
+				__( 'The background email job could not be scheduled.', 'ghca-acd' ),
+				$delivery_id,
+				'queued'
+			)
 		);
+		if ( 1 !== (int) $updated ) {
+			return false;
+		}
 
 		self::sync_communication_state( $delivery_id, 'failed' );
+		return true;
+	}
+
+	/**
+	 * Scheduling lock for one delivery, owned by a random token. The option row holds "token|expires" (Unix time).
+	 *
+	 * - Acquire: INSERT IGNORE succeeds for exactly one caller. If a row exists, a single UPDATE takes it over only
+	 *   when its stored expiry has passed; the expiry test and the write are one statement, so two callers cannot
+	 *   both take over the same expired lock.
+	 * - Release: one DELETE that matches the caller's token, so a request that outlived its lease cannot remove a
+	 *   successor's lock. Releasing twice, or after losing the lock, deletes nothing.
+	 * - Every recovery write that follows carries lock_predicate() in its own WHERE clause, so a caller whose lease
+	 *   expired or was taken over changes nothing even if it keeps running.
+	 *
+	 * @return string The owner token, or '' when another owner holds an unexpired lock.
+	 */
+	public static function acquire_schedule_lock( int $delivery_id, int $ttl = 60 ): string {
+		global $wpdb;
+		$name    = self::lock_name( $delivery_id );
+		$token   = bin2hex( random_bytes( 16 ) );
+		$now     = time();
+		$value   = $token . '|' . ( $now + max( 1, $ttl ) );
+		$created = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO `{$wpdb->options}` ( `option_name`, `option_value`, `autoload` ) VALUES ( %s, %s, 'no' )", $name, $value ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( 1 === (int) $created ) {
+			return $token;
+		}
+		$taken = $wpdb->query( $wpdb->prepare( "UPDATE `{$wpdb->options}` SET option_value = %s WHERE option_name = %s AND CAST( SUBSTRING_INDEX( option_value, '|', -1 ) AS UNSIGNED ) < %d", $value, $name, $now ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return 1 === (int) $taken ? $token : '';
+	}
+
+	/** Removes the lock only if this token still owns it. Returns true when this call removed it. */
+	public static function release_schedule_lock( int $delivery_id, string $token ): bool {
+		global $wpdb;
+		if ( '' === $token ) {
+			return false;
+		}
+		$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM `{$wpdb->options}` WHERE option_name = %s AND SUBSTRING_INDEX( option_value, '|', 1 ) = %s", self::lock_name( $delivery_id ), $token ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return 1 === (int) $deleted;
+	}
+
+	/** Whether this token holds an unexpired lock right now (used before non-database steps such as scheduling). */
+	public static function holds_schedule_lock( int $delivery_id, string $token ): bool {
+		global $wpdb;
+		if ( '' === $token ) {
+			return false;
+		}
+		return 1 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->options}` WHERE " . self::lock_predicate(), self::lock_name( $delivery_id ), $token, time() ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	private static function lock_name( int $delivery_id ): string {
+		return 'ghca_acd_sched_lock_' . $delivery_id;
+	}
+
+	/** Placeholders: lock name, token, current time. */
+	private static function lock_predicate(): string {
+		return "option_name = %s AND SUBSTRING_INDEX( option_value, '|', 1 ) = %s AND CAST( SUBSTRING_INDEX( option_value, '|', -1 ) AS UNSIGNED ) >= %d";
+	}
+
+	/**
+	 * Recovery transition for a message that was saved but never scheduled: failed -> queued, only when the row is
+	 * exactly failed with queue_schedule_failed and zero attempts, and only while $token owns the unexpired lock.
+	 * One UPDATE: a worker attempt, a different failure reason or a lost lock between the caller's read and this
+	 * write makes it change nothing. Separate from requeue_failed(), which keeps the manual retry policy.
+	 */
+	public static function requeue_unscheduled( int $delivery_id, string $token ): bool {
+		global $wpdb;
+		$now     = current_time( 'mysql', true );
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				'UPDATE ' . GHCA_ACD_Messaging_Schema::deliveries_table() . '
+				 SET state = %s, queued_at = %s, updated_at = %s, failed_at = NULL, last_error_code = NULL, last_error_summary = NULL
+				 WHERE id = %d AND state = %s AND last_error_code = %s AND attempt_count = 0
+				 AND EXISTS ( SELECT 1 FROM `' . $wpdb->options . '` WHERE ' . self::lock_predicate() . ' )',
+				'queued',
+				$now,
+				$now,
+				$delivery_id,
+				'failed',
+				'queue_schedule_failed',
+				self::lock_name( $delivery_id ),
+				$token,
+				time()
+			)
+		);
+		if ( 1 !== (int) $updated ) {
+			return false;
+		}
+		self::sync_communication_state( $delivery_id, 'queued' );
+		return true;
+	}
+
+	/**
+	 * mark_schedule_failed() for the recovery path: also requires that $token still owns the lock, so a stale
+	 * owner cannot mark a delivery its successor has since scheduled.
+	 */
+	public static function mark_schedule_failed_as_owner( int $delivery_id, string $token ): bool {
+		global $wpdb;
+		$now     = current_time( 'mysql', true );
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				'UPDATE ' . GHCA_ACD_Messaging_Schema::deliveries_table() . '
+				 SET state = %s, failed_at = %s, updated_at = %s, last_error_code = %s, last_error_summary = %s
+				 WHERE id = %d AND state = %s AND attempt_count = 0
+				 AND EXISTS ( SELECT 1 FROM `' . $wpdb->options . '` WHERE ' . self::lock_predicate() . ' )',
+				'failed',
+				$now,
+				$now,
+				'queue_schedule_failed',
+				__( 'The background email job could not be scheduled.', 'ghca-acd' ),
+				$delivery_id,
+				'queued',
+				self::lock_name( $delivery_id ),
+				$token,
+				time()
+			)
+		);
+		if ( 1 !== (int) $updated ) {
+			return false;
+		}
+		self::sync_communication_state( $delivery_id, 'failed' );
+		return true;
 	}
 
 	public static function requeue_failed( int $delivery_id ): bool {
@@ -442,7 +572,7 @@ final class GHCA_ACD_Messaging_Repository {
 		$id_query  = $wpdb->prepare( $id_sql, $id_args );
 
 		$rows = $wpdb->get_results(
-			'SELECT c.id AS communication_id, c.actor_user_id, c.source, c.urgency, c.subject, c.message, c.requested_channels, c.state AS communication_state,
+			'SELECT c.id AS communication_id, c.actor_user_id, c.source, c.template_id, c.urgency, c.subject, c.message, c.requested_channels, c.state AS communication_state,
 				        c.created_at, d.id AS delivery_id, d.channel, d.masked_destination, d.provider, d.provider_ref, d.state AS delivery_state,
 				        d.attempt_count, d.last_error_code, d.last_error_summary, d.accepted_at, d.delivered_at, d.failed_at
 				 FROM ' . GHCA_ACD_Messaging_Schema::communications_table() . ' c
@@ -500,6 +630,52 @@ final class GHCA_ACD_Messaging_Repository {
 		}
 
 		$out['total'] = self::history_count( $employee_user_id );
+		return $out;
+	}
+
+	/**
+	 * The most recent communication for each of several employees, with its deliveries, in one query. Read
+	 * only; used for the "Last reminder" column of the Overdue tab. Ids are cast to positive integers and
+	 * bound as placeholders. Callers check the communication-history permission and the schema first.
+	 *
+	 * @param array<int,int> $employee_user_ids
+	 * @return array<int,array{created_at:string,deliveries:array<int,array{channel:string,state:string}>}>
+	 */
+	public static function latest_for_employees( array $employee_user_ids ): array {
+		global $wpdb;
+
+		$ids = array_values( array_unique( array_filter( array_map( 'absint', $employee_user_ids ) ) ) );
+		if ( empty( $ids ) ) {
+			return array();
+		}
+		$communications = GHCA_ACD_Messaging_Schema::communications_table();
+		$placeholders   = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+		$rows           = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				'SELECT c.employee_user_id AS employee_user_id, c.created_at AS created_at, d.channel AS channel, d.state AS state
+				 FROM ' . $communications . ' c
+				 INNER JOIN (SELECT MAX(id) AS id FROM ' . $communications . ' WHERE employee_user_id IN (' . $placeholders . ') GROUP BY employee_user_id) latest ON latest.id = c.id
+				 INNER JOIN ' . GHCA_ACD_Messaging_Schema::deliveries_table() . ' d ON d.communication_id = c.id
+				 ORDER BY d.id ASC', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$ids
+			),
+			ARRAY_A
+		);
+
+		$out = array();
+		foreach ( (array) $rows as $row ) {
+			$employee = (int) ( $row['employee_user_id'] ?? 0 );
+			if ( $employee <= 0 ) {
+				continue;
+			}
+			if ( ! isset( $out[ $employee ] ) ) {
+				$out[ $employee ] = array( 'created_at' => (string) ( $row['created_at'] ?? '' ), 'deliveries' => array() );
+			}
+			$out[ $employee ]['deliveries'][] = array(
+				'channel' => sanitize_key( (string) ( $row['channel'] ?? '' ) ),
+				'state'   => sanitize_key( (string) ( $row['state'] ?? '' ) ),
+			);
+		}
 		return $out;
 	}
 

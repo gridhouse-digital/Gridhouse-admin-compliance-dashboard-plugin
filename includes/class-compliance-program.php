@@ -3,6 +3,8 @@ if ( ! defined( 'ABSPATH' ) ) {
   exit;
 }
 
+require_once __DIR__ . '/class-training-year.php';
+
 final class GHCA_Compliance_Program {
   const OPTION_NEW_HIRE_GROUPS = 'ghca_new_hire_group_ids';
   const OPTION_NEW_HIRE_DAYS   = 'ghca_new_hire_deadline_days';
@@ -193,7 +195,7 @@ final class GHCA_Compliance_Program {
         'certificate_url'    => self::get_certificate_url( $user_id, $course_id ),
         'completed_recently' => $completed && $completed_ts > ( time() - ( 30 * DAY_IN_SECONDS ) ),
         'last_activity_ts'   => self::get_course_last_activity_timestamp( $user_id, $course_id, $completed_ts ),
-      ) + GHCA_Course_Lifespans::decorate( $course_id, $completed, $completed_ts );
+      ) + GHCA_Course_Lifespans::for_user( $user_id, $course_id, $completed, $completed_ts );
     }
 
     return $items;
@@ -201,10 +203,16 @@ final class GHCA_Compliance_Program {
 
   /** @return array<string,mixed> */
   public static function get_user_status( int $user_id ): array {
-    if ( isset( self::$user_status_cache[ $user_id ] ) ) {
-      return self::$user_status_cache[ $user_id ];
+    // Keyed by the training-year switch too, so the dry run can compare both rule sets in one request.
+    $key = $user_id . ':' . ( self::training_year_rules() ? 1 : 0 );
+    if ( isset( self::$user_status_cache[ $key ] ) ) {
+      return self::$user_status_cache[ $key ];
     }
-    return self::$user_status_cache[ $user_id ] = self::compute_user_status( $user_id );
+    return self::$user_status_cache[ $key ] = self::compute_user_status( $user_id );
+  }
+
+  private static function training_year_rules(): bool {
+    return class_exists( 'GHCA_ACD_Training_Year' ) && GHCA_ACD_Training_Year::enabled();
   }
 
   /** @return array<string,mixed> */
@@ -244,13 +252,25 @@ final class GHCA_Compliance_Program {
     }
 
     $enrollment_ts = self::get_enrollment_timestamp( $user_id, $group_ids );
-    if ( ! $enrollment_ts ) {
+    $rules         = self::training_year_rules();
+    if ( ! $enrollment_ts && ! $rules ) {
       return $empty;
     }
 
     $deadline_days  = self::get_deadline_days();
-    // Calendar-day arithmetic in the site time zone, so DST shifts do not move the deadline.
-    $deadline_ts    = ( new DateTimeImmutable( '@' . $enrollment_ts ) )->setTimezone( wp_timezone() )->modify( '+' . $deadline_days . ' days' )->getTimestamp();
+    if ( $rules ) {
+      // Training-year rules: the window runs from the verified hire date (or a later first service date where the
+      // agency allows it, § 6100.142(a)). Hire day is day 0 and the whole of day N is on time, as in the audit packet.
+      $anchor         = GHCA_ACD_Training_Year::new_hire_anchor( $user_id );
+      $start_ts       = (int) $anchor['ts'];
+      $deadline_basis = (string) $anchor['basis'];
+      $deadline_ts    = $start_ts > 0 ? GHCA_ACD_Training_Year::add_days( $start_ts, $deadline_days + 1 ) - 1 : 0;
+    } else {
+      $start_ts       = $enrollment_ts;
+      $deadline_basis = 'enrollment';
+      // Calendar-day arithmetic in the site time zone, so DST shifts do not move the deadline.
+      $deadline_ts    = ( new DateTimeImmutable( '@' . $enrollment_ts ) )->setTimezone( wp_timezone() )->modify( '+' . $deadline_days . ' days' )->getTimestamp();
+    }
     $courses        = self::get_user_courses( $user_id, $group_ids );
     $completed      = 0;
     $started        = 0;
@@ -273,10 +293,11 @@ final class GHCA_Compliance_Program {
     $total         = count( $courses );
     $all_complete  = $total > 0 && $completed === $total;
     $now           = time();
-    $days_elapsed  = (int) floor( max( 0, $now - $enrollment_ts ) / DAY_IN_SECONDS );
-    $days_remaining = (int) max( 0, (int) ceil( ( $deadline_ts - $now ) / DAY_IN_SECONDS ) );
-    $overdue       = ! $all_complete && $now > $deadline_ts;
-    $at_risk       = ! $all_complete && ! $overdue && $days_remaining <= self::AT_RISK_DAYS;
+    $days_elapsed  = $start_ts > 0 ? (int) floor( max( 0, $now - $start_ts ) / DAY_IN_SECONDS ) : 0;
+    $days_remaining = $deadline_ts > 0 ? (int) max( 0, (int) ceil( ( $deadline_ts - $now ) / DAY_IN_SECONDS ) ) : null;
+    // No deadline (hire date missing under training-year rules) is never overdue or at risk; it is reported instead.
+    $overdue       = ! $all_complete && $deadline_ts > 0 && $now > $deadline_ts;
+    $at_risk       = ! $all_complete && ! $overdue && null !== $days_remaining && $days_remaining <= self::AT_RISK_DAYS;
     $flagged       = $overdue;
 
     if ( $all_complete ) {
@@ -305,7 +326,7 @@ final class GHCA_Compliance_Program {
       'group_label'        => get_the_title( $group_ids[0] ),
       'enrollment_ts'      => $enrollment_ts,
       'deadline_ts'        => $deadline_ts,
-      'deadline_label'     => wp_date( 'F j, Y', $deadline_ts ),
+      'deadline_label'     => $deadline_ts > 0 ? wp_date( 'F j, Y', $deadline_ts ) : __( 'Hire date missing', 'ghca-acd' ),
       'days_remaining'     => $all_complete ? 0 : $days_remaining,
       'days_elapsed'       => $days_elapsed,
       'deadline_days'      => $deadline_days,
@@ -314,9 +335,10 @@ final class GHCA_Compliance_Program {
       'completed_count'    => $completed,
       // Latest dated completion among required courses; 0 until all are complete.
       'last_completion_ts' => $all_complete ? $last_completion_ts : 0,
-      // The deadline runs from the earliest of account registration and group
-      // enrollment, not from the verified date of hire used by the audit packet.
-      'deadline_basis'     => 'enrollment',
+      // Without training-year rules the deadline runs from the earliest of account registration and group
+      // enrollment ('enrollment'); with them, from the verified hire date ('hire'), a later first service date
+      // ('first_service'), or nowhere ('missing').
+      'deadline_basis'     => $deadline_basis,
       'status_slug'        => $status_slug,
       'status_label'       => $status_label,
     );

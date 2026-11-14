@@ -20,7 +20,7 @@ final class GHCA_Course_Lifespans {
    * @return array{state:string,expiration_ts:int}
    *   state ∈ incomplete | current (🟢) | expiring_soon (🟡) | expired (🔴)
    */
-  public static function evaluate( bool $completed, int $completed_ts, int $lifespan_days, int $warning_days, int $now ): array {
+  public static function evaluate( bool $completed, int $completed_ts, int $lifespan_days, int $warning_days, int $now, ?DateTimeZone $calendar = null ): array {
     if ( ! $completed ) {
       return array( 'state' => 'incomplete', 'expiration_ts' => 0 );
     }
@@ -31,11 +31,20 @@ final class GHCA_Course_Lifespans {
       return array( 'state' => 'current', 'expiration_ts' => 0 );
     }
 
-    $expiration_ts = $completed_ts + ( $lifespan_days * DAY_IN_SECONDS );
+    if ( $calendar ) {
+      // Calendar days in the site time zone ($calendar): DST- and leap-year-safe (training-year rules).
+      $completed_at  = ( new DateTimeImmutable( '@' . $completed_ts ) )->setTimezone( $calendar );
+      $expires_at    = $completed_at->modify( '+' . $lifespan_days . ' days' );
+      $expiration_ts = $expires_at->getTimestamp();
+      $warning_from  = $expires_at->modify( '-' . $warning_days . ' days' )->getTimestamp();
+    } else {
+      $expiration_ts = $completed_ts + ( $lifespan_days * DAY_IN_SECONDS );
+      $warning_from  = $expiration_ts - ( $warning_days * DAY_IN_SECONDS );
+    }
 
     if ( $now >= $expiration_ts ) {
       $state = 'expired';
-    } elseif ( $now >= ( $expiration_ts - ( $warning_days * DAY_IN_SECONDS ) ) ) {
+    } elseif ( $now >= $warning_from ) {
       $state = 'expiring_soon';
     } else {
       $state = 'current';
@@ -83,8 +92,10 @@ final class GHCA_Course_Lifespans {
    * @return array{lifespan_days:int,expiration_ts:int,expiration_label:string,compliance_state:string}
    */
   public static function decorate( int $course_id, bool $completed, int $completed_ts ): array {
-    $lifespan_days = self::get_lifespan_days( $course_id );
-    $eval          = self::evaluate( $completed, $completed_ts, $lifespan_days, self::get_warning_days(), time() );
+    $rules         = class_exists( 'GHCA_ACD_Training_Year' ) && GHCA_ACD_Training_Year::enabled();
+    // Training-year rules: courses that earn annual ODP credit follow the training year, not a lifespan.
+    $lifespan_days = $rules && GHCA_ACD_Training_Year::is_annual_course( $course_id ) ? 0 : self::get_lifespan_days( $course_id );
+    $eval          = self::evaluate( $completed, $completed_ts, $lifespan_days, self::get_warning_days(), time(), $rules ? wp_timezone() : null );
     $expiration_ts = (int) $eval['expiration_ts'];
 
     return array(
@@ -93,6 +104,19 @@ final class GHCA_Course_Lifespans {
       'expiration_label' => $expiration_ts > 0 ? wp_date( 'M j, Y', $expiration_ts ) : '',
       'compliance_state' => (string) $eval['state'],
     );
+  }
+
+  /**
+   * The expiry fields the admin dashboard shows for one employee's course. With the training-year switch on this is
+   * exactly GHCA_ACD_Training_Year::course() (the result the employee plugin shows); with it off, decorate() as before.
+   *
+   * @return array{lifespan_days:int,expiration_ts:int,expiration_label:string,compliance_state:string}
+   */
+  public static function for_user( int $user_id, int $course_id, bool $completed, int $completed_ts ): array {
+    if ( class_exists( 'GHCA_ACD_Training_Year' ) && GHCA_ACD_Training_Year::enabled() ) {
+      return GHCA_ACD_Training_Year::course( $user_id, $course_id, $completed, $completed_ts );
+    }
+    return self::decorate( $course_id, $completed, $completed_ts );
   }
 
   /**

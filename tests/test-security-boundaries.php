@@ -175,7 +175,8 @@ check_security_boundary( false !== $builder_renderer && false !== $legacy_render
 $course_page_renderer = strpos( $pdf_source, 'render_course_detail_page( $pdf, $course )' );
 $certificate_appender = strpos( $pdf_source, 'append_certificate( $pdf, GHCA_Audit_PDF_Jobs::cert_path' );
 check_security_boundary( false !== $course_page_renderer && false !== $certificate_appender && $course_page_renderer < $certificate_appender, 'course detail pages are rendered before their matching certificates' );
-check_security_boundary( false !== strpos( $pdf_source, '<strong>Employee:</strong>' ) && false === strpos( $pdf_source, "'Employee: ' . \$audit_data" ), 'employee name is rendered inside the cover details table instead of as a separate heading' );
+$layout_source = file_get_contents( __DIR__ . '/../includes/class-audit-packet-layout.php' );
+check_security_boundary( false !== strpos( $layout_source, "esc_html( '' !== \$name ? \$name : 'Unnamed employee' )" ) && false === strpos( $pdf_source . $layout_source, "'Employee: ' . \$audit_data" ), 'employee name is escaped where the packet prints it (employee block of the print layout)' );
 check_security_boundary( false !== strpos( $pdf_source, 'GHCA_ACD_Settings::annual_cycle_label' ) && false !== strpos( (string) file_get_contents( __DIR__ . '/../includes/class-settings.php' ), "'employee_start_date' => __( 'Employee Hire Date'" ), 'employee-anniversary packets use the configured Employee Hire Date label' );
 
 echo 0 === $fails ? "\nALL PASS\n" : "\n$fails FAILED\n";

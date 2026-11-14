@@ -1,0 +1,17 @@
+{
+    "priority_default": "467f5b488c5b038cfe211dcd723a1a5bbe44aaf27124eec9a6b50cefbc3ba320",
+    "priority_overdue": "3abdd06714ef8971ccb7ab5450a5624aae1ea8f1e176b919ac77894055cbcb9e",
+    "priority_group": "fa953d6be121424535e06b08365079542a350dbf125a48379583a7e6fce257da",
+    "priority_search": "bfaef3396a94c1213e02877fb1916036b6f0e4b6d77c6448164154053ba465c9",
+    "priority_sorted": "d2045f9ccb846acac437c6c320da2ca7edc50b0a816fbcaf3225e4be230d1868",
+    "priority_paged": "467f5b488c5b038cfe211dcd723a1a5bbe44aaf27124eec9a6b50cefbc3ba320",
+    "courses_default": "664a2028395394d7e2e197bcd76d5b6156bfe0f59be57bd6d35a208f39130e5a",
+    "courses_cert_yes": "28ac89facb9618266d0e4858c0ad0ea3d9d822b04c1b72a7bbab8a9c952254a4",
+    "courses_cert_no": "d5aa941bd5a6fb825a31dd6138470e0efbae908df33e257b3716464248b6ba10",
+    "courses_search": "fe2b2b0df6843aed9706527387b540f2c1a1d246ceb6cd6bf9f446c2af4b1863",
+    "courses_empty": "d03d49c2c1bcef26eac163c73e49ef0a5a25cd0c085e23ab764839c16a464124",
+    "certificates_full": "21c1aff9fe6a97650d8ca6127e687391c724e9ebb867ff754fd679e2f4c85f2e",
+    "certificates_compact": "ca017d2dad96db19e29317699076d905d353c9328bedf378fd3027c4782584e0",
+    "overdue_panel": "6c407268cfd7fc57bbac27c56a50a9e09fbbe8c0f74f5a89068a32f802fd94c9",
+    "courses_panel": "504dc17f587b8f1dff69773e4f5bc23095ef6e0a3cc496a1066cfc7fddf29445"
+}

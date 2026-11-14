@@ -2,12 +2,16 @@
 if ( ! defined( 'ABSPATH' ) ) {
   exit;
 }
+
+require_once __DIR__ . '/class-training-year.php';
 require_once __DIR__ . '/class-packet-course-selection.php';
 require_once __DIR__ . '/class-agency-training.php';
 
 final class GHCA_ACD_Settings {
   const OPTION_AGENCY_PROFILE = 'ghca_acd_agency_profile';
   const OPTION_AT_RISK_DAYS = 'ghca_acd_at_risk_days';
+  const OPTION_UI_REDESIGN = 'ghca_acd_ui_redesign';
+  const OPTION_UI_THEME    = 'ghca_acd_ui_theme';
   const OPTION_CACHE_TTL    = 'ghca_acd_cache_ttl';
   const OPTION_PERM_EDIT_RECORDS = 'ghca_acd_permission_edit_records';
   const OPTION_PERM_MANAGE_ANNOUNCEMENTS = 'ghca_acd_permission_manage_announcements';
@@ -57,6 +61,8 @@ final class GHCA_ACD_Settings {
       GHCA_Dashboard_Branding::OPTION,
       GHCA_Course_Lifespans::OPTION_LIFESPANS,
       GHCA_Course_Lifespans::OPTION_WARNING_DAYS,
+      GHCA_ACD_Training_Year::OPTION_NEW_HIRE_ANCHOR,
+      GHCA_ACD_Training_Year::OPTION_ENABLED,
       self::OPTION_PERM_EDIT_RECORDS,
       self::OPTION_PERM_MANAGE_ANNOUNCEMENTS,
       self::OPTION_PERM_UNRESTRICTED_VIEW,
@@ -245,6 +251,28 @@ final class GHCA_ACD_Settings {
 
     register_setting(
       'ghca_acd_settings',
+      self::OPTION_UI_REDESIGN,
+      array(
+        'type'              => 'integer',
+        'sanitize_callback' => array( __CLASS__, 'sanitize_ui_redesign' ),
+        'default'           => 0,
+        'show_in_rest'      => false,
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
+      self::OPTION_UI_THEME,
+      array(
+        'type'              => 'string',
+        'sanitize_callback' => array( __CLASS__, 'sanitize_ui_theme' ),
+        'default'           => 'gridhouse',
+        'show_in_rest'      => false,
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
       self::OPTION_CACHE_TTL,
       array(
         'type'              => 'integer',
@@ -263,6 +291,16 @@ final class GHCA_ACD_Settings {
         'type'              => 'array',
         'sanitize_callback' => array( 'GHCA_Course_Lifespans', 'sanitize_lifespan_map' ),
         'default'           => array(),
+      )
+    );
+
+    register_setting(
+      'ghca_acd_settings',
+      GHCA_ACD_Training_Year::OPTION_NEW_HIRE_ANCHOR,
+      array(
+        'type'              => 'string',
+        'sanitize_callback' => array( 'GHCA_ACD_Training_Year', 'sanitize_anchor' ),
+        'default'           => 'hire',
       )
     );
 
@@ -583,6 +621,36 @@ final class GHCA_ACD_Settings {
     return (int) get_option( self::OPTION_AT_RISK_DAYS, 30 );
   }
 
+  public static function sanitize_ui_redesign( $value ): int {
+    return in_array( $value, array( 1, '1' ), true ) ? 1 : 0;
+  }
+
+  /** @return array<string,string> */
+  public static function ui_theme_choices(): array {
+    return array(
+      'gridhouse' => __( 'Gridhouse (uses the brand colors saved above)', 'ghca-acd' ),
+      'akansoh'   => __( 'Akansoh green and gold', 'ghca-acd' ),
+      'purple'    => __( 'Purple', 'ghca-acd' ),
+    );
+  }
+
+  public static function sanitize_ui_theme( $value ): string {
+    $value = is_string( $value ) ? $value : '';
+    return array_key_exists( $value, self::ui_theme_choices() ) ? $value : 'gridhouse';
+  }
+
+  public static function ui_theme(): string {
+    return self::sanitize_ui_theme( get_option( self::OPTION_UI_THEME, 'gridhouse' ) );
+  }
+
+  public static function ui_redesign_enabled(): bool {
+    $enabled = 1 === self::sanitize_ui_redesign( get_option( self::OPTION_UI_REDESIGN, 0 ) );
+    if ( function_exists( 'apply_filters' ) ) {
+      $enabled = (bool) apply_filters( 'ghca_acd_ui_redesign_enabled', $enabled );
+    }
+    return $enabled;
+  }
+
   /** Onboarding context only; these descriptions never select regulatory rules. */
   private static function agency_profile_fields(): array {
     return array(
@@ -867,7 +935,16 @@ final class GHCA_ACD_Settings {
             <th scope="row"><label for="ghca_new_hire_deadline_days"><?php esc_html_e( 'New hire completion window (days)', 'ghca-acd' ); ?></label></th>
             <td>
               <input type="number" min="7" max="120" id="ghca_new_hire_deadline_days" name="<?php echo esc_attr( GHCA_Compliance_Program::OPTION_NEW_HIRE_DAYS ); ?>" value="<?php echo esc_attr( (string) $new_hire_days ); ?>" class="small-text" />
-              <p class="description"><?php esc_html_e( 'Default: 30 days from new hire group enrollment.', 'ghca-acd' ); ?></p>
+              <p class="description"><?php echo esc_html( GHCA_ACD_Training_Year::enabled() ? __( 'Default: 30 days. Counted from the verified hire date (training-year rules).', 'ghca-acd' ) : __( 'Default: 30 days from new hire group enrollment.', 'ghca-acd' ) ); ?></p>
+<?php if ( GHCA_ACD_Training_Year::enabled() ) : // Training-year rules only; with them off this page is exactly as before. ?>
+              <p>
+                <label for="ghca_acd_new_hire_anchor"><?php esc_html_e( 'Count from', 'ghca-acd' ); ?></label>
+                <select id="ghca_acd_new_hire_anchor" name="<?php echo esc_attr( GHCA_ACD_Training_Year::OPTION_NEW_HIRE_ANCHOR ); ?>">
+                  <option value="hire" <?php selected( GHCA_ACD_Training_Year::new_hire_anchor_rule(), 'hire' ); ?>><?php esc_html_e( 'The verified hire date', 'ghca-acd' ); ?></option>
+                  <option value="hire_or_first_service" <?php selected( GHCA_ACD_Training_Year::new_hire_anchor_rule(), 'hire_or_first_service' ); ?>><?php esc_html_e( 'The first service date when it is later than the hire date (§ 6100.142(a))', 'ghca-acd' ); ?></option>
+                </select>
+              </p>
+<?php endif; ?>
             </td>
           </tr>
           <tr>
@@ -986,6 +1063,28 @@ final class GHCA_ACD_Settings {
             <td><input type="number" min="7" max="120" id="ghca_acd_at_risk_days" name="<?php echo esc_attr( self::OPTION_AT_RISK_DAYS ); ?>" value="<?php echo esc_attr( (string) $at_risk ); ?>" class="small-text" /></td>
           </tr>
           <tr>
+            <th scope="row"><?php esc_html_e( 'Redesigned overview', 'ghca-acd' ); ?></th>
+            <td>
+              <input type="hidden" name="<?php echo esc_attr( self::OPTION_UI_REDESIGN ); ?>" value="0" />
+              <label for="ghca_acd_ui_redesign">
+                <input type="checkbox" id="ghca_acd_ui_redesign" name="<?php echo esc_attr( self::OPTION_UI_REDESIGN ); ?>" value="1" <?php checked( 1, self::sanitize_ui_redesign( get_option( self::OPTION_UI_REDESIGN, 0 ) ) ); ?> />
+                <?php esc_html_e( 'Use the redesigned compliance overview', 'ghca-acd' ); ?>
+              </label>
+              <p class="description"><?php esc_html_e( 'Off by default. Uncheck and save to restore the previous dashboard. This does not change training math, records, or permissions. ODP bulletin pages stay available either way. Agencies do not publish bulletins here.', 'ghca-acd' ); ?></p>
+            </td>
+          </tr>
+          <tr>
+            <th scope="row"><label for="ghca_acd_ui_theme"><?php esc_html_e( 'Redesign color theme', 'ghca-acd' ); ?></label></th>
+            <td>
+              <select id="ghca_acd_ui_theme" name="<?php echo esc_attr( self::OPTION_UI_THEME ); ?>">
+                <?php foreach ( self::ui_theme_choices() as $slug => $label ) : ?>
+                  <option value="<?php echo esc_attr( $slug ); ?>" <?php selected( self::ui_theme(), $slug ); ?>><?php echo esc_html( $label ); ?></option>
+                <?php endforeach; ?>
+              </select>
+              <p class="description"><?php esc_html_e( 'Applies to the redesigned overview and the ODP bulletin pages only. Older tabs keep their existing styling.', 'ghca-acd' ); ?></p>
+            </td>
+          </tr>
+          <tr>
             <th scope="row"><label for="ghca_acd_cache_ttl"><?php esc_html_e( 'Aggregate cache TTL (seconds)', 'ghca-acd' ); ?></label></th>
             <td><input type="number" min="0" max="3600" id="ghca_acd_cache_ttl" name="<?php echo esc_attr( self::OPTION_CACHE_TTL ); ?>" value="<?php echo esc_attr( (string) $cache ); ?>" class="small-text" /></td>
           </tr>
@@ -993,6 +1092,9 @@ final class GHCA_ACD_Settings {
         </details>
         <details class="ghca-settings-section" id="ghca-lifespans"><summary><?php esc_html_e( 'Course validity & expiration', 'ghca-acd' ); ?></summary>
         <p><?php esc_html_e( 'Define how long each course stays valid after completion. A completed course turns yellow inside the warning window and red once it passes its lifespan. Courses with no lifespan never expire.', 'ghca-acd' ); ?></p>
+<?php if ( GHCA_ACD_Training_Year::enabled() ) : ?>
+        <p class="description"><?php esc_html_e( 'Recommended: no lifespan for courses mapped to ODP annual (6100) categories. Their due date is the end of the employee’s training year. With training-year rules enabled, lifespans on those courses are ignored and the rest count calendar days in the site time zone.', 'ghca-acd' ); ?></p>
+<?php endif; ?>
         <table class="form-table" role="presentation">
           <tr>
             <th scope="row"><label for="ghca_acd_warning_days"><?php esc_html_e( 'Warning window (days)', 'ghca-acd' ); ?></label></th>
@@ -1018,6 +1120,8 @@ final class GHCA_ACD_Settings {
                       </select>
                       <input type="number" min="1" max="3650" class="ghca-lifespan-days small-text" value="<?php echo esc_attr( (string) $days ); ?>" placeholder="<?php esc_attr_e( 'days', 'ghca-acd' ); ?>" />
                       <button type="button" class="button ghca-lifespan-remove"><?php esc_html_e( 'Remove', 'ghca-acd' ); ?></button>
+<?php if ( GHCA_ACD_Training_Year::enabled() && GHCA_ACD_Training_Year::is_annual_course( (int) $cid ) ) : ?>                      <span class="description ghca-lifespan-annual"><?php esc_html_e( 'Ignored: this course earns annual ODP credit, so it follows the training year. Recommended: remove this lifespan.', 'ghca-acd' ); ?></span>
+<?php endif; ?>
                     </div>
                   <?php endforeach; ?>
                 </div>

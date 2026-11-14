@@ -42,6 +42,24 @@ final class GHCA_ACD_Export {
     $employees = GHCA_ACD_Data_Provider::get_employees_for_current_view();
     $filename  = 'compliance-export-' . wp_date( 'Y-m-d-His' ) . '.csv';
 
+    // "Export selected" (redesigned Employees tab) posts the selected ids. Each must be an active employee in this
+    // viewer's own scope; if any is not, nothing is exported, so a hidden or foreign id can never be included.
+    $selected = self::selected_ids();
+    if ( null !== $selected ) {
+      $by_id = array();
+      foreach ( $employees as $employee ) {
+        $by_id[ (int) ( $employee['user_id'] ?? 0 ) ] = $employee;
+      }
+      if ( ! $selected || array_diff( $selected, array_keys( $by_id ) ) ) {
+        wp_die( esc_html__( 'One or more selected employees are not in your current view. Nothing was exported.', 'ghca-acd' ) );
+      }
+      $employees = array();
+      foreach ( $selected as $id ) {
+        $employees[] = $by_id[ $id ];
+      }
+      $filename = 'compliance-export-selected-' . wp_date( 'Y-m-d-His' ) . '.csv';
+    }
+
     nocache_headers();
     header( 'Content-Type: text/csv; charset=utf-8' );
     header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
@@ -85,6 +103,29 @@ final class GHCA_ACD_Export {
 
     fclose( $out );
     exit;
+  }
+
+  /**
+   * Ids posted by "Export selected", or null when the request is the ordinary full export.
+   *
+   * @return array<int,int>|null
+   */
+  private static function selected_ids(): ?array {
+    if ( ! isset( $_POST['ghca_ids'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- the caller checked the export nonce.
+      return null;
+    }
+    $ids = array();
+    foreach ( explode( ',', (string) wp_unslash( $_POST['ghca_ids'] ) ) as $value ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput -- digits only, checked below.
+      $value = trim( $value );
+      if ( '' === $value ) {
+        continue;
+      }
+      if ( ! ctype_digit( $value ) || (int) $value <= 0 ) {
+        return array();
+      }
+      $ids[ (int) $value ] = (int) $value;
+    }
+    return array_values( $ids );
   }
 
 }

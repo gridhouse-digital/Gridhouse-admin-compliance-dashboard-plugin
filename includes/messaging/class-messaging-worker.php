@@ -49,8 +49,37 @@ final class GHCA_ACD_Messaging_Worker {
 			return false;
 		}
 
+		self::refresh_cron();
 		$result = wp_schedule_single_event( time() + 1, self::HOOK, array( $delivery_id ) );
-		return ! is_wp_error( $result ) && false !== $result;
+		if ( ! is_wp_error( $result ) && false !== $result ) {
+			return true;
+		}
+		// WordPress refuses an identical single event due within ten minutes. A job for this delivery already
+		// exists, so the delivery is scheduled; that is not a failure.
+		return self::is_scheduled( $delivery_id );
+	}
+
+	/** Whether a background job for this delivery is waiting to run. */
+	public static function is_scheduled( int $delivery_id ): bool {
+		if ( $delivery_id <= 0 ) {
+			return false;
+		}
+		self::refresh_cron();
+		return false !== wp_next_scheduled( self::HOOK, array( $delivery_id ) );
+	}
+
+	/**
+	 * WordPress keeps the cron option in the per-request options cache, loaded when the request starts. A request
+	 * that checks for a job, or schedules one, after another request has scheduled it would otherwise see its stale
+	 * copy, decide no job exists, and could mark a scheduled delivery failed. Found by the real-database concurrency
+	 * test (tests/integration-bulk-recovery.php). Drop the cached copy so the next read comes from the database.
+	 */
+	private static function refresh_cron(): void {
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( 'cron', 'options' );
+			wp_cache_delete( 'alloptions', 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+		}
 	}
 
 	public static function process( int $delivery_id ): void {

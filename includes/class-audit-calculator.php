@@ -14,6 +14,7 @@ require_once __DIR__ . '/class-packet-course-selection.php';
 require_once __DIR__ . '/class-employment-record.php';
 require_once __DIR__ . '/class-audit-mapping.php';
 require_once __DIR__ . '/class-odp-applicability.php';
+require_once __DIR__ . '/class-training-year.php';
 
 final class GHCA_Audit_Calculator {
 
@@ -99,8 +100,9 @@ final class GHCA_Audit_Calculator {
 		);
 	}
 
-	public static function annual_status( float $hours, int $now_ts, int $end_ts ): string {
-		if ( $hours >= 24 ) {
+	/** $required: the employee's annual hours (24 or 12, GHCA_ACD_Training_Year::required_hours()). */
+	public static function annual_status( float $hours, int $now_ts, int $end_ts, float $required = 24 ): string {
+		if ( $hours >= $required ) {
 			return 'compliant';
 		}
 
@@ -276,7 +278,7 @@ final class GHCA_Audit_Calculator {
 		$report = array(
 			'active' => false, 'complete' => false, 'outstanding' => array(), 'missing_dates' => array(),
 			'unmapped_required' => array(), 'last_completion_ts' => 0,
-			'enrollment_date' => '', 'deadline_date' => '', 'deadline_days' => 0,
+			'enrollment_date' => '', 'deadline_date' => '', 'deadline_days' => 0, 'deadline_basis' => '',
 		);
 		if ( ! class_exists( 'GHCA_Compliance_Program', false ) ) {
 			return $report;
@@ -290,6 +292,7 @@ final class GHCA_Audit_Calculator {
 		$report['enrollment_date']     = ! empty( $status['enrollment_ts'] ) ? wp_date( 'm/d/Y', (int) $status['enrollment_ts'] ) : '';
 		$report['deadline_date']       = ! empty( $status['deadline_ts'] ) ? wp_date( 'm/d/Y', (int) $status['deadline_ts'] ) : '';
 		$report['deadline_days']       = (int) ( $status['deadline_days'] ?? 0 );
+		$report['deadline_basis']      = (string) ( $status['deadline_basis'] ?? 'enrollment' );
 
 		$dated = 0;
 		foreach ( (array) ( $status['courses'] ?? array() ) as $course ) {
@@ -626,7 +629,8 @@ final class GHCA_Audit_Calculator {
 		}
 
 		// Annual Compliance Verification
-		$annual_status = self::annual_status( $total_annual_hrs + $additional_hrs, $now_ts, $end_ts );
+		$required_annual_hrs = GHCA_ACD_Training_Year::required_hours( (int) $user_id );
+		$annual_status = self::annual_status( $total_annual_hrs + $additional_hrs, $now_ts, $end_ts, $required_annual_hrs );
 		if ( $evidence_issues ) {
 			$annual_status = 'missing_evidence';
 		}
@@ -728,6 +732,8 @@ final class GHCA_Audit_Calculator {
 			'total_annual_hrs'    => $total_annual_hrs,
 			'additional_hrs'      => $additional_hrs,
 			'total_hrs'           => $total_annual_hrs + $additional_hrs,
+			'required_annual_hrs' => $required_annual_hrs,
+			'required_annual_label' => GHCA_ACD_Training_Year::enabled() ? GHCA_ACD_Training_Year::requirement( (int) $user_id )['label'] : '',
 			
 			'completion_date'     => $orientation_completed_date ? wp_date( 'm/d/Y', $orientation_completed_date ) : '',
 			'completed_within_30' => $completed_within_30,

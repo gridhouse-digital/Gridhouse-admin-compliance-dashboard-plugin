@@ -1,0 +1,70 @@
+/*
+ * Redesigned settings shell (boards "WP admin settings", WP-Settings-*.dc.html). Loaded only on the plugin's admin
+ * pages while the redesign switch is on. Every rule is scoped to #ghca-set-shell (id weight, so WordPress admin CSS
+ * cannot override it) and uses design-system tokens only; the WordPress chrome around it is untouched.
+ */
+body.ghca-set-rd #wpcontent { padding-right: 20px; }
+#ghca-set-shell { margin: 20px 0 0; max-width: 1200px; }
+#ghca-set-shell > .gh-app { background: transparent; min-height: 0; padding: 0; }
+#ghca-set-shell .ghca-set-head { margin-bottom: var(--gh-space-4); }
+#ghca-set-shell .ghca-set-head .gh-h1 { font-size: clamp(24px, 4vw, 32px); margin: 2px 0 4px; }
+#ghca-set-shell .ghca-set-split { display: flex; align-items: flex-start; gap: var(--gh-space-6); }
+#ghca-set-shell .ghca-set-nav { flex: 0 0 220px; position: sticky; top: 48px; }
+#ghca-set-shell .ghca-set-nav-g { margin-bottom: 14px; }
+#ghca-set-shell .ghca-set-nav-g > .gh-eyebrow { display: block; padding: 0 10px 4px; }
+#ghca-set-shell .ghca-set-nav-i { min-height: 40px; text-decoration: none; border-radius: var(--gh-radius-md); display: flex; align-items: center; }
+#ghca-set-shell .ghca-set-nav-i[aria-current="page"] { background: var(--gh-primary-50); color: var(--gh-color-primary); font-weight: 700; box-shadow: inset 3px 0 0 var(--gh-color-primary); }
+#ghca-set-shell .ghca-set-main { flex: 1 1 600px; min-width: 0; display: flex; flex-direction: column; gap: var(--gh-space-4); }
+#ghca-set-shell .ghca-set-pick { display: none; }
+#ghca-set-shell .ghca-set-title { margin: 0; }
+#ghca-set-shell .gh-alert ul { margin: 4px 0 0 18px; list-style: disc; }
+
+/* The page's own content, moved in by settings-redesign.js. */
+#ghca-set-shell .wrap { margin: 0; max-width: none; }
+#ghca-set-shell .wrap > h1, #ghca-set-shell .wrap > h1 + p { display: none; }
+#ghca-set-shell .wrap, #ghca-set-shell .wrap p, #ghca-set-shell .wrap td, #ghca-set-shell .wrap th, #ghca-set-shell .wrap label { color: var(--gh-text); font-family: var(--gh-font-body, inherit); font-size: var(--gh-text-sm); }
+#ghca-set-shell .wrap h2, #ghca-set-shell .wrap h3 { font-family: var(--gh-font-heading, inherit); color: var(--gh-text); }
+#ghca-set-shell .wrap .description { color: var(--gh-text-secondary); font-size: var(--gh-text-xs); line-height: 1.5; margin-top: 4px; max-width: 720px; }
+#ghca-set-shell .ghca-settings-section, #ghca-set-shell #ghca-packet-selection, #ghca-set-shell .wrap > form > .form-table, #ghca-set-shell .wrap > .form-table, #ghca-set-shell .ghca-settings-help {
+  background: var(--gh-surface-card); border: 1px solid var(--gh-border); border-radius: var(--gh-radius-lg); box-shadow: var(--gh-shadow-1); padding: var(--gh-space-5); margin: 0 0 var(--gh-space-4);
+}
+#ghca-set-shell .ghca-settings-section > summary { list-style: none; pointer-events: none; font-family: var(--gh-font-heading, inherit); font-size: var(--gh-text-lg); font-weight: var(--gh-heading-weight, 650); color: var(--gh-text); padding: 0 0 var(--gh-space-2); }
+#ghca-set-shell .ghca-settings-section > summary::-webkit-details-marker { display: none; }
+#ghca-set-shell .form-table { border-collapse: collapse; width: 100%; margin: 0; }
+#ghca-set-shell .form-table, #ghca-set-shell .form-table tbody, #ghca-set-shell .form-table tr, #ghca-set-shell .form-table th, #ghca-set-shell .form-table td { display: block; width: auto; }
+#ghca-set-shell .form-table tr { padding: var(--gh-space-3) 0; border-top: 1px solid var(--gh-border); }
+#ghca-set-shell .form-table tr:first-child { border-top: 0; }
+#ghca-set-shell .form-table th { padding: 0 0 6px; font-weight: 600; }
+#ghca-set-shell .form-table td { padding: 0; }
+#ghca-set-shell .wrap input[type="text"], #ghca-set-shell .wrap input[type="number"], #ghca-set-shell .wrap input[type="email"], #ghca-set-shell .wrap input[type="url"], #ghca-set-shell .wrap input[type="tel"], #ghca-set-shell .wrap input[type="password"], #ghca-set-shell .wrap input[type="date"], #ghca-set-shell .wrap select, #ghca-set-shell .wrap textarea {
+  min-height: 40px; border: 1px solid var(--gh-border-input); border-radius: var(--gh-radius-md); background: var(--gh-surface-card); color: var(--gh-text); padding: 0 10px; box-shadow: none; max-width: 100%;
+}
+#ghca-set-shell .wrap textarea { padding: 8px 10px; }
+#ghca-set-shell .wrap input:focus-visible, #ghca-set-shell .wrap select:focus-visible, #ghca-set-shell .wrap textarea:focus-visible, #ghca-set-shell .wrap .button:focus-visible { outline: 2px solid var(--gh-color-primary); outline-offset: 2px; box-shadow: none; }
+#ghca-set-shell .wrap input[type="checkbox"], #ghca-set-shell .wrap input[type="radio"] { -webkit-appearance: auto; appearance: auto; accent-color: var(--gh-color-primary); width: 18px; height: 18px; min-width: 18px; margin: 0 8px 0 0; vertical-align: -3px; border: 0; box-shadow: none; background: none; }
+#ghca-set-shell .wrap input[type="checkbox"]::before, #ghca-set-shell .wrap input[type="radio"]::before { content: none; display: none; }
+#ghca-set-shell .wrap .button, #ghca-set-shell .wrap .button-secondary { min-height: 40px; border-radius: var(--gh-radius-md); border: 1px solid var(--gh-border-strong); background: var(--gh-surface-card); color: var(--gh-text); padding: 0 16px; }
+#ghca-set-shell .wrap .button-primary { background: var(--gh-color-primary); border-color: var(--gh-color-primary); color: var(--gh-color-on-primary); }
+#ghca-set-shell .wrap .button-primary:hover { background: var(--gh-color-primary-hover); border-color: var(--gh-color-primary-hover); }
+#ghca-set-shell .wrap .submit { padding: 0; margin: var(--gh-space-2) 0 0; }
+#ghca-set-shell .wrap table.widefat { display: block; overflow-x: auto; max-width: 100%; }
+#ghca-set-shell .wrap .widefat { border: 1px solid var(--gh-border); border-radius: var(--gh-radius-md); background: var(--gh-surface-card); }
+#ghca-set-shell .wrap .widefat th, #ghca-set-shell .wrap .widefat td { padding: 10px 12px; vertical-align: top; }
+#ghca-set-shell .notice, #ghca-set-shell .updated, #ghca-set-shell .error { margin: 0; border-radius: var(--gh-radius-md); border: 1px solid var(--gh-border); border-left-width: 4px; background: var(--gh-surface-card); box-shadow: none; }
+#ghca-set-shell .notice-error, #ghca-set-shell .error { border-color: var(--gh-status-danger-border); border-left-color: var(--gh-status-danger-solid); background: var(--gh-status-danger-bg); }
+#ghca-set-shell .notice-success, #ghca-set-shell .updated { border-color: var(--gh-status-success-border); border-left-color: var(--gh-status-success-solid); background: var(--gh-status-success-bg); }
+
+/* Unsaved changes (board "State · unsaved changes"). */
+#ghca-set-shell .ghca-set-dirty { position: fixed; z-index: 9990; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(720px, calc(100vw - 32px)); display: flex; align-items: center; justify-content: space-between; gap: var(--gh-space-3); flex-wrap: wrap; padding: 12px 16px; background: var(--gh-surface-card); border: 1px solid var(--gh-border-strong); border-radius: var(--gh-radius-lg); box-shadow: var(--gh-shadow-3); }
+#ghca-set-shell .ghca-set-dirty[hidden] { display: none; }
+
+@media (max-width: 1023px) {
+  #ghca-set-shell .ghca-set-nav { display: none; }
+  #ghca-set-shell .ghca-set-pick { display: flex; }
+}
+@media (max-width: 782px) {
+  body.ghca-set-rd #wpcontent { padding-right: 10px; }
+  #ghca-set-shell { margin-top: 12px; }
+  #ghca-set-shell .ghca-settings-section, #ghca-set-shell #ghca-packet-selection { padding: var(--gh-space-4); }
+  #ghca-set-shell .wrap input[type="text"].regular-text { width: 100%; }
+}
