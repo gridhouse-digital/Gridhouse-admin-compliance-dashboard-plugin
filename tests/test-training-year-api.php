@@ -35,7 +35,18 @@ $r = GHCA_ACD_Training_Year::resolve( array( 'admin_role', 'driver' ), $catalog,
 check( 24 === $r['hours'] && 'default' === $r['source'] && 'Role requirement not set' === $r['label'], 'a 12 h role plus an unmapped role never becomes 12 h silently: 24 h, flagged, default' );
 check( 24 === GHCA_ACD_Training_Year::resolve( array( 'dsp_role', 'driver' ), $catalog, $map )['hours'] && 'role_map' === GHCA_ACD_Training_Year::resolve( array( 'dsp_role', 'driver' ), $catalog, $map )['source'], 'a 24 h role plus an unmapped role: 24 h from the role map (nothing higher possible)' );
 $r = GHCA_ACD_Training_Year::resolve( array( 'ghca_custom_rn' ), $catalog, array() );
-check( 24 === $r['hours'] && 'role_map' === $r['source'] && false !== strpos( $r['label'], 'agency policy' ), 'nurse role (RN) unmapped → 24 h as agency policy' );
+check( 24 === $r['hours'] && false === $r['set'] && 'default' === $r['source'] && false !== strpos( $r['label'], 'agency policy' ), 'unsaved nurse default (RN): 24 h as agency policy, set=false (not a saved mapping)' );
+$r = GHCA_ACD_Training_Year::resolve( array( 'ghca_custom_rn' ), $catalog, array( 'ghca_custom_rn' => '24' ) );
+check( 24 === $r['hours'] && true === $r['set'] && 'role_map' === $r['source'], 'nurse role after an administrator saves 24 h: set=true, source role_map' );
+$r = GHCA_ACD_Training_Year::resolve( array( 'ghca_custom_rn', 'dsp_role' ), $catalog, array( 'dsp_role' => '24' ) );
+check( 24 === $r['hours'] && true === $r['set'] && 'role:dsp_role' === $r['key'], 'unsaved nurse default plus a saved 24 h role: the saved mapping wins the tie (set=true)' );
+// Core WordPress and forum roles never count, even if a catalog or a leftover map lists them.
+$with_core = $catalog + array( 'subscriber' => 'Subscriber', 'bbp_participant' => 'Participant', 'author' => 'Author' );
+$r = GHCA_ACD_Training_Year::resolve( array( 'admin_role', 'subscriber', 'bbp_participant' ), $with_core, array( 'admin_role' => '12', 'subscriber' => '24' ) );
+check( 12 === $r['hours'] && 'role_map' === $r['source'] && true === $r['set'], 'a 12 h job role plus subscriber and a forum role: stays 12 h, source role_map, set=true (core/forum roles ignored, leftover subscriber entry ignored)' );
+foreach ( array( 'subscriber', 'administrator', 'editor', 'author', 'contributor', 'bbp_keymaster', 'bbp_moderator', 'bbp_participant', 'bbp_spectator', 'bbp_blocked', 'member' ) as $core ) {
+	check( GHCA_ACD_Training_Year::is_excluded_role( $core ) && array() === GHCA_ACD_Training_Year::sanitize_role_map( array( $core => '12' ) ), 'excluded role ' . $core . ': never in the map' );
+}
 check( 24 === GHCA_ACD_Training_Year::resolve( array( 'house_nurse' ), $catalog, array() )['hours'], 'nurse role by title (Staff Nurse) → 24 h agency policy' );
 check( 12 === GHCA_ACD_Training_Year::resolve( array( 'ghca_custom_rn' ), $catalog, array( 'ghca_custom_rn' => '12' ) )['hours'], 'nurse mapping is editable: an administrator can set 12 h' );
 $r = GHCA_ACD_Training_Year::resolve( array( 'dsp_role' ), $catalog, $map, 'management' );
@@ -103,15 +114,55 @@ check( array( 'expiration_ts', 'expiration_label', 'compliance_state', 'lifespan
 check( $d['due_timestamp'] === $c['expiration_ts'] && 'Oct 19, 2027' === $c['expiration_label'] && 0 === $c['lifespan_days'] && true === $c['follows_training_year'] && 'current' === $c['compliance_state'], 'course(), annual course: expiration = due()["due_timestamp"], label Oct 19, 2027, follows the training year, current' );
 check( 'incomplete' === GHCA_ACD_Training_Year::course( 900001, 900001, false, 0, $now )['compliance_state'] && $d['due_timestamp'] === GHCA_ACD_Training_Year::course( 900001, 900001, false, 0, $now )['expiration_ts'], 'course(), annual course not completed: incomplete, still carrying the training-year due date' );
 $late = ( new DateTimeImmutable( '2027-10-10 10:00', $tz ) )->getTimestamp();
-check( 'expiring_soon' === GHCA_ACD_Training_Year::course( 900001, 900001, true, $late - DAY_IN_SECONDS, $late )['compliance_state'], 'course(), annual course: expiring soon inside the warning window before the training-year end' );
+check( 'current' === GHCA_ACD_Training_Year::course( 900001, 900001, true, $late - DAY_IN_SECONDS, $late )['compliance_state'], 'course(), annual course completed in the current year: current even inside the warning window (never expiring_soon)' );
+check( 'expiring_soon' === GHCA_ACD_Training_Year::course( 900001, 900001, false, 0, $late )['compliance_state'], 'course(), annual course not completed: expiring_soon inside the warning window' );
+// rc.3: a completion counts only inside the current window (start inclusive, end exclusive).
+$start = $w['start_ts'];
+$three = GHCA_ACD_Training_Year::course( 900001, 900001, true, $start - 3 * 365 * DAY_IN_SECONDS, $now );
+check( 'incomplete' === $three['compliance_state'] && $d['due_timestamp'] === $three['expiration_ts'] && 'Oct 19, 2027' === $three['expiration_label'], 'course(), annual course completed three years ago: incomplete, carrying this year\'s due date' );
+check( 'incomplete' === GHCA_ACD_Training_Year::course( 900001, 900001, true, $start - DAY_IN_SECONDS, $now )['compliance_state'], 'course(), annual course completed the day before the current window: incomplete' );
+check( 'incomplete' === GHCA_ACD_Training_Year::course( 900001, 900001, true, $start - 3 * 365 * DAY_IN_SECONDS, $late )['compliance_state'], 'course(), completed outside the year, inside the warning window: incomplete (not expiring_soon, which is only for a course never completed)' );
+check( 'current' === GHCA_ACD_Training_Year::course( 900001, 900001, true, $start, $now )['compliance_state'], 'course(), completed at 00:00 on the anniversary (window start): counts in the current year → current' );
+check( 'incomplete' === GHCA_ACD_Training_Year::course( 900001, 900001, true, $start - 1, $now )['compliance_state'], 'course(), completed one second before the anniversary: previous year → incomplete' );
+check( 'incomplete' === GHCA_ACD_Training_Year::course( 900001, 900001, true, $w['end_ts'], $now )['compliance_state'], 'course(), a completion stamped at the window end (exclusive) does not count in this year' );
+check( 'current' === GHCA_ACD_Training_Year::course( 900001, 900001, true, $now - DAY_IN_SECONDS, $now )['compliance_state'], 'course(), completed inside the current window: current' );
 $done = ( new DateTimeImmutable( '2026-11-01 12:00', $tz ) )->getTimestamp();
 $c = GHCA_ACD_Training_Year::course( 900001, 900002, true, $done, $now );
 $e = GHCA_Course_Lifespans::evaluate( true, $done, 30, 14, $now, $tz );
 check( $e['expiration_ts'] === $c['expiration_ts'] && $e['state'] === $c['compliance_state'] && 30 === $c['lifespan_days'] && false === $c['follows_training_year'] && '2026-12-01 12:00' === ( new DateTimeImmutable( '@' . $c['expiration_ts'] ) )->setTimezone( $tz )->format( 'Y-m-d H:i' ), 'course(), lifespan course: same calendar-day expiry and state as the lifespan policy (Dec 1, 2026 12:00, across the DST change)' );
+// rc.3: completed annual course with no training year is never current; it shows why.
+$saved_emp = $fixture['meta']['ghca_acd_verified_employment'];
+unset( $fixture['meta']['ghca_acd_verified_employment'] );
+$m = GHCA_ACD_Training_Year::course( 900001, 900001, true, $now - DAY_IN_SECONDS, $now );
+check( 0 === $m['expiration_ts'] && 'Hire date missing' === $m['expiration_label'] && ! in_array( $m['compliance_state'], array( 'current', 'expiring_soon' ), true ) && true === $m['follows_training_year'], 'course(), completed annual course with no hire date: expiration_ts 0, label "Hire date missing", not current' );
+$fixture['meta']['ghca_acd_verified_employment'] = $saved_emp;
+$fixture['options']['ghca_acd_annual_cycle'] = '';
+$m = GHCA_ACD_Training_Year::course( 900001, 900001, true, $now - DAY_IN_SECONDS, $now );
+check( 0 === $m['expiration_ts'] && 'Training year not configured' === $m['expiration_label'] && 'current' !== $m['compliance_state'], 'course(), training year not configured: label "Training year not configured", not current' );
+$fixture['options']['ghca_acd_annual_cycle'] = 'employee_start_date';
 $c = GHCA_ACD_Training_Year::course( 900001, 900003, true, $done, $now );
 check( 0 === $c['expiration_ts'] && '' === $c['expiration_label'] && 'current' === $c['compliance_state'] && false === $c['follows_training_year'], 'course(), no lifespan and not annual: does not expire' );
 GHCA_ACD_Training_Year::set_override( false );
 check( 3 === ( new ReflectionMethod( 'GHCA_Course_Lifespans', 'decorate' ) )->getNumberOfParameters(), 'decorate() still takes exactly three parameters' );
+// rc.3: the admin dashboard badge source (GHCA_Course_Lifespans::for_user) equals course() with the switch on,
+// and decorate() with it off (unchanged output).
+foreach ( array( 900001 => 'annual course', 900002 => 'lifespan course' ) as $cid => $kind ) {
+	GHCA_ACD_Training_Year::set_override( true );
+	$api  = GHCA_ACD_Training_Year::course( 900001, $cid, true, $done );
+	$dash = GHCA_Course_Lifespans::for_user( 900001, $cid, true, $done );
+	check( $api === $dash, 'dashboard parity, switch on, ' . $kind . ': same expiry, label, state, lifespan and follows_training_year as course() (' . $dash['compliance_state'] . ', ' . ( $dash['expiration_label'] ?: 'no expiry' ) . ')' );
+	GHCA_ACD_Training_Year::set_override( false );
+	check( GHCA_Course_Lifespans::decorate( $cid, true, $done ) === GHCA_Course_Lifespans::for_user( 900001, $cid, true, $done ), 'dashboard parity, switch off, ' . $kind . ': exactly decorate() as before' );
+}
+GHCA_ACD_Training_Year::set_override( null );
+
+// rc.3 (c): a Settings save without the start-date field keeps the stored value.
+$fixture['options'][ GHCA_ACD_Training_Year::OPTION_NEW_HIRE_ANCHOR ] = 'hire_or_first_service';
+check( 'hire_or_first_service' === GHCA_ACD_Training_Year::sanitize_anchor( null ), 'sanitize_anchor(null) (field absent from POST) keeps the stored hire_or_first_service' );
+check( 'hire' === GHCA_ACD_Training_Year::sanitize_anchor( 'hire' ) && 'hire' === GHCA_ACD_Training_Year::sanitize_anchor( 'junk' ) && 'hire_or_first_service' === GHCA_ACD_Training_Year::sanitize_anchor( 'hire_or_first_service' ), 'sanitize_anchor() still validates posted values' );
+unset( $fixture['options'][ GHCA_ACD_Training_Year::OPTION_NEW_HIRE_ANCHOR ] );
+check( 'hire' === GHCA_ACD_Training_Year::sanitize_anchor( null ), 'sanitize_anchor(null) with nothing stored: hire' );
+
 GHCA_ACD_Training_Year::set_override( null );
 
 echo 'PASS: ' . ( $checks - $base ) . " training-year role map and employee API checks (synthetic; no WordPress)\n";

@@ -110,7 +110,19 @@ final class GHCA_ACD_Training_Year {
 				}
 			}
 		}
+		foreach ( array_keys( $roles ) as $slug ) {
+			if ( self::is_excluded_role( (string) $slug ) ) {
+				unset( $roles[ $slug ] );
+			}
+		}
 		return array_map( 'strval', $roles );
+	}
+
+	/** WordPress core and bbPress / BuddyBoss forum roles: never job roles, never in the map, ignored in resolution. */
+	const EXCLUDED_ROLES = array( 'subscriber', 'administrator', 'editor', 'author', 'contributor', 'bbp_keymaster', 'bbp_moderator', 'bbp_participant', 'bbp_spectator', 'bbp_blocked', 'member' );
+
+	public static function is_excluded_role( string $slug ): bool {
+		return in_array( $slug, self::EXCLUDED_ROLES, true ) || 0 === strpos( $slug, 'bbp_' ) || 0 === strpos( $slug, 'bp_' );
 	}
 
 	/** Nurse roles (LPN, RN, other nurse titles) start at 24 h as agency policy (not ODP text). */
@@ -121,7 +133,8 @@ final class GHCA_ACD_Training_Year {
 	/** @return array<string,string> slug => role map value, as saved (no defaults). */
 	public static function role_map(): array {
 		$map = function_exists( 'get_option' ) ? get_option( self::OPTION_ROLE_MAP, array() ) : array();
-		return self::sanitize_role_map( $map );
+		// Leftover entries for roles no longer in the catalog (removed, or excluded such as subscriber) never count.
+		return array_intersect_key( self::sanitize_role_map( $map ), self::role_catalog() );
 	}
 
 	/** @param mixed $value @return array<string,string> */
@@ -132,7 +145,7 @@ final class GHCA_ACD_Training_Year {
 		}
 		foreach ( $value as $slug => $choice ) {
 			$slug = is_string( $slug ) ? $slug : '';
-			if ( 1 === preg_match( '/^[a-z0-9_-]{1,64}$/', $slug ) && is_string( $choice ) && isset( self::role_map_choices()[ $choice ] ) ) {
+			if ( 1 === preg_match( '/^[a-z0-9_-]{1,64}$/', $slug ) && ! self::is_excluded_role( $slug ) && is_string( $choice ) && isset( self::role_map_choices()[ $choice ] ) ) {
 				$out[ $slug ] = $choice;
 			}
 		}
@@ -176,7 +189,7 @@ final class GHCA_ACD_Training_Year {
 		$unmapped = false;
 		foreach ( $user_roles as $slug ) {
 			$slug = (string) $slug;
-			if ( ! isset( $catalog[ $slug ] ) ) {
+			if ( ! isset( $catalog[ $slug ] ) || self::is_excluded_role( $slug ) ) {
 				continue;
 			}
 			$v = self::role_value( $slug, $catalog[ $slug ], $map );
@@ -184,7 +197,8 @@ final class GHCA_ACD_Training_Year {
 				$unmapped = true;
 				continue;
 			}
-			if ( null === $best || $v['hours'] > $best['hours'] ) {
+			// Highest hours win; on a tie a saved mapping beats an unsaved nurse default.
+			if ( null === $best || $v['hours'] > $best['hours'] || ( $v['hours'] === $best['hours'] && $best['nurse_default'] && ! $v['nurse_default'] ) ) {
 				$best = $v + array( 'slug' => $slug );
 			}
 		}
@@ -194,7 +208,8 @@ final class GHCA_ACD_Training_Year {
 		$role  = $catalog[ $best['slug'] ];
 		$hours = (int) $best['hours'];
 		if ( $best['nurse_default'] ) {
-			$label = sprintf( /* translators: %s: role */ __( '%s: 24 h (agency policy)', 'ghca-acd' ), $role );
+			// A nurse role nobody has saved yet: 24 h as agency policy, but not a saved mapping (set false).
+			return array( 'key' => '', 'label' => sprintf( /* translators: %s: role */ __( '%s: 24 h (agency policy, not yet saved in the role map)', 'ghca-acd' ), $role ), 'hours' => self::DEFAULT_HOURS, 'set' => false, 'source' => 'default' );
 		} elseif ( 0 === $hours ) {
 			$label = $role . ': ' . self::role_map_choices()[ $best['value'] ][0];
 		} else {
@@ -292,8 +307,12 @@ final class GHCA_ACD_Training_Year {
 	/**
 	 * Employee API (stable). One course's due date or expiry for one employee.
 	 * - Courses that earn annual ODP credit (is_annual_course()) follow the training year: expiration_ts is
-	 *   due()['due_timestamp'], lifespan_days 0, follows_training_year true; the state is computed against that date
-	 *   and the warning window (incomplete courses stay 'incomplete' but still carry the date).
+	 *   due()['due_timestamp'], lifespan_days 0, follows_training_year true. A completion counts only when
+	 *   $completed_ts is inside the current window() (start inclusive, end exclusive): then 'current' (never
+	 *   'expiring_soon'). Otherwise (not completed, or completed outside the year): 'incomplete', 'expiring_soon'
+	 *   only when not completed and inside the warning window, 'expired' once the due date has passed. With no
+	 *   training year (hire date missing / not configured): expiration_ts 0, expiration_label = due()'s label,
+	 *   state 'incomplete'.
 	 * - Other courses with a lifespan: calendar-day expiry in the site time zone (as decorate() with the rules on).
 	 * - No lifespan: expiration_ts 0 (does not expire).
 	 *
@@ -304,21 +323,33 @@ final class GHCA_ACD_Training_Year {
 		$timezone = function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' );
 		$warning  = GHCA_Course_Lifespans::get_warning_days();
 		if ( self::is_annual_course( $course_id ) ) {
-			$due = (int) self::due( $user_id, $now )['due_timestamp'];
-			if ( ! $completed ) {
-				$state = 'incomplete';
-			} elseif ( $due <= 0 ) {
+			$due_info = self::due( $user_id, $now );
+			$due      = (int) $due_info['due_timestamp'];
+			if ( $due <= 0 ) {
+				// No training year (hire date missing / year not configured): never current; show why.
+				return array(
+					'expiration_ts'         => 0,
+					'expiration_label'      => (string) $due_info['due_date_label'],
+					'compliance_state'      => 'incomplete',
+					'lifespan_days'         => 0,
+					'follows_training_year' => true,
+				);
+			}
+			// A completion counts only inside the current training year: start inclusive, end exclusive (audit rule).
+			$window    = self::window( $user_id, $now );
+			$this_year = $completed && $completed_ts >= (int) $window['start_ts'] && $completed_ts < (int) $window['end_ts'];
+			if ( $this_year ) {
 				$state = 'current';
 			} elseif ( $now > $due ) {
 				$state = 'expired';
-			} elseif ( $now >= ( new DateTimeImmutable( '@' . ( $due + 1 ) ) )->setTimezone( $timezone )->modify( '-' . $warning . ' days' )->getTimestamp() ) {
-				$state = 'expiring_soon';
+			} elseif ( ! $completed && $now >= ( new DateTimeImmutable( '@' . ( $due + 1 ) ) )->setTimezone( $timezone )->modify( '-' . $warning . ' days' )->getTimestamp() ) {
+				$state = 'expiring_soon'; // only an incomplete course, inside the warning window
 			} else {
-				$state = 'current';
+				$state = 'incomplete';
 			}
 			return array(
 				'expiration_ts'         => $due,
-				'expiration_label'      => $due > 0 ? wp_date( 'M j, Y', $due ) : '',
+				'expiration_label'      => wp_date( 'M j, Y', $due ),
 				'compliance_state'      => $state,
 				'lifespan_days'         => 0,
 				'follows_training_year' => true,
@@ -373,7 +404,14 @@ final class GHCA_ACD_Training_Year {
 		return is_array( $mapping ) && '' !== (string) ( $mapping[ $course_id ]['odp_category'] ?? '' );
 	}
 
+	/**
+	 * Settings API sanitizer. A Settings save without the field (it is shown only with the switch on) posts nothing
+	 * for this option; WordPress then passes null, and the stored value is kept instead of resetting it to 'hire'.
+	 */
 	public static function sanitize_anchor( $value ): string {
+		if ( null === $value ) {
+			return self::new_hire_anchor_rule();
+		}
 		return 'hire_or_first_service' === $value ? 'hire_or_first_service' : 'hire';
 	}
 }

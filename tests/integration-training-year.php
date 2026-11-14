@@ -33,9 +33,10 @@ add_filter( 'wp_die_ajax_handler', static function () { return static function (
 add_filter( 'wp_die_handler', static function () { return static function ( $message ) { throw new Ghca_TY_Stop( is_string( $message ) ? $message : 'die' ); }; } );
 add_filter( 'wp_redirect', static function ( $location ) { throw new Ghca_TY_Stop( 'redirect:' . $location ); } );
 function ajax( callable $handler, array $request ): array {
-	$_POST = $_REQUEST = $request + array( 'nonce' => wp_create_nonce( 'ghca_acd_table' ) );
+	// Slashed like a real request (WordPress adds slashes to $_POST; handlers wp_unslash()).
+	$_POST = $_REQUEST = wp_slash( $request + array( 'nonce' => wp_create_nonce( 'ghca_acd_table' ) ) );
 	ob_start();
-	try { $handler(); } catch ( Ghca_TY_Stop $e ) {} // phpcs:ignore
+	try { $handler(); } catch ( Ghca_TY_Stop $x ) {} // phpcs:ignore
 	return (array) json_decode( (string) ob_get_clean(), true );
 }
 /** Everything the plugin could write: every option row (transients included, so the dashboard aggregate counts) and user meta. */
@@ -92,7 +93,7 @@ $f = $make( 'synthetic-ty-nurse', 'Synthetic', 'Nurse' );
 $f->set_role( 'synthetic_ty_lpn' );
 delete_option( GHCA_ACD_Training_Year::OPTION_ROLE_MAP );
 GHCA_ACD_Data_Provider::bust_cache();
-GHCA_ACD_Training_Year_Review::cached() && delete_transient( 'ghca_acd_ty_dryrun_' . $admin->ID );
+GHCA_ACD_Training_Year_Review::cached() && GHCA_ACD_Training_Year_Review::invalidate_cache();
 
 // ---- Role map: settable while the switch is off; administrators only; only known values.
 require_once ABSPATH . 'wp-admin/includes/template.php'; // submit_button(), loaded on real admin pages
@@ -106,7 +107,23 @@ $out = $post_map( array( 'synthetic_ty_office' => '12', 'synthetic_ty_dsp' => '2
 check( 0 === strpos( $out, 'redirect:' ) && array( 'synthetic_ty_office' => '12', 'synthetic_ty_dsp' => '24' ) === get_option( GHCA_ACD_Training_Year::OPTION_ROLE_MAP ) && ! GHCA_ACD_Training_Year::enabled(), 'role map saves 12 h and 24 h while the switch is off; "none" without an exception and unknown roles are dropped' );
 check( 'role_map' === GHCA_ACD_Training_Year::requirement( $d->ID )['source'] && 24 === GHCA_ACD_Training_Year::requirement( $d->ID )['hours'], 'real user with a 12 h role and a 24 h role: 24 h (highest wins), source role_map' );
 check( 12 === GHCA_ACD_Training_Year::requirement( $e->ID )['hours'] && 'role_map' === GHCA_ACD_Training_Year::requirement( $e->ID )['source'], 'real user with a 12 h role: 12 h from the role map' );
-check( 24 === GHCA_ACD_Training_Year::requirement( $f->ID )['hours'] && 'role_map' === GHCA_ACD_Training_Year::requirement( $f->ID )['source'] && false !== strpos( GHCA_ACD_Training_Year::requirement( $f->ID )['label'], 'agency policy' ) && ! isset( get_option( GHCA_ACD_Training_Year::OPTION_ROLE_MAP )['synthetic_ty_lpn'] ), 'nurse role (LPN): 24 h as agency policy, not auto-saved into the role map' );
+$nq = GHCA_ACD_Training_Year::requirement( $f->ID );
+check( 24 === $nq['hours'] && false === $nq['set'] && false !== strpos( $nq['label'], 'agency policy' ) && ! isset( get_option( GHCA_ACD_Training_Year::OPTION_ROLE_MAP )['synthetic_ty_lpn'] ), 'unsaved nurse role (LPN): 24 h as agency policy, set=false, not auto-saved into the role map' );
+// rc.3 (g): subscriber (and forum roles) never count and are not in the map.
+$e->add_role( 'subscriber' );
+$eq = GHCA_ACD_Training_Year::requirement( $e->ID );
+check( 12 === $eq['hours'] && 'role_map' === $eq['source'] && true === $eq['set'], 'mapped 12 h job role plus subscriber: stays 12 h, source role_map, set=true' );
+check( ! isset( GHCA_ACD_Training_Year::role_catalog()['subscriber'] ), 'subscriber is not in the role map catalog' );
+// rc.3 (h1): a leftover saved entry for an excluded role cannot change anyone's hours.
+$saved_map = get_option( GHCA_ACD_Training_Year::OPTION_ROLE_MAP );
+update_option( GHCA_ACD_Training_Year::OPTION_ROLE_MAP, $saved_map + array( 'subscriber' => '24', 'removed_role' => '24' ) );
+check( 12 === GHCA_ACD_Training_Year::requirement( $e->ID )['hours'] && ! isset( GHCA_ACD_Training_Year::role_map()['subscriber'] ) && ! isset( GHCA_ACD_Training_Year::role_map()['removed_role'] ), 'leftover role-map entries (subscriber, a removed role) are ignored when the map is read' );
+$post_map( array( 'synthetic_ty_office' => '12', 'synthetic_ty_dsp' => '24', 'synthetic_ty_lpn' => '24' ) );
+check( array( 'synthetic_ty_office' => '12', 'synthetic_ty_dsp' => '24', 'synthetic_ty_lpn' => '24' ) === get_option( GHCA_ACD_Training_Year::OPTION_ROLE_MAP ), 'saving the role map drops leftover entries; the nurse role is saved only because the administrator saved it' );
+$nq = GHCA_ACD_Training_Year::requirement( $f->ID );
+check( 24 === $nq['hours'] && true === $nq['set'] && 'role_map' === $nq['source'], 'nurse role after an administrator saves it: 24 h, set=true, source role_map' );
+ob_start(); GHCA_ACD_Training_Year_Review::render_page(); $map_page = (string) ob_get_clean();
+check( false === strpos( $map_page, 'name="role_map[subscriber]"' ) && false === strpos( $map_page, 'name="role_map[bbp_' ) && false !== strpos( $map_page, 'name="role_map[synthetic_ty_lpn]"' ), 'role-map table: no subscriber or forum roles; job roles listed' );
 $q = GHCA_ACD_Training_Year::requirement( $a->ID );
 check( 24 === $q['hours'] && false === $q['set'] && 'default' === $q['source'] && 'Role requirement not set' === $q['label'], 'unmapped role (subscriber): 24 h, "Role requirement not set", source default' );
 wp_set_current_user( get_user_by( 'login', 'synthetic-viewer' ) ? get_user_by( 'login', 'synthetic-viewer' )->ID : 0 );
@@ -114,13 +131,13 @@ $out = $post_map( array( 'synthetic_ty_office' => '24' ) );
 wp_set_current_user( $admin->ID );
 check( '12' === get_option( GHCA_ACD_Training_Year::OPTION_ROLE_MAP )['synthetic_ty_office'], 'a non-administrator cannot change the role map' );
 GHCA_ACD_Data_Provider::bust_cache();
-delete_transient( 'ghca_acd_ty_dryrun_' . $admin->ID );
+GHCA_ACD_Training_Year_Review::invalidate_cache();
 
 // ---- Dry run: read-only.
 $before = durable_state();
 $report = GHCA_ACD_Training_Year_Review::build( GHCA_ACD_Training_Year_Review::employee_ids() );
 check( durable_state() === $before, 'the dry run writes nothing: every option row (including the dashboard aggregate transient) and all user meta byte-identical before and after' );
-check( false === get_transient( 'ghca_acd_ty_dryrun_' . $admin->ID ), 'the comparison itself does not fill the dry-run cache either' );
+check( false === get_transient( 'ghca_acd_ty_dryrun' ), 'the comparison itself does not fill the dry-run cache either' );
 check( false === GHCA_ACD_Training_Year::enabled(), 'the dry run leaves the rules off' );
 $rows = array();
 foreach ( $report['rows'] as $row ) { $rows[ $row['user_id'] ] = $row; }
@@ -151,7 +168,7 @@ check( '=Synthetic Twelve' === $csv_c[1] && false !== strpos( (string) stream_ge
 $before = durable_state();
 ob_start(); GHCA_ACD_Training_Year_Review::render_page(); $page = (string) ob_get_clean();
 check( durable_state() === $before && false !== strpos( $page, 'No dry run yet.' ) && false === strpos( $page, 'data-ghca-training-year-review' ), 'page without a dry run: nothing computed, nothing written' );
-check( false !== strpos( $page, 'Per 55 Pa. Code §6100.143; nurse mapping is agency policy.' ) && false !== strpos( $page, 'name="role_map[synthetic_ty_office]"' ) && false !== strpos( $page, 'building-owner exception' ) && false !== strpos( $page, 'Nurse role: 24 h is agency policy' ), 'page: role map table with the basis text, exceptions next to "Not required", and the nurse agency-policy note' );
+check( false !== strpos( $page, 'Per 55 Pa. Code §6100.143; nurse mapping is agency policy.' ) && false !== strpos( $page, 'name="role_map[synthetic_ty_office]"' ) && false !== strpos( $page, 'building-owner exception' ) && ( false !== strpos( $page, 'Nurse role: 24 h is agency policy' ) || false !== strpos( $page, 'Agency policy (nurse role)' ) ), 'page: role map table with the basis text, exceptions next to "Not required", and the nurse agency-policy note' );
 $o1 = option_names();
 $_POST = $_REQUEST = array( 'action' => GHCA_ACD_Training_Year_Review::ACTION_RUN, '_wpnonce' => wp_create_nonce( GHCA_ACD_Training_Year_Review::ACTION_RUN ) );
 ob_start(); try { GHCA_ACD_Training_Year_Review::handle_run(); } catch ( Ghca_TY_Stop $x ) {} ob_end_clean(); // phpcs:ignore
@@ -159,10 +176,10 @@ $o2 = option_names();
 $written = array();
 foreach ( $o2 as $name => $row ) { if ( ! isset( $o1[ $name ] ) || $o1[ $name ]->{'MD5(option_value)'} !== $row->{'MD5(option_value)'} ) { $written[] = $name; } }
 sort( $written );
-check( array( '_transient_ghca_acd_ty_dryrun_' . $admin->ID, '_transient_timeout_ghca_acd_ty_dryrun_' . $admin->ID ) === $written, 'running the dry run writes only its own cache (' . implode( ', ', $written ) . '), never the dashboard aggregate' );
+check( array( '_transient_ghca_acd_ty_dryrun', '_transient_timeout_ghca_acd_ty_dryrun' ) === $written, 'running the dry run writes only its own cache (' . implode( ', ', $written ) . '), never the dashboard aggregate' );
 $cache = GHCA_ACD_Training_Year_Review::cached();
 $cache['report']['rows'][0]['name'] = 'Sentinel From Cache';
-set_transient( 'ghca_acd_ty_dryrun_' . $admin->ID, $cache, 600 );
+set_transient( 'ghca_acd_ty_dryrun', $cache, 600 );
 $before = durable_state();
 ob_start(); GHCA_ACD_Training_Year_Review::render_page(); $page = (string) ob_get_clean();
 check( durable_state() === $before && false !== strpos( $page, 'Sentinel From Cache' ), 'page load reads the cached dry run (no recomputation, nothing written)' );
@@ -171,6 +188,89 @@ ob_start(); GHCA_ACD_Training_Year_Review::render_page(); $page = (string) ob_ge
 unset( $_GET['show'] );
 check( false !== strpos( $page, 'Requirement (source)' ) && false !== strpos( $page, 'Training-year window (old → new)' ) && false !== strpos( $page, 'New-hire deadline (old → new)' ) && false !== strpos( $page, 'Role requirement not set: ' ), 'page: source, old → new windows and new-hire deadlines, and the role-requirement count' );
 check( false !== strpos( $page, 'name="reviewed"' ) && false !== strpos( $page, 'Enable training-year rules' ), 'page: the enable button sits under the dry run, with the review confirmation' );
+GHCA_ACD_Training_Year_Review::run_and_cache();
+check( (int) GHCA_ACD_Training_Year_Review::cached()['built_by'] === $admin->ID, 'the dry-run cache records who ran it' );
+ob_start(); GHCA_ACD_Training_Year_Review::render_page(); $page = (string) ob_get_clean();
+check( false !== strpos( $page, 'Dry run by ' . esc_html( $admin->display_name ) . ' on ' ), 'page: "Dry run by {admin} on {date}"' );
+
+// ---- rc.3 (f): any role-map, override or hire-date change clears every administrator's dry-run result.
+$admin2 = get_user_by( 'login', 'synthetic-ty-admin2' ) ?: get_user_by( 'id', wp_insert_user( array( 'user_login' => 'synthetic-ty-admin2', 'user_email' => 'ty-admin2@example.test', 'user_pass' => wp_generate_password(), 'role' => 'administrator' ) ) );
+$stale = static function (): int { global $wpdb; return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_ghca\\_acd\\_ty\\_dryrun%'" ); };
+$seed  = static function () use ( $admin2 ) { GHCA_ACD_Training_Year_Review::run_and_cache(); set_transient( 'ghca_acd_ty_dryrun_' . $admin2->ID, array( 'report' => array(), 'built_at' => time() ), 600 ); };
+$seed();
+check( 2 === $stale(), 'setup: a shared result and another administrator\'s rc.2-style result are cached' );
+$post_map( array( 'synthetic_ty_office' => '12', 'synthetic_ty_dsp' => '24', 'synthetic_ty_lpn' => '24' ) );
+check( 0 === $stale() && null === GHCA_ACD_Training_Year_Review::cached(), 'role-map save: no administrator\'s dry-run cache is left' );
+$seed();
+update_user_meta( $e->ID, GHCA_ACD_Training_Year::REQUIREMENT_META, 'management' );
+check( 0 === $stale(), 'per-employee override change: no administrator\'s dry-run cache is left' );
+delete_user_meta( $e->ID, GHCA_ACD_Training_Year::REQUIREMENT_META );
+$seed();
+update_user_meta( $b->ID, GHCA_ACD_Employment_Record::META_KEY, array( 'date' => '2026-01-05', 'source' => 'Synthetic HR reference', 'verified_by' => $admin->ID, 'verified_at' => time() ) );
+check( 0 === $stale(), 'hire-date change: no administrator\'s dry-run cache is left' );
+delete_user_meta( $b->ID, GHCA_ACD_Employment_Record::META_KEY );
+
+// ---- rc.3 (d): the CSV download never runs the comparison.
+GHCA_ACD_Training_Year_Review::invalidate_cache();
+$before = durable_state();
+$_GET = $_POST = $_REQUEST = array( 'action' => GHCA_ACD_Training_Year_Review::ACTION_CSV, '_wpnonce' => wp_create_nonce( GHCA_ACD_Training_Year_Review::ACTION_CSV ) );
+ob_start(); $msg = '';
+try { GHCA_ACD_Training_Year_Review::download_csv(); } catch ( Ghca_TY_Stop $x ) { $msg = $x->getMessage(); } // phpcs:ignore
+$csv_out = (string) ob_get_clean();
+check( false !== strpos( $msg, 'Run the dry run first.' ) && false === strpos( $csv_out, 'User ID,' ) && durable_state() === $before && null === GHCA_ACD_Training_Year_Review::cached(), 'CSV without a dry run: "Run the dry run first.", no CSV, nothing computed or written' );
+
+// ---- rc.3 (e): chunked run = single-shot build(), zero writes until the verified save.
+$single = GHCA_ACD_Training_Year_Review::build( GHCA_ACD_Training_Year_Review::employee_ids() );
+$nonce  = wp_create_nonce( GHCA_ACD_Training_Year_Review::ACTION_RUN );
+$before = durable_state();
+$start  = ajax( array( 'GHCA_ACD_Training_Year_Review', 'ajax_run_start' ), array( 'nonce' => $nonce ) )['data'];
+$chunks = array();
+foreach ( array_chunk( $start['ids'], 4 ) as $part ) {
+	$chunks[] = ajax( array( 'GHCA_ACD_Training_Year_Review', 'ajax_run_chunk' ), array( 'nonce' => $nonce, 'run' => $start['run'], 'ids' => $part ) )['data'];
+}
+check( count( $chunks ) >= 3 && durable_state() === $before, 'chunked run (' . count( $chunks ) . ' chunks of up to 4): starting and every chunk write nothing (options incl. transients, user meta)' );
+$bad = $chunks;
+$bad[0]['rows'] = str_replace( '"changed":true', '"changed":false', $bad[0]['rows'] );
+$r = ajax( array( 'GHCA_ACD_Training_Year_Review', 'ajax_run_save' ), array( 'nonce' => $nonce, 'run' => $start['run'], 'ids' => wp_json_encode( $start['ids'] ), 'ids_sig' => $start['ids_sig'], 'chunks' => wp_json_encode( $bad ) ) );
+check( empty( $r['success'] ) && null === GHCA_ACD_Training_Year_Review::cached(), 'a tampered chunk is refused; nothing is stored' );
+$r = ajax( array( 'GHCA_ACD_Training_Year_Review', 'ajax_run_save' ), array( 'nonce' => $nonce, 'run' => $start['run'], 'ids' => wp_json_encode( $start['ids'] ), 'ids_sig' => $start['ids_sig'], 'chunks' => wp_json_encode( array_slice( $chunks, 1 ) ) ) );
+check( empty( $r['success'] ) && null === GHCA_ACD_Training_Year_Review::cached(), 'an incomplete run (a chunk missing) is refused; nothing is stored' );
+$o1 = option_names();
+$r  = ajax( array( 'GHCA_ACD_Training_Year_Review', 'ajax_run_save' ), array( 'nonce' => $nonce, 'run' => $start['run'], 'ids' => wp_json_encode( $start['ids'] ), 'ids_sig' => $start['ids_sig'], 'chunks' => wp_json_encode( $chunks ) ) );
+$o2 = option_names();
+$written = array();
+foreach ( $o2 as $name => $row ) { if ( ! isset( $o1[ $name ] ) || $o1[ $name ]->{'MD5(option_value)'} !== $row->{'MD5(option_value)'} ) { $written[] = $name; } }
+sort( $written );
+check( ! empty( $r['success'] ) && array( '_transient_ghca_acd_ty_dryrun', '_transient_timeout_ghca_acd_ty_dryrun' ) === $written, 'the verified save writes only the dry-run cache' );
+check( $single === GHCA_ACD_Training_Year_Review::cached()['report'], 'the chunked run produces exactly the same report as a single-shot build() (' . count( $single['rows'] ) . ' rows)' );
+$_POST = $_REQUEST = array( 'nonce' => 'bad' );
+ob_start(); try { GHCA_ACD_Training_Year_Review::ajax_run_start(); } catch ( Ghca_TY_Stop $x ) {} $denied = (string) ob_get_clean(); // phpcs:ignore
+check( false !== strpos( $denied, 'Permission denied' ), 'chunked run endpoints need the run nonce' );
+
+// ---- rc.3 (b): dashboard badges equal course() with the switch on, decorate() with it off.
+$saved_life = get_option( GHCA_Course_Lifespans::OPTION_LIFESPANS, null );
+update_option( GHCA_Course_Lifespans::OPTION_LIFESPANS, array( 990002 => 30 ) );
+update_user_meta( $a->ID, 'ghca_rs_courses', array( 990001, 990002 ) );
+$done_ts = time() - 3 * DAY_IN_SECONDS;
+update_user_meta( $a->ID, 'course_completed_990001', $done_ts );
+update_user_meta( $a->ID, 'course_completed_990002', $done_ts );
+foreach ( array( true, false ) as $on ) {
+	$rec   = GHCA_ACD_Data_Provider::employee_record_for_review( $a->ID, $on );
+	$items = array();
+	foreach ( $rec['courses'] as $item ) { $items[ (int) $item['id'] ] = $item; }
+	foreach ( array( 990001 => 'annual course', 990002 => 'lifespan course' ) as $cid => $kind ) {
+		GHCA_ACD_Training_Year::set_override( $on );
+		$want = $on ? GHCA_ACD_Training_Year::course( $a->ID, $cid, true, $done_ts ) : GHCA_Course_Lifespans::decorate( $cid, true, $done_ts );
+		GHCA_ACD_Training_Year::set_override( null );
+		$got = array_intersect_key( $items[ $cid ] ?? array(), $want );
+		check( $want === $got, 'dashboard item parity, switch ' . ( $on ? 'on' : 'off' ) . ', ' . $kind . ': ' . ( $on ? 'course()' : 'decorate()' ) . ' fields (' . ( $got['compliance_state'] ?? '?' ) . ', ' . ( ( $got['expiration_label'] ?? '' ) ?: 'no expiry' ) . ')' );
+	}
+}
+check( isset( $items[990001] ) && ! isset( $items[990001]['follows_training_year'] ), 'switch off: dashboard items carry only the previous decorate() fields' );
+delete_user_meta( $a->ID, 'ghca_rs_courses' );
+delete_user_meta( $a->ID, 'course_completed_990001' );
+delete_user_meta( $a->ID, 'course_completed_990002' );
+null === $saved_life ? delete_option( GHCA_Course_Lifespans::OPTION_LIFESPANS ) : update_option( GHCA_Course_Lifespans::OPTION_LIFESPANS, $saved_life );
 GHCA_ACD_Training_Year_Review::run_and_cache();
 
 // ---- Switch off: everything else looks and computes exactly as before rc.1.
@@ -188,7 +288,7 @@ check( false === strpos( $legacy_off['data']['html'], 'Training year' ) && false
 $switch = static function ( array $post ): string {
 	$_POST = $_REQUEST = $post + array( 'action' => GHCA_ACD_Training_Year_Review::ACTION_SWITCH, '_wpnonce' => wp_create_nonce( GHCA_ACD_Training_Year_Review::ACTION_SWITCH ) );
 	ob_start();
-	try { GHCA_ACD_Training_Year_Review::handle_switch(); } catch ( Ghca_TY_Stop $e ) { ob_end_clean(); return $e->getMessage(); }
+	try { GHCA_ACD_Training_Year_Review::handle_switch(); } catch ( Ghca_TY_Stop $x ) { ob_end_clean(); return $x->getMessage(); }
 	return (string) ob_get_clean();
 };
 $out = $switch( array( 'enable' => '1' ) );
@@ -200,7 +300,7 @@ wp_set_current_user( $admin->ID );
 check( ! GHCA_ACD_Training_Year::enabled() && false !== stripos( $out, 'denied' ), 'a non-administrator cannot enable the rules' );
 $_REQUEST['_wpnonce'] = 'bad';
 $_POST = $_REQUEST = array( 'action' => GHCA_ACD_Training_Year_Review::ACTION_SWITCH, 'enable' => '1', 'reviewed' => '1', '_wpnonce' => 'bad' );
-ob_start(); try { GHCA_ACD_Training_Year_Review::handle_switch(); } catch ( Ghca_TY_Stop $e ) {} ob_end_clean(); // phpcs:ignore
+ob_start(); try { GHCA_ACD_Training_Year_Review::handle_switch(); } catch ( Ghca_TY_Stop $x ) {} ob_end_clean(); // phpcs:ignore
 check( ! GHCA_ACD_Training_Year::enabled(), 'a bad nonce cannot enable the rules' );
 $out = $switch( array( 'enable' => '1', 'reviewed' => '1' ) );
 $by  = get_option( GHCA_ACD_Training_Year::OPTION_ENABLED_BY );
@@ -236,9 +336,9 @@ foreach ( $saved_options as $name => $value ) {
 	null === $value ? delete_option( $name ) : update_option( $name, $value );
 }
 require_once ABSPATH . 'wp-admin/includes/user.php';
-foreach ( array( $a, $b, $c, $d, $e, $f ) as $user ) { wp_delete_user( $user->ID ); }
+foreach ( array( $a, $b, $c, $d, $e, $f, $admin2 ) as $user ) { wp_delete_user( $user->ID ); }
 foreach ( array( 'synthetic_ty_office', 'synthetic_ty_dsp', 'synthetic_ty_lpn' ) as $role ) { remove_role( $role ); }
-delete_transient( 'ghca_acd_ty_dryrun_' . $admin->ID );
+GHCA_ACD_Training_Year_Review::invalidate_cache();
 GHCA_ACD_Data_Provider::bust_cache();
 
 echo $failed ? "FAILED: $failed of $checks training-year real checks\n" : "PASS: $checks training-year real checks (WordPress + MariaDB; synthetic users; nothing sent)\n";

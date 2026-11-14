@@ -22,8 +22,10 @@ final class GHCA_ACD_Training_Year_Review {
 	const ACTION_SWITCH = 'ghca_acd_training_year_switch';
 	const ACTION_RUN    = 'ghca_acd_training_year_run';
 	const ACTION_MAP    = 'ghca_acd_training_role_map';
-	const CACHE_PREFIX  = 'ghca_acd_ty_dryrun_'; // dry-run cache, per administrator; never the dashboard aggregate
+	const CACHE_KEY     = 'ghca_acd_ty_dryrun';  // one site-wide dry-run result; never the dashboard aggregate
+	const CACHE_PREFIX  = 'ghca_acd_ty_dryrun_'; // rc.2 per-administrator keys, removed on invalidation
 	const CACHE_TTL     = 12 * HOUR_IN_SECONDS;
+	const CHUNK         = 25;                    // employees compared per request in the chunked run
 	const PER_PAGE      = 50;
 
 	public static function init(): void {
@@ -32,6 +34,17 @@ final class GHCA_ACD_Training_Year_Review {
 		add_action( 'admin_post_' . self::ACTION_SWITCH, array( __CLASS__, 'handle_switch' ) );
 		add_action( 'admin_post_' . self::ACTION_RUN, array( __CLASS__, 'handle_run' ) );
 		add_action( 'admin_post_' . self::ACTION_MAP, array( __CLASS__, 'handle_role_map' ) );
+		add_action( 'wp_ajax_ghca_acd_ty_run_start', array( __CLASS__, 'ajax_run_start' ) );
+		add_action( 'wp_ajax_ghca_acd_ty_run_chunk', array( __CLASS__, 'ajax_run_chunk' ) );
+		add_action( 'wp_ajax_ghca_acd_ty_run_save', array( __CLASS__, 'ajax_run_save' ) );
+		// Anything that changes a dry-run result makes every administrator's cached result stale.
+		foreach ( array( 'added_user_meta', 'updated_user_meta', 'deleted_user_meta' ) as $hook ) {
+			add_action( $hook, array( __CLASS__, 'maybe_invalidate_for_meta' ), 10, 3 );
+		}
+		foreach ( array( GHCA_ACD_Training_Year::OPTION_ROLE_MAP, 'ghca_acd_annual_cycle', 'ghca_acd_audit_mapping', GHCA_ACD_Training_Year::OPTION_NEW_HIRE_ANCHOR ) as $option ) {
+			add_action( 'update_option_' . $option, array( __CLASS__, 'invalidate_cache' ) );
+			add_action( 'add_option_' . $option, array( __CLASS__, 'invalidate_cache' ) );
+		}
 		if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( 'WP_CLI' ) ) {
 			WP_CLI::add_command( 'ghca-acd training-year-review', array( __CLASS__, 'cli' ) );
 		}
@@ -54,10 +67,14 @@ final class GHCA_ACD_Training_Year_Review {
 	 * @return array{rows:array<int,array<string,mixed>>,summary:array<string,int>}
 	 */
 	public static function build( array $user_ids ): array {
+		return self::summarize( self::build_rows( $user_ids ) );
+	}
+
+	/** The rows only (no sorting, no summary). Zero-write. Used by build() and by each chunk of the chunked run. */
+	public static function build_rows( array $user_ids ): array {
 		$mappings = get_option( 'ghca_acd_audit_mapping', array() );
 		$mappings = is_array( $mappings ) ? $mappings : array();
 		$rows     = array();
-		$summary  = array( 'employees' => 0, 'changed' => 0, 'due_changed' => 0, 'status_changed' => 0, 'annual_changed' => 0, 'deadline_changed' => 0, 'expiry_changed' => 0, 'missing_hire' => 0, 'requirement_not_set' => 0 );
 		foreach ( array_values( array_unique( array_map( 'intval', $user_ids ) ) ) as $user_id ) {
 			if ( $user_id <= 0 ) {
 				continue;
@@ -114,15 +131,68 @@ final class GHCA_ACD_Training_Year_Review {
 			$row['changed']          = $row['due_changed'] || $row['status_changed'] || $row['annual_changed'] || $row['deadline_changed'] || (bool) $expiry;
 			$row['missing_data']     = $row['missing_hire'] || $row['requirement_not_set'];
 			$rows[] = $row;
+		}
+		return $rows;
+	}
 
+	/** Sorted rows and the summary counts. */
+	public static function summarize( array $rows ): array {
+		$summary = array( 'employees' => 0, 'changed' => 0, 'due_changed' => 0, 'status_changed' => 0, 'annual_changed' => 0, 'deadline_changed' => 0, 'expiry_changed' => 0, 'missing_hire' => 0, 'requirement_not_set' => 0 );
+		foreach ( $rows as $row ) {
 			++$summary['employees'];
 			foreach ( array( 'changed', 'due_changed', 'status_changed', 'annual_changed', 'deadline_changed', 'missing_hire', 'requirement_not_set' ) as $k ) {
-				$summary[ $k ] += $row[ $k ] ? 1 : 0;
+				$summary[ $k ] += ! empty( $row[ $k ] ) ? 1 : 0;
 			}
-			$summary['expiry_changed'] += $expiry ? 1 : 0;
+			$summary['expiry_changed'] += ! empty( $row['expiry'] ) ? 1 : 0;
 		}
-		usort( $rows, static function ( array $a, array $b ): int { return strcasecmp( $a['name'], $b['name'] ); } );
+		usort( $rows, static function ( array $a, array $b ): int { return strcasecmp( $a['name'], $b['name'] ) ?: ( (int) $a['user_id'] <=> (int) $b['user_id'] ); } );
 		return array( 'rows' => $rows, 'summary' => $summary );
+	}
+
+	/** The chunked-run loop: start → one request per chunk → verified save → reload. */
+	private static function run_script(): string {
+		return <<<'JS'
+(function () {
+  var form = document.querySelector('[data-ghca-ty-run]');
+  if (!form || !window.fetch || !window.FormData) { return; }
+  var out = form.querySelector('[data-ghca-ty-progress]');
+  var button = form.querySelector('[type="submit"]');
+  var post = function (action, data) {
+    var body = new FormData();
+    body.append('action', action);
+    body.append('nonce', form.getAttribute('data-nonce'));
+    Object.keys(data).forEach(function (k) {
+      if (Array.isArray(data[k])) { data[k].forEach(function (v) { body.append(k + '[]', v); }); } else { body.append(k, data[k]); }
+    });
+    return fetch(form.getAttribute('data-ajax'), { method: 'POST', body: body, credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.success) { throw new Error((j && j.data && j.data.message) || 'Request failed'); }
+      return j.data;
+    });
+  };
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    button.disabled = true;
+    out.textContent = 'Starting…';
+    post('ghca_acd_ty_run_start', {}).then(function (start) {
+      var ids = start.ids, chunks = [], i = 0;
+      var next = function () {
+        if (i >= ids.length) {
+          out.textContent = 'Saving the result…';
+          return post('ghca_acd_ty_run_save', { run: start.run, ids: JSON.stringify(ids), ids_sig: start.ids_sig, chunks: JSON.stringify(chunks) });
+        }
+        var part = ids.slice(i, i + start.chunk);
+        out.textContent = 'Compared ' + i + ' of ' + ids.length + ' employees…';
+        return post('ghca_acd_ty_run_chunk', { run: start.run, ids: part }).then(function (c) { chunks.push(c); i += part.length; return next(); });
+      };
+      if (!ids.length) { return post('ghca_acd_ty_run_save', { run: start.run, ids: JSON.stringify(ids), ids_sig: start.ids_sig, chunks: '[]' }); }
+      return next();
+    }).then(function () { window.location.reload(); }).catch(function (err) {
+      out.textContent = 'The dry run did not finish: ' + err.message + ' Nothing was saved.';
+      button.disabled = false;
+    });
+  });
+})();
+JS;
 	}
 
 	/** "In Progress · 13 of 24 h" — the annual audit result under one rule set; '' when no window can be computed. */
@@ -158,21 +228,119 @@ final class GHCA_ACD_Training_Year_Review {
 		return $out;
 	}
 
-	private static function cache_key(): string {
-		return self::CACHE_PREFIX . get_current_user_id();
-	}
-
-	/** @return array{report:array,built_at:int}|null */
+	/** @return array{report:array,built_at:int,built_by:int}|null */
 	public static function cached(): ?array {
-		$c = get_transient( self::cache_key() );
-		return is_array( $c ) && isset( $c['report'], $c['built_at'] ) ? $c : null;
+		$c = get_transient( self::CACHE_KEY );
+		return is_array( $c ) && isset( $c['report'], $c['built_at'] ) ? $c + array( 'built_by' => 0 ) : null;
 	}
 
-	/** Runs the comparison (zero-write) and then stores it in the separate dry-run cache. */
-	public static function run_and_cache(): array {
-		$entry = array( 'report' => self::build( self::employee_ids() ), 'built_at' => time() );
-		set_transient( self::cache_key(), $entry, self::CACHE_TTL );
+	/** Stores a finished run in the dry-run cache (the only write a run makes). */
+	public static function store( array $report ): array {
+		$entry = array( 'report' => $report, 'built_at' => time(), 'built_by' => get_current_user_id() );
+		set_transient( self::CACHE_KEY, $entry, self::CACHE_TTL );
 		return $entry;
+	}
+
+	/** Single-shot run (no-JavaScript fallback and tests): the comparison (zero-write), then the cache. */
+	public static function run_and_cache(): array {
+		return self::store( self::build( self::employee_ids() ) );
+	}
+
+	/** Removes every administrator's dry-run result: the shared one and any rc.2 per-administrator keys. */
+	public static function invalidate_cache(): void {
+		global $wpdb;
+		delete_transient( self::CACHE_KEY );
+		$names = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( '_transient_' . self::CACHE_PREFIX ) . '%' ) );
+		foreach ( (array) $names as $name ) {
+			delete_transient( substr( (string) $name, strlen( '_transient_' ) ) );
+		}
+	}
+
+	/** User-meta hook: a per-employee override or a verified hire date changed. */
+	public static function maybe_invalidate_for_meta( $meta_id, $user_id, $meta_key ): void {
+		if ( in_array( $meta_key, array( GHCA_ACD_Training_Year::REQUIREMENT_META, GHCA_ACD_Employment_Record::META_KEY ), true ) ) {
+			self::invalidate_cache();
+		}
+	}
+
+	/* ------------------------------------------------------------ chunked run (large sites) */
+
+	private static function ajax_guard(): void {
+		if ( ! current_user_can( 'manage_options' ) || ! check_ajax_referer( self::ACTION_RUN, 'nonce', false ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'ghca-acd' ) ), 403 );
+		}
+	}
+
+	private static function sign( string $run, string $payload ): string {
+		return wp_hash( 'ghca-ty-dryrun|' . get_current_user_id() . '|' . $run . '|' . $payload );
+	}
+
+	/** Starts a chunked run: the employee ids (signed) and the chunk size. Writes nothing. */
+	public static function ajax_run_start(): void {
+		self::ajax_guard();
+		$ids = self::employee_ids();
+		$run = wp_generate_password( 20, false );
+		$json = (string) wp_json_encode( array_values( $ids ) );
+		wp_send_json_success( array( 'run' => $run, 'ids' => $ids, 'ids_sig' => self::sign( $run, $json ), 'chunk' => self::CHUNK ) );
+	}
+
+	/** Compares one chunk of employees and returns the signed rows. Writes nothing. */
+	public static function ajax_run_chunk(): void {
+		self::ajax_guard();
+		$run = isset( $_POST['run'] ) ? sanitize_text_field( wp_unslash( $_POST['run'] ) ) : '';
+		$ids = isset( $_POST['ids'] ) ? array_values( array_filter( array_map( 'intval', (array) wp_unslash( $_POST['ids'] ) ) ) ) : array();
+		if ( '' === $run || ! $ids || count( $ids ) > self::CHUNK ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid dry-run chunk.', 'ghca-acd' ) ), 400 );
+		}
+		$ids  = array_values( array_intersect( $ids, self::employee_ids() ) );
+		$rows = (string) wp_json_encode( self::build_rows( $ids ) );
+		wp_send_json_success( array( 'rows' => $rows, 'sig' => self::sign( $run, $rows ) ) );
+	}
+
+	/** Verifies every chunk against the signed id list, then stores the finished report (the only write). */
+	public static function ajax_run_save(): void {
+		self::ajax_guard();
+		$run     = isset( $_POST['run'] ) ? sanitize_text_field( wp_unslash( $_POST['run'] ) ) : '';
+		$ids     = isset( $_POST['ids'] ) ? (string) wp_unslash( $_POST['ids'] ) : '';
+		$ids_sig = isset( $_POST['ids_sig'] ) ? (string) wp_unslash( $_POST['ids_sig'] ) : '';
+		$chunks  = isset( $_POST['chunks'] ) ? json_decode( (string) wp_unslash( $_POST['chunks'] ), true ) : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified by signature below.
+		$result  = self::assemble( $run, $ids, $ids_sig, is_array( $chunks ) ? $chunks : array() );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
+		}
+		$entry = self::store( $result );
+		wp_send_json_success( array( 'employees' => $entry['report']['summary']['employees'] ) );
+	}
+
+	/**
+	 * Rebuilds the report from signed chunks. Every chunk must be signed for this run and user, and together they
+	 * must cover exactly the signed employee list.
+	 *
+	 * @param array<int,array{rows:string,sig:string}> $chunks
+	 * @return array|WP_Error
+	 */
+	public static function assemble( string $run, string $ids_json, string $ids_sig, array $chunks ) {
+		if ( '' === $run || ! hash_equals( self::sign( $run, $ids_json ), $ids_sig ) ) {
+			return new WP_Error( 'ghca_ty_run', __( 'The dry run could not be verified. Run it again.', 'ghca-acd' ) );
+		}
+		$want = array_map( 'intval', (array) json_decode( $ids_json, true ) );
+		$rows = array();
+		foreach ( $chunks as $chunk ) {
+			$json = is_array( $chunk ) ? (string) ( $chunk['rows'] ?? '' ) : '';
+			if ( ! hash_equals( self::sign( $run, $json ), (string) ( $chunk['sig'] ?? '' ) ) ) {
+				return new WP_Error( 'ghca_ty_run', __( 'The dry run could not be verified. Run it again.', 'ghca-acd' ) );
+			}
+			foreach ( (array) json_decode( $json, true ) as $row ) {
+				$rows[] = $row;
+			}
+		}
+		$got = array_map( static function ( $r ) { return (int) $r['user_id']; }, $rows );
+		sort( $want );
+		sort( $got );
+		if ( $want !== $got ) {
+			return new WP_Error( 'ghca_ty_run', __( 'The dry run is incomplete. Run it again.', 'ghca-acd' ) );
+		}
+		return self::summarize( $rows );
 	}
 
 	private static function guard( string $action ): void {
@@ -199,7 +367,7 @@ final class GHCA_ACD_Training_Year_Review {
 		$catalog = GHCA_ACD_Training_Year::role_catalog();
 		$posted  = array_intersect_key( (array) $posted, $catalog );
 		update_option( GHCA_ACD_Training_Year::OPTION_ROLE_MAP, GHCA_ACD_Training_Year::sanitize_role_map( $posted ), false );
-		delete_transient( self::cache_key() );
+		self::invalidate_cache();
 		GHCA_ACD_Data_Provider::bust_cache();
 		self::back();
 	}
@@ -250,17 +418,20 @@ final class GHCA_ACD_Training_Year_Review {
 
 		echo '<h2>' . esc_html__( 'Dry run', 'ghca-acd' ) . '</h2>';
 		echo '<p>' . esc_html__( 'Every tracked employee, evaluated under the previous rules and the training-year rules. The comparison saves nothing; the result is kept in a separate dry-run cache for this page and the CSV until you run it again.', 'ghca-acd' ) . '</p>';
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline-block;margin-right:12px;"><input type="hidden" name="action" value="' . esc_attr( self::ACTION_RUN ) . '" />';
+		// With JavaScript the run goes in chunks (CHUNK employees per request, with progress) so large sites do not time
+		// out; without it the form falls back to a single request.
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline-block;margin-right:12px;" data-ghca-ty-run data-ajax="' . esc_url( admin_url( 'admin-ajax.php' ) ) . '" data-nonce="' . esc_attr( wp_create_nonce( self::ACTION_RUN ) ) . '"><input type="hidden" name="action" value="' . esc_attr( self::ACTION_RUN ) . '" />';
 		wp_nonce_field( self::ACTION_RUN );
 		submit_button( $cache ? __( 'Run the dry run again', 'ghca-acd' ) : __( 'Run the dry run', 'ghca-acd' ), 'secondary', 'submit', false );
-		echo '</form>';
+		echo ' <span role="status" aria-live="polite" data-ghca-ty-progress></span></form>';
+		echo '<script>' . self::run_script() . '</script>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static script.
 		if ( ! $cache ) {
 			echo '<p>' . esc_html__( 'No dry run yet.', 'ghca-acd' ) . '</p>';
 		} else {
 			$report = $cache['report'];
 			$s      = $report['summary'];
 			echo '<a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=' . self::ACTION_CSV ), self::ACTION_CSV ) ) . '">' . esc_html__( 'Download dry run (CSV)', 'ghca-acd' ) . '</a>';
-			echo '<p class="description">' . esc_html( sprintf( /* translators: %s: date */ __( 'Dry run from %s.', 'ghca-acd' ), wp_date( 'M j, Y g:i A', (int) $cache['built_at'] ) ) ) . '</p>';
+			echo '<p class="description" data-ghca-ty-run-by>' . esc_html( sprintf( /* translators: 1: user, 2: date */ __( 'Dry run by %1$s on %2$s.', 'ghca-acd' ), self::user_name( (int) $cache['built_by'] ), wp_date( 'M j, Y g:i A', (int) $cache['built_at'] ) ) ) . '</p>';
 			echo '<ul style="list-style:disc;margin-left:20px;">';
 			echo '<li>' . esc_html( sprintf( __( '%1$d employees; %2$d would change.', 'ghca-acd' ), $s['employees'], $s['changed'] ) ) . '</li>';
 			echo '<li>' . esc_html( sprintf( __( 'Due date changes: %1$d. Status changes: %2$d. Annual result changes: %3$d. New-hire deadline changes: %4$d. Course expiry changes: %5$d.', 'ghca-acd' ), $s['due_changed'], $s['status_changed'], $s['annual_changed'], $s['deadline_changed'], $s['expiry_changed'] ) ) . '</li>';
@@ -313,7 +484,11 @@ final class GHCA_ACD_Training_Year_Review {
 
 	public static function download_csv(): void {
 		self::guard( self::ACTION_CSV );
-		$cache  = self::cached() ?? self::run_and_cache();
+		$cache  = self::cached();
+		if ( ! $cache ) {
+			// Never run the comparison from a download link: only a stored "Run the dry run" result is exported.
+			wp_die( esc_html__( 'Run the dry run first.', 'ghca-acd' ), esc_html__( 'Training year rules', 'ghca-acd' ), array( 'back_link' => true, 'response' => 409 ) );
+		}
 		nocache_headers();
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename="training-year-dry-run-' . sanitize_file_name( (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) . '-' . wp_date( 'Y-m-d', (int) $cache['built_at'] ) . '.csv"' );

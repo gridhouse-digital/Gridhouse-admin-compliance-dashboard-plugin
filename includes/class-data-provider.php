@@ -705,7 +705,7 @@ final class GHCA_ACD_Data_Provider {
         'certificate_url'    => $cert,
         'completed_recently' => $completed && $completed_ts > ( time() - ( 30 * DAY_IN_SECONDS ) ),
         'last_activity_ts'   => self::get_course_last_activity_timestamp( $user_id, $course_id, $completed_ts ),
-      ) + GHCA_Course_Lifespans::decorate( $course_id, $completed, $completed_ts );
+      ) + GHCA_Course_Lifespans::for_user( $user_id, $course_id, $completed, $completed_ts );
     }
 
     return $items;

@@ -107,6 +107,19 @@ final class GHCA_Course_Lifespans {
   }
 
   /**
+   * The expiry fields the admin dashboard shows for one employee's course. With the training-year switch on this is
+   * exactly GHCA_ACD_Training_Year::course() (the result the employee plugin shows); with it off, decorate() as before.
+   *
+   * @return array{lifespan_days:int,expiration_ts:int,expiration_label:string,compliance_state:string}
+   */
+  public static function for_user( int $user_id, int $course_id, bool $completed, int $completed_ts ): array {
+    if ( class_exists( 'GHCA_ACD_Training_Year' ) && GHCA_ACD_Training_Year::enabled() ) {
+      return GHCA_ACD_Training_Year::course( $user_id, $course_id, $completed, $completed_ts );
+    }
+    return self::decorate( $course_id, $completed, $completed_ts );
+  }
+
+  /**
    * Normalize the saved map to {positive int course_id: 1..3650 days}.
    * Pure: stray course IDs are harmless (a course not in a user's enrollment
    * is never evaluated), so no WP lookups happen here.

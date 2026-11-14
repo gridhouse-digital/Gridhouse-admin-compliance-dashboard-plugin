@@ -1,6 +1,6 @@
 # 2.0: the audit training year as the single source of truth
 
-Version 2.0.0-rc.2 (fix-up on rc.1, GRI-115 prompt v2 and the role-mapping comment). All of it ships in one release, behind one switch (`ghca_acd_training_year_rules`, off by default; the name is unchanged). With the switch off, due dates, thresholds, deadlines and every existing screen are identical to 1.7.3-rc.8. The Settings page HTML was compared byte for byte with `eeec7da` on the test site. The only addition while it is off is the **Compliance → Training year** page (role map, dry run, switch).
+Version 2.0.0-rc.3 (fix-up on rc.2 `11a7c64`; rc.2 was a fix-up on rc.1 for GRI-115 prompt v2 and the role-mapping comment). All of it ships in one release, behind one switch (`ghca_acd_training_year_rules`, off by default; the name is unchanged). With the switch off, due dates, thresholds, deadlines and every existing screen are identical to 1.7.3-rc.8. The Settings page HTML was compared byte for byte with `eeec7da` on the test site. The only addition while it is off is the **Compliance → Training year** page (role map, dry run, switch).
 
 ## What changes when the rules are enabled
 
@@ -18,7 +18,13 @@ The annual audit window itself (`resolve_annual_window()`, anniversary-based or 
 
 ## Role map (rc.2)
 
-On the **Training year** page (fillable while the switch is off; the dry run uses it). Each GHCA job role maps to one value: the plugin's active built-in employee roles, the agency's custom roles, and the other registered non-management roles, such as LPN or RN. Basis shown in the UI: "Per 55 Pa. Code §6100.143; nurse mapping is agency policy."
+On the **Training year** page (fillable while the switch is off; the dry run uses it). Each GHCA job role maps to one value: the plugin's active built-in employee roles, the agency's custom roles, and the other registered non-management roles, such as LPN or RN.
+
+**Excluded roles (rc.3):** they are never listed in the map, never saved, and ignored in `resolve()` / `requirement()`, even if a leftover saved entry names them:
+- WordPress core: `subscriber`, `administrator`, `editor`, `author`, `contributor`;
+- bbPress / BuddyBoss forum roles: `bbp_keymaster`, `bbp_moderator`, `bbp_participant`, `bbp_spectator`, `bbp_blocked`, any other `bbp_*` / `bp_*` role, and `member`.
+
+So an employee with a mapped 12 h job role who also holds `subscriber` stays at 12 h (`role_map`, `set` true). `role_map()` also drops entries for roles no longer in the catalog when it is read, and a role-map save drops them from the option. Basis shown in the UI: "Per 55 Pa. Code §6100.143; nurse mapping is agency policy."
 
 | Value | Hours | Meaning |
 | --- | --- | --- |
@@ -29,7 +35,7 @@ On the **Training year** page (fillable while the switch is off; the dry run use
 | `none_volunteer` | 0 | Not required: volunteer or intern who never works alone with individuals |
 | (unset) | 24 | **Role requirement not set**: counts as 24 h and is flagged; never silently 12 h |
 
-"Not required" is offered only with its exception. **Nurse roles** (slug or title matching LPN, RN, nurse or nursing) show 24 h as **agency policy, not ODP text**. That default is computed, never auto-saved, and is editable like any other role. No other role is pre-filled. The map is stored in `ghca_acd_training_role_map`; only administrators can save it, and saving clears the dry-run cache.
+"Not required" is offered only with its exception. **Nurse roles** (slug or title matching LPN, RN, nurse or nursing) show 24 h as **agency policy, not ODP text**. That default is computed, never auto-saved, and is editable like any other role. **Until an administrator saves the nurse role (rc.3), it is not a saved mapping:** `requirement()` returns 24 h with `set` false and `source` `default`, labelled "… 24 h (agency policy, not yet saved in the role map)". After a save it is `set` true, `source` `role_map`. When a saved mapping and an unsaved nurse default tie at 24 h, the saved mapping wins. No other role is pre-filled. The map is stored in `ghca_acd_training_role_map`; only administrators can save it, and saving clears the dry-run cache.
 
 **Resolution** (`GHCA_ACD_Training_Year::resolve()`):
 1. A valid per-employee **override** (Edit Records field, shown only with the switch on) wins. Source: `override`.
@@ -53,13 +59,20 @@ The employee plugin (1.6.4, written separately) calls only these public static m
 | `course( int $user_id, int $course_id, bool $completed, int $completed_ts, ?int $now = null ): array` | `expiration_ts`, `expiration_label` (`wp_date( 'M j, Y' )` or ''), `compliance_state` (incomplete / current / expiring_soon / expired), `lifespan_days`, `follows_training_year`. See the rules below. |
 | `is_annual_course( int $course_id ): bool` | True when the course is mapped to an ODP category |
 
-Rules for `course()`:
+Rules for `course()` (rc.3):
 - **Annual course** (`is_annual_course()`): it follows the training year.
-  - `expiration_ts` = `due( $user_id, $now )['due_timestamp']`, `lifespan_days` 0, `follows_training_year` true.
-  - The state is computed against that date and the site warning-days window.
-  - An incomplete course stays `incomplete` but still carries the date.
+  - `expiration_ts` = `due( $user_id, $now )['due_timestamp']`, `expiration_label` its date, `lifespan_days` 0, `follows_training_year` true. The date is carried for every state, so badges can show it.
+  - **A completion counts only inside the current `window()`:** `start_ts` inclusive, `end_ts` exclusive, the same rule as the audit window. A completion at 00:00 on the anniversary counts in the new year; one a second earlier belongs to the previous year.
+  - **Completed inside the window → `current`.** Never `expiring_soon`, even inside the warning window.
+  - **Completed outside the window** (three years ago, or the day before the window started) → `incomplete`, or `expired` once the due date has passed.
+  - **Not completed** → `incomplete`, `expiring_soon` inside the site warning-days window before the due date, or `expired` once the due date has passed.
+  - **No training year** (hire date missing, or cycle not configured): `expiration_ts` 0, `expiration_label` = `due()`'s label ("Hire date missing" / "Training year not configured"), state `incomplete`. Never `current`.
 - **Other course with a lifespan:** calendar-day expiry in the site time zone, the same policy as `decorate()` with the rules on.
 - **No lifespan:** `expiration_ts` 0, does not expire.
+
+**Admin dashboard parity (rc.3).** Both dashboard paths (`GHCA_ACD_Data_Provider::get_user_courses()` and `GHCA_Compliance_Program::get_user_courses()`) get their course expiry fields from `GHCA_Course_Lifespans::for_user()`:
+- **Switch on:** exactly `GHCA_ACD_Training_Year::course()`, the same `expiration_ts`, `expiration_label`, `compliance_state`, `lifespan_days` and `follows_training_year` the employee plugin shows.
+- **Switch off:** `decorate()`, so the output is unchanged.
 
 `GHCA_Course_Lifespans::decorate()` keeps its three-parameter signature. `GHCA_Audit_PDF::append_certificate( Fpdi $pdf, string $path, int &$total_pages, array $label = array() )` is unchanged.
 
@@ -71,10 +84,21 @@ Rules for `course()`:
 - Employee ids come from `GHCA_ACD_Data_Provider::review_employee_ids()`, which bypasses `get_aggregate()`.
 - The integration test compares every option row (transients included) and all user meta, byte for byte.
 
-**Not recomputed on page load:**
-- "Run the dry run" stores the result in a **separate dry-run cache** (transient `ghca_acd_ty_dryrun_{admin id}`, 12 h). That is the only write, and the test confirms it.
-- The page and the CSV read that cache.
-- The table is paginated, 50 rows per page.
+**Not recomputed on page load (rc.3):**
+- **Chunked run.** "Run the dry run" works in chunks of 25 employees per request, with a progress line, so a site with a few hundred employees does not hit a PHP timeout. The steps are `ajax_run_start` (signed employee list), `ajax_run_chunk` (signed rows), then `ajax_run_save`.
+  - Starting and every chunk write nothing.
+  - The save verifies every chunk's signature (`wp_hash`, per run and per user) and that the chunks cover exactly the signed list. Only then does it store the result.
+  - A tampered or incomplete run is refused and nothing is stored.
+  - Without JavaScript the button falls back to a single request.
+  - The test checks that the chunked result equals a single-shot `build()`.
+- **One shared dry-run cache** (transient `ghca_acd_ty_dryrun`, 12 h), separate from the dashboard aggregate. It stores the report, when it ran (`built_at`) and who ran it (`built_by`). The page shows "Dry run by {name} on {date}". This is the run's only write.
+- **Invalidation for every administrator.** The cache is cleared, together with any rc.2 per-administrator `ghca_acd_ty_dryrun_*` keys, when any of these change:
+  - the role map;
+  - a per-employee override (`ghca_acd_training_requirement`);
+  - a verified hire date (`ghca_acd_verified_employment`);
+  - the annual cycle, the audit mapping, or the new-hire start-date setting.
+- **CSV never computes.** The CSV downloads only a stored result. With no stored result the link shows "Run the dry run first." and emits no CSV.
+- **Pagination.** The table shows 50 rows per page.
 
 The page shows:
 - the role map;
@@ -98,6 +122,39 @@ wp ghca-acd training-year-review --user=<admin login> --format=csv > training-ye
 4. Remove lifespans from courses mapped to ODP categories.
 5. Run the dry run and keep the CSV.
 6. Enable.
+
+## rc.3: files and functions changed (on top of rc.2 `11a7c64`)
+
+| File | Change |
+| --- | --- |
+| `includes/class-training-year.php` | `course()`: annual courses count a completion only inside the current window; never `expiring_soon` once completed; no training year → not current, with `due()`'s label. New: `EXCLUDED_ROLES`, `is_excluded_role()`. `role_catalog()` drops excluded roles. `role_map()` keeps only catalog roles. `sanitize_role_map()` drops excluded roles. `resolve()` ignores excluded roles; an unsaved nurse default is `set` false / `default`; a saved mapping wins a 24 h tie. `sanitize_anchor()` keeps the stored value when the field is absent (null). |
+| `includes/class-course-lifespans.php` | New `for_user()`: `course()` with the switch on, `decorate()` with it off. `decorate()` is unchanged. |
+| `includes/class-data-provider.php` | `get_user_courses()` uses `for_user()` |
+| `includes/class-compliance-program.php` | `get_user_courses()` uses `for_user()` |
+| `includes/class-training-year-review.php` | New: `CACHE_KEY` (shared), `CHUNK`, `build_rows()`, `summarize()`, `store()`, `invalidate_cache()`, `maybe_invalidate_for_meta()`, `ajax_run_start()`, `ajax_run_chunk()`, `ajax_run_save()`, `assemble()`, `sign()`, `ajax_guard()`, `run_script()`. Changed: `init()` (AJAX and invalidation hooks), `build()`, `cached()` (with `built_by`), `run_and_cache()`, `handle_role_map()` (clears every administrator's cache), `download_csv()` (no computation; "Run the dry run first."), `render_page()` (chunked run, "Dry run by … on …"). Removed: `cache_key()`. |
+| `gridhouse-admin-compliance-dashboard.php` | Version 2.0.0-rc.3 |
+| `tests/real-site/ghca-real-site-stubs.php` | Test site only: synthetic enrolments (`ghca_rs_courses`) and completions, so the dashboard parity test has courses |
+
+### rc.3 tests
+
+- `tests/test-training-year-api.php` (74):
+  - completed three years ago; completed the day before the window; completed inside the window (current, including inside the warning window, never `expiring_soon`); 00:00 on the anniversary → current, one second earlier → previous year; window end exclusive;
+  - no hire date / cycle not configured → not current, with the label;
+  - unsaved nurse default `set` false, saved `set` true / `role_map`;
+  - 12 h job role plus subscriber and a forum role stays 12 h; excluded roles never saved;
+  - dashboard parity via `for_user()` for an annual and a lifespan course, switch on and off;
+  - `sanitize_anchor(null)` keeps the stored value.
+- `tests/integration-training-year.php` (69, real WordPress + MariaDB):
+  - subscriber excluded (requirement and role-map table); leftover entries ignored and dropped on save; nurse `set` before and after a save;
+  - "Dry run by …";
+  - role-map, override and hire-date changes leave no administrator's dry-run cache;
+  - CSV without a dry run shows "Run the dry run first.", with nothing computed or written;
+  - chunked run: zero writes until the verified save, tampered and incomplete runs refused, only the dry-run cache written, same report as `build()`;
+  - dashboard item parity with `course()` (switch on) and `decorate()` (switch off), using synthetic enrolments.
+- `tests/browser-settings-redesign.cjs` (18):
+  - "switch off: saving Settings (start-date field absent) keeps the stored new-hire start-date choice";
+  - "Training year page: 'Run the dry run' runs in chunks …, stores the result and shows who ran it". The test site needs one chunk; the PHP test drives several chunks of 4.
+- **Unchanged and green:** `test-training-year.php` (39, including the anniversary rule), the switch-off Settings HTML compared byte for byte with `eeec7da` again, `integration-packet-layout` (42, `append_certificate` by reference), and the hidden-section invalid-field check.
 
 ## rc.2: files and functions changed (on top of rc.1 `f774878`)
 

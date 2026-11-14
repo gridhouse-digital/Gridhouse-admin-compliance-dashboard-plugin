@@ -33,8 +33,9 @@ if ( ! function_exists( 'learndash_get_users_group_ids' ) ) {
 	function learndash_get_administrators_group_ids( $user_id = 0, $bypass = false ) { return array_map( 'intval', (array) get_user_meta( (int) $user_id, 'ghca_rs_leads', true ) ); }
 	function learndash_is_group_leader_user( $user = 0 ) { return false; }
 	function learndash_is_admin_user( $user = 0 ) { return user_can( $user ?: get_current_user_id(), 'manage_options' ); }
-	function learndash_user_get_enrolled_courses( $user_id = 0, $args = array(), $bypass = false ) { return array(); }
-	function learndash_course_completed( $user_id, $course_id ) { return false; }
+	// Enrolments and completions come from synthetic user meta (ghca_rs_courses, course_completed_{id}); none by default.
+	function learndash_user_get_enrolled_courses( $user_id = 0, $args = array(), $bypass = false ) { return array_map( 'intval', (array) get_user_meta( (int) $user_id, 'ghca_rs_courses', true ) ); }
+	function learndash_course_completed( $user_id, $course_id ) { return (bool) get_user_meta( (int) $user_id, 'course_completed_' . (int) $course_id, true ); }
 	function learndash_course_progress( $args = array() ) { return array(); }
 	function learndash_course_status( $course_id, $user_id = null ) { return ''; }
 	function learndash_get_course_certificate_link( $course_id, $user_id = null ) { return ''; }

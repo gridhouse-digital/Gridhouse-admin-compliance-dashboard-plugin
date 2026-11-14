@@ -26,8 +26,9 @@ const getOpt = (name) => php('echo wp_json_encode(get_option("' + name + '", nul
 const setOpt = (name, json) => php('$v = json_decode(\'' + json.replace(/'/g, "\\'") + '\', true); null === $v ? delete_option("' + name + '") : update_option("' + name + '", $v);');
 
 (async () => {
-  const saved = { redesign: getOpt('ghca_acd_ui_redesign'), days: getOpt('ghca_new_hire_deadline_days'), cycle: getOpt('ghca_acd_annual_cycle'), warn: getOpt('ghca_acd_warning_days') };
+  const saved = { redesign: getOpt('ghca_acd_ui_redesign'), days: getOpt('ghca_new_hire_deadline_days'), cycle: getOpt('ghca_acd_annual_cycle'), anchor: getOpt('ghca_acd_new_hire_anchor'), warn: getOpt('ghca_acd_warning_days') };
   setOpt('ghca_acd_ui_redesign', '1');
+  setOpt('ghca_acd_annual_cycle', '"employee_start_date"'); // a configured cycle, so a plain save succeeds (restored at the end)
   const browser = await chromium.launch();
   try {
     for (const vp of [{ width: 1440, height: 1000 }, { width: 834, height: 1100 }, { width: 390, height: 844 }]) {
@@ -84,13 +85,25 @@ const setOpt = (name, json) => php('$v = json_decode(\'' + json.replace(/'/g, "\
         assert.equal(Number(JSON.parse(getOpt('ghca_new_hire_deadline_days'))), 31);
         assert.equal(await page.textContent('.ghca-set-title'), 'Training rules');
         ok('Save in the bar submits the existing form: "Settings saved", the value is stored, and the same section is shown again');
+        // rc.3 (c): the new-hire start-date field is not on the form with the switch off; saving must keep the stored value.
+        assert.equal(await page.$('#ghca_acd_new_hire_anchor'), null);
+        setOpt('ghca_acd_new_hire_anchor', '"hire_or_first_service"');
+        await page.goto(SITE + '/wp-admin/admin.php?page=ghca-acd-settings&section=training');
+        await page.waitForSelector('#ghca-set-shell.is-ready');
+        await page.fill('#ghca_new_hire_deadline_days', '30');
+        await Promise.all([page.waitForNavigation(), page.click('[data-ghca-set-save]')]);
+        await page.waitForSelector('[data-ghca-set-result="saved"]');
+        assert.equal(JSON.parse(getOpt('ghca_acd_new_hire_anchor')), 'hire_or_first_service');
+        ok('switch off: saving Settings (start-date field absent) keeps the stored new-hire start-date choice (hire_or_first_service)');
+        await page.fill('#ghca_new_hire_deadline_days', '31');
+        await Promise.all([page.waitForNavigation(), page.click('[data-ghca-set-save]')]);
         // A rejected value: the annual cycle sanitizer refuses it and keeps the stored policy.
         await page.evaluate(() => { const sel = document.getElementById('ghca_acd_annual_cycle'); const o = document.createElement('option'); o.value = 'bogus'; sel.appendChild(o); sel.value = 'bogus'; sel.dispatchEvent(new Event('change', { bubbles: true })); });
         await Promise.all([page.waitForNavigation(), page.click('[data-ghca-set-save]')]);
         await page.waitForSelector('#ghca-set-shell.is-ready');
         assert.equal(await page.textContent('[data-ghca-set-result="error"] .gh-alert-t'), 'Settings not saved');
         assert.match(await page.textContent('[data-ghca-set-result="error"]'), /Select an annual training cycle/);
-        assert.equal(getOpt('ghca_acd_annual_cycle'), saved.cycle);
+        assert.equal(getOpt('ghca_acd_annual_cycle'), '"employee_start_date"');
         ok('a rejected value shows "Settings not saved" with the reason, and the stored policy is unchanged');
         if (shots) { await page.screenshot({ path: path.join(shots, 'settings-error-1440.png') }); }
         // An invalid value in a hidden section must not block the save silently.
@@ -114,6 +127,20 @@ const setOpt = (name, json) => php('$v = json_decode(\'' + json.replace(/'/g, "\
         assert.equal(Number(JSON.parse(getOpt('ghca_new_hire_deadline_days'))), 31);
         ok('an invalid value in a hidden section: the save stops visibly, the section with the field opens, the reason is shown and the field is focused (' + inv.msg + ')');
         if (shots) { await page.screenshot({ path: path.join(shots, 'settings-invalid-1440.png') }); }
+        await page.goto(SITE + '/wp-admin/admin.php?page=ghca-acd-settings&section=training');
+        await page.waitForSelector('#ghca-set-shell.is-ready');
+        // rc.3 (e): the dry run runs in chunks from the page (progress, then reload with "Dry run by …").
+        php('delete_transient("ghca_acd_ty_dryrun");');
+        await page.goto(SITE + '/wp-admin/admin.php?page=ghca-acd-training-year');
+        await page.waitForSelector('#ghca-set-shell.is-ready');
+        const chunkCalls = [];
+        page.on('request', (r) => { if (/admin-ajax\.php/.test(r.url()) && /ghca_acd_ty_run_chunk/.test(r.postData() || '')) { chunkCalls.push(1); } });
+        await Promise.all([page.waitForNavigation({ timeout: 120000 }), page.click('[data-ghca-ty-run] [type="submit"]')]);
+        await page.waitForSelector('[data-ghca-ty-run-by]');
+        assert.match(await page.textContent('[data-ghca-ty-run-by]'), /^Dry run by .+ on /);
+        assert.ok(chunkCalls.length >= 1);
+        ok('Training year page: "Run the dry run" runs in chunks (' + chunkCalls.length + ' chunk request(s)), stores the result and shows who ran it');
+        php('delete_transient("ghca_acd_ty_dryrun");');
         await page.goto(SITE + '/wp-admin/admin.php?page=ghca-acd-settings&section=training');
         await page.waitForSelector('#ghca-set-shell.is-ready');
         // Discard reloads without saving.
@@ -176,6 +203,7 @@ const setOpt = (name, json) => php('$v = json_decode(\'' + json.replace(/'/g, "\
     setOpt('ghca_new_hire_deadline_days', saved.days);
     setOpt('ghca_acd_annual_cycle', saved.cycle);
     setOpt('ghca_acd_warning_days', saved.warn);
+    setOpt('ghca_acd_new_hire_anchor', saved.anchor);
     await browser.close();
   }
   process.stdout.write('PASS: ' + n + ' settings redesign browser checks (disposable site, Chromium; settings restored)\n');
