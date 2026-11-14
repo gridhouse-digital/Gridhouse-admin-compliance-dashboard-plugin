@@ -270,3 +270,22 @@ wp ghca-acd training-year-review --user=<admin login> --format=csv > training-ye
 - The counts were measured on the committed files.
 
 **Not installed anywhere.** No employee plugin ZIP is part of this build.
+
+## Package (2.0.0-rc.3)
+
+| | |
+| --- | --- |
+| File | `Gridhouse-admin-compliance-dashboard-2.0.0-rc.3-f5d1cc8.zip` (root folder `Gridhouse-admin-compliance-dashboard-plugin-main/`) |
+| Commit | `f5d1cc86458c64c22c3c1d3b7fd7c0ee3408d49d` |
+| Size | 780,886 bytes |
+| SHA-256 | `18221c009f096e78b709370542978b7ac96cad8f32fe4873fe2442a28d8d1f9f` |
+| External BUILD.txt SHA-256 | `350c14386f1e18c927197d578b502396a8881eaa969885ee411209a62db5bf6f` |
+| Tests archive (not installable) | `Gridhouse-admin-compliance-dashboard-2.0.0-rc.3-f5d1cc8-tests.zip`, 703,174 bytes, SHA-256 `20d3cfbc1426b7e38dc8a54ef4ed8993a3deaf6bcb72bcc0313ead1820bdb263` |
+| Supersedes | `11a7c64` (2.0.0-rc.2, on Akanso staging with employee 1.6.5) |
+
+**Verification:**
+- `unzip -t` is clean.
+- All 151 runtime files match the commit and the tested site, every hash is in the manifest, `php -l` passes, and there are no tests in the plugin ZIP.
+- The counts were measured on the committed files.
+
+**Not installed anywhere.**

@@ -6,7 +6,8 @@ One place for what each staging site runs. Update it whenever a build is install
 
 | Build | Status | Date | Notes |
 | --- | --- | --- | --- |
-| `2.0.0-rc.2-11a7c64` | Prepared, not installed | | Fix-up on rc.1 (GRI-115): role map for annual hours, stable employee API (`course()` added), zero-write cached dry run, identical switch-off screens, hidden-section validation. `docs/training-year-rules-2.0.md`. |
+| `2.0.0-rc.3-f5d1cc8` | Prepared, not installed | | Fix-up on rc.2: annual-course completion window in `course()`, dashboard badges from `course()` with the switch on, new-hire start-date kept on save, chunked/shared/invalidated dry run, core and forum roles excluded, unsaved nurse defaults `set` false. |
+| `2.0.0-rc.2-11a7c64` | **Installed on Akanso staging** with employee 1.6.5 (by the site owner; date not recorded) | | Fix-up on rc.1 (GRI-115): role map for annual hours, stable employee API (`course()` added), zero-write cached dry run, identical switch-off screens, hidden-section validation. `docs/training-year-rules-2.0.md`. |
 | `2.0.0-rc.1-f774878` | Prepared, not installed | | Major release: training-year rules (off until enabled after the dry run, Compliance → Training year) and the redesigned settings screen (redesign switch). Includes the packet print layout. Superseded by `11a7c64`. |
 | `1.7.3-rc.8-eeec7da` | Prepared, not installed | | Print layout for the ODP Annual and Orientation audit packets (board "Print: Orientation audit packet"); OLTL unchanged. Superseded by `f774878`. |
 | `1.7.3-rc.8-9a92da1` | Prepared, not installed | | Review follow-ups: dormant BuddyBoss notification code removed (it ignored the announcement audience); the legacy-form edit confirmation reports the stored audience; docs. Superseded by `eeec7da`. |
